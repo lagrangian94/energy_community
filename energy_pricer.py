@@ -73,11 +73,14 @@ class EnergyPricer(Pricer):
             print(f"Player {u}: min_redcost = {min_redcost}, objval = {objval}")
             
             # If negative reduced cost, add pattern
+            if farkas:
+                min_redcost -= 1
             if min_redcost < -1e-6:
                 found_improving_pattern = True
                 self.add_pattern_to_rmp(u, pattern)
         
-        self.iter += 1
+        if self.iter > 20:
+            print(1)
         
         # Return result to SCIP
         if found_improving_pattern:
