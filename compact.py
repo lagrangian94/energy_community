@@ -2,6 +2,77 @@ from pyscipopt import Model, quicksum
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 
+def solve_and_extract_results(model):
+    """
+    모델을 풀고 결과를 반환합니다.
+    
+    Returns:
+    --------
+    results : dict
+        test.py의 generate_initial_patterns와 동일한 구조의 딕셔너리
+    """
+   
+    # 최적화 상태 확인
+    status = model.getStatus()
+    time = model.getSolvingTime()
+    print(f"MIP model status: {status}, time: {time}")
+    if status in ["optimal", "gaplimit"]:            
+        # 결과 저장할 딕셔너리 초기화
+        results = {}
+        if model.data != None:
+            # 저장된 모든 변수에 대해 최적해 값 추출
+            for var_name, var_dict in model.data["vars"].items():
+                if isinstance(var_dict, dict):
+                    # 딕셔너리 형태의 변수들 처리 (예: e_E_gri, i_E_gri 등)
+                    result_dict = {}
+                    for key, var in var_dict.items():
+                        try:
+                            result_dict[key] = model.getVal(var)
+                        except:
+                            print(f"Could not get value for {var_name}_{key}")
+                    results[var_name] = result_dict
+                else:
+                    # 단일 변수 처리 (예: chi_peak)
+                    try:
+                        results[var_name] = model.getVal(var_dict)
+                    except:
+                        print(f"Could not get value for {var_name}")
+        else:
+            vars_name = ["e_E_gri", "i_E_gri", "e_E_com", "i_E_com", "e_H_gri", "i_H_gri", 
+                        "e_H_com", "i_H_com", "e_G_gri", "i_G_gri", "e_G_com", "i_G_com",
+                        "p", "d", "b_dis_E", "b_ch_E", "s_E", "b_dis_G", "b_ch_G", "s_G",
+                        "b_dis_H", "b_ch_H", "s_H", "z_su", "z_on", "z_off", "z_sb", "chi_peak"]
+            raise Exception(f"Model data is None. Cannot extract results for {vars_name}")
+            
+        return status, results
+    else:
+        print(f"Model not solved to optimality. Status: {status}")
+        return status, None
+
+def process_cons_arr(arr, process_func):
+    """
+    Recursively process arrays of constraint objects
+    
+    Args:
+        arr: A numpy array (potentially nested) of constraint objects
+        process_func: Function to apply to each constraint object
+        
+    Returns:
+        Processed array with the same structure
+    """
+    # # Base case: if it's not an array or not of object type, just return it
+    # if not isinstance(arr, np.ndarray) or arr.dtype != object:
+    #     return arr
+    
+    # Create a new array with the same shape
+    new_arr = {}
+    
+    # Process each element
+    for key, val in arr.items():
+        new_arr[key] = process_func(val)
+    
+    return new_arr
+
 class LocalEnergyMarket:
     def __init__(self, 
                  players: List[str],
@@ -154,7 +225,7 @@ class LocalEnergyMarket:
                     
                     # Electrolyzer commitment variables
                     c_su = self.params.get(f'c_su_{u}', 0)
-                    vartype = "B" if not isLP else "C"
+                    vartype = "C" if isLP else "B"
                     self.z_su[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_{u}_{t}", obj=c_su)
                     self.z_on[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_{u}_{t}")
                     self.z_off[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_{u}_{t}")
@@ -486,26 +557,45 @@ class LocalEnergyMarket:
                     # Constraint 20: startup logic
                     if t > 0:
                         cons = self.model.addCons(
-                            self.z_su[u,t] >= self.z_off[u,t-1] + self.z_on[u,t] + self.z_sb[u,t] - 1,
+                            self.z_su[u,t] >= self.z_on[u,t] - self.z_on[u,t-1] - self.z_sb[u,t],
                             name=f"electrolyzer_startup_{u}_{t}"
                         )
                         self.electrolyzer_cons[f"electrolyzer_startup_{u}_{t}"] = cons
+                        
+                        # off to standby is not allowed
+                        cons = self.model.addCons(
+                            self.z_off[u,t-1] + self.z_sb[u,t] <= 1.0,
+                            name=f"electrolyzer_forbid_off_to_sb_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_{u}_{t}"] = cons
+                    else:
+                        cons = self.model.addCons(
+                            self.z_off[u,t] >= 1.0,
+                            name=f"electrolyzer_initial_state_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
+
         
         # hydro storage SOC transition
         for u in self.players_with_hydro_storage:
             # Set initial SOC
             if (u,0) in self.s_G:
-                initial_soc = self.params.get(f'initial_soc', 50)
-                cons = self.model.addCons(self.s_G[u,0] == initial_soc, name=f"initial_soc_G_{u}")
-                self.storage_cons[f"initial_soc_G_{u}"] = cons
-            
+                initial_soc = self.params.get(f'initial_soc', 0)
+                initial_soc = 0.0
+                # cons = self.model.addCons(self.s_G[u,0] == initial_soc, name=f"initial_soc_G_{u}")
+                # self.storage_cons[f"initial_soc_G_{u}"] = cons
+            nu_ch = self.params.get('nu_ch', 0.9)
+            nu_dis = self.params.get('nu_dis', 0.9)            
             for t in self.time_periods:
                 if t > 0 and (u,t) in self.s_G and (u,t-1) in self.s_G:
-                    nu_ch = self.params.get('nu_ch', 0.9)
-                    nu_dis = self.params.get('nu_dis', 0.9)
-                    
                     cons = self.model.addCons(
                         self.s_G[u,t] == self.s_G[u,t-1] + nu_ch * self.b_ch_G[u,t] - (1/nu_dis) * self.b_dis_G[u,t],
+                        name=f"soc_transition_G_{u}_{t}"
+                    )
+                    self.storage_cons[f"soc_transition_G_{u}_{t}"] = cons
+                elif t==0:
+                    cons = self.model.addCons(
+                        self.s_G[u,t] == initial_soc + nu_ch * self.b_ch_G[u,t] - (1/nu_dis) * self.b_dis_G[u,t],
                         name=f"soc_transition_G_{u}_{t}"
                     )
                     self.storage_cons[f"soc_transition_G_{u}_{t}"] = cons
@@ -522,6 +612,264 @@ class LocalEnergyMarket:
         self.model.optimize()
         return self.model.getStatus()
     
+    def solve_complete_model(self):
+        """
+        Solve the complete optimization model and analyze revenue by resource type
+        
+        Returns:
+            tuple: (status, results, revenue_analysis)
+                - status: optimization status
+                - results: optimization results dictionary
+                - revenue_analysis: dictionary with revenue breakdown by resource type
+        """
+        print("Solving complete optimization model...")
+        
+        # Solve the model
+        status = self.solve()
+        
+        if status != "optimal":
+            print(f"Optimization failed with status: {status}")
+            return status, None, None
+        
+        print("Model solved successfully. Extracting results and analyzing revenue...")
+        
+        # Extract results using existing function
+        status, results = solve_and_extract_results(self.model)
+        
+        if status != "optimal":
+            print(f"Failed to extract results. Status: {status}")
+            return status, None, None
+        
+        # Analyze revenue by resource type
+        revenue_analysis = self._analyze_revenue_by_resource(results)
+        
+        return status, results, revenue_analysis
+    
+    def _analyze_revenue_by_resource(self, results):
+        """
+        Analyze revenue contribution by resource type from objective function
+        
+        Args:
+            results: Dictionary containing optimization results
+            
+        Returns:
+            Dictionary with revenue breakdown by resource type
+        """
+        revenue_analysis = {
+            'electricity': {
+                'grid_export': 0.0,
+                'grid_import': 0.0,
+                'community_export': 0.0,
+                'community_import': 0.0,
+                'total': 0.0
+            },
+            'heat': {
+                'grid_export': 0.0,
+                'grid_import': 0.0,
+                'community_export': 0.0,
+                'community_import': 0.0,
+                'total': 0.0
+            },
+            'hydro': {
+                'grid_export': 0.0,
+                'grid_import': 0.0,
+                'community_export': 0.0,
+                'community_import': 0.0,
+                'total': 0.0
+            },
+            'storage': {
+                'electricity': 0.0,
+                'heat': 0.0,
+                'hydro': 0.0,
+                'total': 0.0
+            },
+            'production': {
+                'renewables': 0.0,
+                'electrolyzers': 0.0,
+                'heatpumps': 0.0,
+                'total': 0.0
+            }
+        }
+        
+        # Calculate electricity revenue
+        if 'e_E_gri' in results:
+            for (u, t), val in results['e_E_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    revenue_analysis['electricity']['grid_export'] += val * price
+        
+        if 'i_E_gri' in results:
+            for (u, t), val in results['i_E_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    revenue_analysis['electricity']['grid_import'] += val * price
+        
+        if 'e_E_com' in results:
+            for (u, t), val in results['e_E_com'].items():
+                if val > 0:
+                    # Community price (could be different from grid price)
+                    price = self.params.get(f'pi_E_gri_{t}', 0.2) * 0.8  # Assume 20% discount
+                    revenue_analysis['electricity']['community_export'] += val * price
+        
+        if 'i_E_com' in results:
+            for (u, t), val in results['i_E_com'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_E_gri_{t}', 0.2) * 0.8
+                    revenue_analysis['electricity']['community_import'] += val * price
+        
+        # Calculate heat revenue
+        if 'e_H_gri' in results:
+            for (u, t), val in results['e_H_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    revenue_analysis['heat']['grid_export'] += val * price
+        
+        if 'i_H_gri' in results:
+            for (u, t), val in results['i_H_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    revenue_analysis['heat']['grid_import'] += val * price
+        
+        if 'e_H_com' in results:
+            for (u, t), val in results['e_H_com'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_{t}', 0.15) * 0.8
+                    revenue_analysis['heat']['community_export'] += val * price
+        
+        if 'i_H_com' in results:
+            for (u, t), val in results['i_H_com'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_{t}', 0.15) * 0.8
+                    revenue_analysis['heat']['community_import'] += val * price
+        
+        # Calculate hydro revenue
+        if 'e_G_gri' in results:
+            for (u, t), val in results['e_G_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    revenue_analysis['hydro']['grid_export'] += val * price
+        
+        if 'i_G_gri' in results:
+            for (u, t), val in results['i_G_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    revenue_analysis['hydro']['grid_import'] += val * price
+        
+        if 'e_G_com' in results:
+            for (u, t), val in results['e_G_com'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_{t}', 0.3) * 0.8
+                    revenue_analysis['hydro']['community_export'] += val * price
+        
+        if 'i_G_com' in results:
+            for (u, t), val in results['i_G_com'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_{t}', 0.3) * 0.8
+                    revenue_analysis['hydro']['community_import'] += val * price
+        
+        # Calculate storage revenue (avoided costs)
+        if 'b_dis_E' in results:
+            for (u, t), val in results['b_dis_E'].items():
+                if val > 0:
+                    # Storage discharge avoids grid import cost
+                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    revenue_analysis['storage']['electricity'] += val * price
+        
+        if 'b_dis_H' in results:
+            for (u, t), val in results['b_dis_H'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    revenue_analysis['storage']['heat'] += val * price
+        
+        if 'b_dis_G' in results:
+            for (u, t), val in results['b_dis_G'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    revenue_analysis['storage']['hydro'] += val * price
+        
+        # Calculate production revenue
+        if 'p' in results:
+            for (u, resource_type, t), val in results['p'].items():
+                if val > 0:
+                    if resource_type == 'res' and u in self.players_with_renewables:
+                        # Renewable energy production
+                        price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                        revenue_analysis['production']['renewables'] += val * price
+                    elif resource_type == 'els' and u in self.players_with_electrolyzers:
+                        # Electrolyzer production (hydrogen)
+                        price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                        revenue_analysis['production']['electrolyzers'] += val * price
+                    elif resource_type == 'hp' and u in self.players_with_heatpumps:
+                        # Heat pump production
+                        price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                        revenue_analysis['production']['heatpumps'] += val * price
+        
+        # Calculate totals
+        revenue_analysis['electricity']['total'] = (
+            revenue_analysis['electricity']['grid_export'] +
+            revenue_analysis['electricity']['community_export'] -
+            revenue_analysis['electricity']['grid_import'] -
+            revenue_analysis['electricity']['community_import']
+        )
+        
+        revenue_analysis['heat']['total'] = (
+            revenue_analysis['heat']['grid_export'] +
+            revenue_analysis['heat']['community_export'] -
+            revenue_analysis['heat']['grid_import'] -
+            revenue_analysis['heat']['community_import']
+        )
+        
+        revenue_analysis['hydro']['total'] = (
+            revenue_analysis['hydro']['grid_export'] +
+            revenue_analysis['hydro']['community_export'] -
+            revenue_analysis['hydro']['grid_import'] -
+            revenue_analysis['hydro']['community_import']
+        )
+        
+        revenue_analysis['storage']['total'] = (
+            revenue_analysis['storage']['electricity'] +
+            revenue_analysis['storage']['heat'] +
+            revenue_analysis['storage']['hydro']
+        )
+        
+        revenue_analysis['production']['total'] = (
+            revenue_analysis['production']['renewables'] +
+            revenue_analysis['production']['electrolyzers'] +
+            revenue_analysis['production']['heatpumps']
+        )
+        
+        # Print summary
+        print("\n=== REVENUE ANALYSIS BY RESOURCE TYPE ===")
+        print(f"Electricity: {revenue_analysis['electricity']['total']:.2f}")
+        print(f"  - Grid export: {revenue_analysis['electricity']['grid_export']:.2f}")
+        print(f"  - Grid import: {revenue_analysis['electricity']['grid_import']:.2f}")
+        print(f"  - Community export: {revenue_analysis['electricity']['community_export']:.2f}")
+        print(f"  - Community import: {revenue_analysis['electricity']['community_import']:.2f}")
+        
+        print(f"Heat: {revenue_analysis['heat']['total']:.2f}")
+        print(f"  - Grid export: {revenue_analysis['heat']['grid_export']:.2f}")
+        print(f"  - Grid import: {revenue_analysis['heat']['grid_import']:.2f}")
+        print(f"  - Community export: {revenue_analysis['heat']['community_export']:.2f}")
+        print(f"  - Community import: {revenue_analysis['heat']['community_import']:.2f}")
+        
+        print(f"Hydrogen: {revenue_analysis['hydro']['total']:.2f}")
+        print(f"  - Grid export: {revenue_analysis['hydro']['grid_export']:.2f}")
+        print(f"  - Grid import: {revenue_analysis['hydro']['grid_import']:.2f}")
+        print(f"  - Community export: {revenue_analysis['hydro']['community_export']:.2f}")
+        print(f"  - Community import: {revenue_analysis['hydro']['community_import']:.2f}")
+        
+        print(f"Storage benefits: {revenue_analysis['storage']['total']:.2f}")
+        print(f"  - Electricity: {revenue_analysis['storage']['electricity']:.2f}")
+        print(f"  - Heat: {revenue_analysis['storage']['heat']:.2f}")
+        print(f"  - Hydrogen: {revenue_analysis['storage']['hydro']:.2f}")
+        
+        print(f"Production revenue: {revenue_analysis['production']['total']:.2f}")
+        print(f"  - Renewables: {revenue_analysis['production']['renewables']:.2f}")
+        print(f"  - Electrolyzers: {revenue_analysis['production']['electrolyzers']:.2f}")
+        print(f"  - Heat pumps: {revenue_analysis['production']['heatpumps']:.2f}")
+        
+        return revenue_analysis
+
     def solve_with_restricted_pricing(self):
         """
         Solve with Restricted Pricing mechanism:
@@ -538,15 +886,19 @@ class LocalEnergyMarket:
         print("Step 1: Solving MILP to get optimal commitment decisions...")
         
         # Step 1: Solve original MILP
-        status = self.solve()
+        # status = self.solve()
         
-        if status != "optimal":
-            print(f"MILP optimization failed with status: {status}")
-            return status, None, None
+        # if status != "optimal":
+        #     print(f"MILP optimization failed with status: {status}")
+        #     return status, None, None
         
-        print("MILP solved successfully. Extracting binary variable values...")
-        
+        # print("MILP solved successfully. Extracting binary variable values...")
         # Extract optimal binary variable values
+        from pyscipopt import SCIP_PARAMSETTING
+        self.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        self.model.disablePropagation()
+        self.model.optimize()
         binary_values = {}
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
@@ -558,25 +910,54 @@ class LocalEnergyMarket:
                     binary_values['z_off', u, t] = self.model.getVal(self.z_off[u,t])
                 if (u,t) in self.z_sb:
                     binary_values['z_sb', u, t] = self.model.getVal(self.z_sb[u,t])
+        # Step 2: Create new LP model with fixed binary variables
+        for u in self.players_with_electrolyzers:
+            for t in self.time_periods:
+                var = self.model.data["vars"]["z_su"][(u,t)]
+                # self.model.fixVar(var, binary_values["z_su", u, t])
+                var = self.model.data["vars"]["z_on"][(u,t)]
+                # self.model.fixVar(var, binary_values["z_on", u, t])
+                var = self.model.data["vars"]["z_off"][(u,t)]
+                # self.model.fixVar(var, binary_values["z_off", u, t])
+                # self.model.chgVarUb(var, binary_values["z_off", u, t])
+                var = self.model.data["vars"]["z_sb"][(u,t)]
+                # self.model.fixVar(var, binary_values["z_sb", u, t])
+                # self.model.chgVarUb(var, binary_values["z_sb", u, t])
+        
+        self.model.optimize()
+        # # if status != "optimal":
+        #     print(f"LP optimization failed with status: {status}")
+        #     return status, None, None
+        
+        print("LP solved successfully. Extracting shadow prices...")
+        
+        # Step 3: Extract shadow prices (dual multipliers) from community balance constraints
+        prices = {
+            'electricity': {},
+            'heat': {},
+            'hydro': {}
+        }
+        
+        for t in self.time_periods:
+            # Get dual multipliers for community balance constraints
+            # Note: Must use getTransformedCons() to get transformed constraints for dual solution
+            t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
+            prices['electricity'][t] = self.model.getDualsolLinear(t_cons)
+            t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
+            prices['heat'][t] = self.model.getDualsolLinear(t_cons)
+            t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
+            prices['hydro'][t] = self.model.getDualsolLinear(t_cons)
+            
+
+
+
+        
         
         print("Step 2: Creating LP relaxation with fixed binary variables...")
         self.model.freeTransform()
         self.model.relax()
 
-        # Step 2: Create new LP model with fixed binary variables
-        for u in self.players_with_electrolyzers:
-            for t in self.time_periods:
-                var = self.model.data["vars"]["z_su"][(u,t)]
-                self.model.fixVar(var, binary_values["z_su", u, t])
-                var = self.model.data["vars"]["z_on"][(u,t)]
-                self.model.fixVar(var, binary_values["z_on", u, t])
-                var = self.model.data["vars"]["z_off"][(u,t)]
-                self.model.chgVarLb(var, binary_values["z_off", u, t])
-                self.model.chgVarUb(var, binary_values["z_off", u, t])
-                var = self.model.data["vars"]["z_sb"][(u,t)]
-                self.model.chgVarLb(var, binary_values["z_sb", u, t])
-                self.model.chgVarUb(var, binary_values["z_sb", u, t])
-        
+
         print("Step 3: Solving LP relaxation...")
         
         # Solve LP
@@ -585,9 +966,9 @@ class LocalEnergyMarket:
         self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
         self.model.disablePropagation()
         self.model.optimize()
-        if status != "optimal":
-            print(f"LP optimization failed with status: {status}")
-            return status, None, None
+        # if status != "optimal":
+        #     print(f"LP optimization failed with status: {status}")
+        #     return status, None, None
         
         print("LP solved successfully. Extracting shadow prices...")
         
@@ -981,7 +1362,7 @@ class LocalEnergyMarket:
             'hydro': {},
             'storage': {},
             'production': {},
-            'peak_power': lp_model.getVal(self.lp_chi_peak)
+            'peak_power': lp_model.getVal(self.chi_peak)
         }
         
         for u in self.players:
@@ -1194,6 +1575,22 @@ if __name__ == "__main__":
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     
+    # First solve complete model and analyze revenue
+    print("\n" + "="*60)
+    print("SOLVING COMPLETE MODEL AND ANALYZING REVENUE")
+    print("="*60)
+    status_complete, results_complete, revenue_analysis = lem.solve_complete_model()
+    
+    if status_complete == "optimal":
+        print(f"\nComplete model solved successfully!")
+        print(f"Objective value: {results_complete.get('objective_value', 'N/A')}")
+    else:
+        print(f"\nComplete model failed with status: {status_complete}")
+    
+    print("\n" + "="*60)
+    print("SOLVING WITH RESTRICTED PRICING")
+    print("="*60)
+    
     # Solve using Restricted Pricing
     status, results, prices = lem.solve_with_restricted_pricing()
     
@@ -1206,72 +1603,3 @@ if __name__ == "__main__":
         print(f"hydro prices: {prices['hydro']}")
     else:
         print(f"Optimization failed with status: {status}")
-def process_cons_arr(arr, process_func):
-    """
-    Recursively process arrays of constraint objects
-    
-    Args:
-        arr: A numpy array (potentially nested) of constraint objects
-        process_func: Function to apply to each constraint object
-        
-    Returns:
-        Processed array with the same structure
-    """
-    # # Base case: if it's not an array or not of object type, just return it
-    # if not isinstance(arr, np.ndarray) or arr.dtype != object:
-    #     return arr
-    
-    # Create a new array with the same shape
-    new_arr = {}
-    
-    # Process each element
-    for key, val in arr.items():
-        new_arr[key] = process_func(val)
-    
-    return new_arr
-def solve_and_extract_results(model):
-    """
-    모델을 풀고 결과를 반환합니다.
-    
-    Returns:
-    --------
-    results : dict
-        test.py의 generate_initial_patterns와 동일한 구조의 딕셔너리
-    """
-   
-    # 최적화 상태 확인
-    status = model.getStatus()
-    time = model.getSolvingTime()
-    print(f"MIP model status: {status}, time: {time}")
-    if status in ["optimal", "gaplimit"]:            
-        # 결과 저장할 딕셔너리 초기화
-        results = {}
-        if model.data != None:
-            # 저장된 모든 변수에 대해 최적해 값 추출
-            for var_name, var_dict in model.data["vars"].items():
-                if isinstance(var_dict, dict):
-                    # 딕셔너리 형태의 변수들 처리 (예: e_E_gri, i_E_gri 등)
-                    result_dict = {}
-                    for key, var in var_dict.items():
-                        try:
-                            result_dict[key] = model.getVal(var)
-                        except:
-                            print(f"Could not get value for {var_name}_{key}")
-                    results[var_name] = result_dict
-                else:
-                    # 단일 변수 처리 (예: chi_peak)
-                    try:
-                        results[var_name] = model.getVal(var_dict)
-                    except:
-                        print(f"Could not get value for {var_name}")
-        else:
-            vars_name = ["e_E_gri", "i_E_gri", "e_E_com", "i_E_com", "e_H_gri", "i_H_gri", 
-                        "e_H_com", "i_H_com", "e_G_gri", "i_G_gri", "e_G_com", "i_G_com",
-                        "p", "d", "b_dis_E", "b_ch_E", "s_E", "b_dis_G", "b_ch_G", "s_G",
-                        "b_dis_H", "b_ch_H", "s_H", "z_su", "z_on", "z_off", "z_sb", "chi_peak"]
-            raise Exception(f"Model data is None. Cannot extract results for {vars_name}")
-            
-        return status, results
-    else:
-        print(f"Model not solved to optimality. Status: {status}")
-        return status, None
