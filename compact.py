@@ -195,15 +195,15 @@ class LocalEnergyMarket:
             for t in self.time_periods:
                 if u in self.U_E:
                     self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
-                                                        ub=self.params.get(f'e_E_cap_{u}_{t}', 1000), obj=-1*self.params.get(f'pi_E_gri_{t}', 0))
+                                                        ub=self.params.get(f'e_E_cap_{u}_{t}', 1000), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
                     self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0, ub=1000)
                 if u in self.U_H:
                     self.e_H_gri[u,t] = self.model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
-                                                        ub=self.params.get(f'e_H_cap_{u}_{t}', 500), obj=-1*self.params.get(f'pi_H_gri_{t}', 0))
+                                                        ub=self.params.get(f'e_H_cap_{u}_{t}', 500), obj=-1*self.params.get(f'pi_H_gri_export_{t}', 0))
                     self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0, ub=500)
                 if u in self.U_G:
                     self.e_G_gri[u,t] = self.model.addVar(vtype="C", name=f"e_G_gri_{u}_{t}", lb=0,
-                                                        ub=self.params.get(f'e_G_cap_{u}_{t}', 100), obj=-1*self.params.get(f'pi_G_gri_{t}', 0))
+                                                        ub=self.params.get(f'e_G_cap_{u}_{t}', 100), obj=-1*self.params.get(f'pi_G_gri_export_{t}', 0))
                     self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0, ub=100)
                 # Production variables (for renewables, heat pumps, electrolyzers) with capacity limits
                 if u in self.players_with_renewables:  # Renewable generators
@@ -238,21 +238,21 @@ class LocalEnergyMarket:
                     self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=nfl_elec_demand_t, ub=nfl_elec_demand_t)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000), obj=self.params.get(f'pi_E_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=nfl_hydro_demand_t, ub=nfl_hydro_demand_t)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=nfl_heat_demand_t, ub=nfl_heat_demand_t)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 
                 # Flexible demand variables
@@ -261,21 +261,21 @@ class LocalEnergyMarket:
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=0.0, ub=fl_elec_demand_cap)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000), obj=self.params.get(f'pi_E_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
                 if u in self.players_with_fl_hydro_demand:
                     fl_hydro_demand_cap = 10**6
                     self.fl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=0.0, ub=fl_hydro_demand_cap)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_fl_heat_demand:
                     fl_heat_demand_cap = 10**6
                     self.fl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=0.0, ub=fl_heat_demand_cap)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_{t}', 0))
+                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 # Storage variables by type with capacity constraints
                 storage_power = self.params.get(f'storage_power', 50)  # kW power rating
@@ -513,7 +513,7 @@ class LocalEnergyMarket:
                 if not (type(lhs) == int):
                     cons = self.model.addCons(lhs == rhs, name=f"hydro_balance_{u}_{t}")
                     self.hydro_balance_cons[f"hydro_balance_{u}_{t}"] = cons
-        
+
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
@@ -529,51 +529,50 @@ class LocalEnergyMarket:
         # Electrolyzer commitment constraints (constraints 17-21)
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
-                if all(var in self.z_on for var in [(u,t), (u,t), (u,t), (u,t)]):
-                    # Constraint 17: exactly one state
+                # Constraint 17: exactly one state
+                cons = self.model.addCons(
+                    self.z_on[u,t] + self.z_off[u,t] + self.z_sb[u,t] == 1,
+                    name=f"electrolyzer_state_{u}_{t}"
+                )
+                self.electrolyzer_cons['state', u, t] = cons
+                
+                # Constraints 18-19: production bounds
+                C_max = self.params.get(f'C_max_{u}', 100)
+                C_sb = self.params.get(f'C_sb_{u}', 10)
+                C_min = self.params.get(f'C_min_{u}', 20)
+                
+                cons = self.model.addCons(
+                    self.fl_d[u,'elec',t] <= C_max * self.z_on[u,t] + C_sb * self.z_sb[u,t],
+                    name=f"electrolyzer_max_{u}_{t}"
+                )
+                self.electrolyzer_cons[f"electrolyzer_max_{u}_{t}"] = cons
+                
+                cons = self.model.addCons(
+                    self.fl_d[u,'elec',t] >= C_min * self.z_on[u,t] + C_sb * self.z_sb[u,t],
+                    name=f"electrolyzer_min_{u}_{t}"
+                )
+                self.electrolyzer_cons[f"electrolyzer_min_{u}_{t}"] = cons
+                
+                # Constraint 20: startup logic
+                if t > 0:
                     cons = self.model.addCons(
-                        self.z_on[u,t] + self.z_off[u,t] + self.z_sb[u,t] == 1,
-                        name=f"electrolyzer_state_{u}_{t}"
+                        self.z_su[u,t] >= self.z_on[u,t] - self.z_on[u,t-1] - self.z_sb[u,t],
+                        name=f"electrolyzer_startup_{u}_{t}"
                     )
-                    self.electrolyzer_cons['state', u, t] = cons
+                    self.electrolyzer_cons[f"electrolyzer_startup_{u}_{t}"] = cons
                     
-                    # Constraints 18-19: production bounds
-                    C_max = self.params.get(f'C_max_{u}', 100)
-                    C_sb = self.params.get(f'C_sb_{u}', 10)
-                    C_min = self.params.get(f'C_min_{u}', 20)
-                    
+                    # off to standby is not allowed
                     cons = self.model.addCons(
-                        self.fl_d[u,'elec',t] <= C_max * self.z_on[u,t] + C_sb * self.z_sb[u,t],
-                        name=f"electrolyzer_max_{u}_{t}"
+                        self.z_off[u,t-1] + self.z_sb[u,t] <= 1.0,
+                        name=f"electrolyzer_forbid_off_to_sb_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"electrolyzer_max_{u}_{t}"] = cons
-                    
+                    self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_{u}_{t}"] = cons
+                else:
                     cons = self.model.addCons(
-                        self.fl_d[u,'elec',t] >= C_min * self.z_on[u,t] + C_sb * self.z_sb[u,t],
-                        name=f"electrolyzer_min_{u}_{t}"
+                        self.z_off[u,t] >= 1.0,
+                        name=f"electrolyzer_initial_state_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"electrolyzer_min_{u}_{t}"] = cons
-                    
-                    # Constraint 20: startup logic
-                    if t > 0:
-                        cons = self.model.addCons(
-                            self.z_su[u,t] >= self.z_on[u,t] - self.z_on[u,t-1] - self.z_sb[u,t],
-                            name=f"electrolyzer_startup_{u}_{t}"
-                        )
-                        self.electrolyzer_cons[f"electrolyzer_startup_{u}_{t}"] = cons
-                        
-                        # off to standby is not allowed
-                        cons = self.model.addCons(
-                            self.z_off[u,t-1] + self.z_sb[u,t] <= 1.0,
-                            name=f"electrolyzer_forbid_off_to_sb_{u}_{t}"
-                        )
-                        self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_{u}_{t}"] = cons
-                    else:
-                        cons = self.model.addCons(
-                            self.z_off[u,t] >= 1.0,
-                            name=f"electrolyzer_initial_state_{u}_{t}"
-                        )
-                        self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
+                    self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
 
         
         # hydro storage SOC transition
@@ -605,6 +604,15 @@ class LocalEnergyMarket:
             community_hydro_balance = quicksum(self.e_G_com.get((u,t),0) - self.i_G_com.get((u,t),0) for u in self.players)
             cons = self.model.addCons(community_hydro_balance == 0, name=f"community_hydro_balance_{t}")
             self.community_hydro_balance_cons[f"community_hydro_balance_{t}"] = cons
+        
+        # Force u5 to only import hydrogen from community (not from grid)
+        # for t in self.time_periods:
+        #     if t==10:
+        #         cons = self.model.addCons(
+        #             self.i_G_gri.get(('u5',t),0) == 0, 
+        #             name=f"force_u5_community_only_{t}"
+        #         )
+        #         self.storage_cons[f"force_u5_community_only_{t}"] = cons
     
     
     def solve(self):
@@ -695,76 +703,76 @@ class LocalEnergyMarket:
         if 'e_E_gri' in results:
             for (u, t), val in results['e_E_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    price = self.params.get(f'pi_E_gri_export_{t}', 0.2)
                     revenue_analysis['electricity']['grid_export'] += val * price
         
         if 'i_E_gri' in results:
             for (u, t), val in results['i_E_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2)
                     revenue_analysis['electricity']['grid_import'] += val * price
         
         if 'e_E_com' in results:
             for (u, t), val in results['e_E_com'].items():
                 if val > 0:
                     # Community price (could be different from grid price)
-                    price = self.params.get(f'pi_E_gri_{t}', 0.2) * 0.8  # Assume 20% discount
+                    price = self.params.get(f'pi_E_gri_export_{t}', 0.2) * 0.8  # Assume 20% discount
                     revenue_analysis['electricity']['community_export'] += val * price
         
         if 'i_E_com' in results:
             for (u, t), val in results['i_E_com'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_E_gri_{t}', 0.2) * 0.8
+                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2) * 0.8
                     revenue_analysis['electricity']['community_import'] += val * price
         
         # Calculate heat revenue
         if 'e_H_gri' in results:
             for (u, t), val in results['e_H_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    price = self.params.get(f'pi_H_gri_export_{t}', 0.15)
                     revenue_analysis['heat']['grid_export'] += val * price
         
         if 'i_H_gri' in results:
             for (u, t), val in results['i_H_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15)
                     revenue_analysis['heat']['grid_import'] += val * price
         
         if 'e_H_com' in results:
             for (u, t), val in results['e_H_com'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_{t}', 0.15) * 0.8
+                    price = self.params.get(f'pi_H_gri_export_{t}', 0.15) * 0.8
                     revenue_analysis['heat']['community_export'] += val * price
         
         if 'i_H_com' in results:
             for (u, t), val in results['i_H_com'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_{t}', 0.15) * 0.8
+                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15) * 0.8
                     revenue_analysis['heat']['community_import'] += val * price
         
         # Calculate hydro revenue
         if 'e_G_gri' in results:
             for (u, t), val in results['e_G_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    price = self.params.get(f'pi_G_gri_export_{t}', 0.3)
                     revenue_analysis['hydro']['grid_export'] += val * price
         
         if 'i_G_gri' in results:
             for (u, t), val in results['i_G_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3)
                     revenue_analysis['hydro']['grid_import'] += val * price
         
         if 'e_G_com' in results:
             for (u, t), val in results['e_G_com'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_{t}', 0.3) * 0.8
+                    price = self.params.get(f'pi_G_gri_export_{t}', 0.3) * 0.8
                     revenue_analysis['hydro']['community_export'] += val * price
         
         if 'i_G_com' in results:
             for (u, t), val in results['i_G_com'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_{t}', 0.3) * 0.8
+                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3) * 0.8
                     revenue_analysis['hydro']['community_import'] += val * price
         
         # Calculate storage revenue (avoided costs)
@@ -772,19 +780,19 @@ class LocalEnergyMarket:
             for (u, t), val in results['b_dis_E'].items():
                 if val > 0:
                     # Storage discharge avoids grid import cost
-                    price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2)
                     revenue_analysis['storage']['electricity'] += val * price
         
         if 'b_dis_H' in results:
             for (u, t), val in results['b_dis_H'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15)
                     revenue_analysis['storage']['heat'] += val * price
         
         if 'b_dis_G' in results:
             for (u, t), val in results['b_dis_G'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3)
                     revenue_analysis['storage']['hydro'] += val * price
         
         # Calculate production revenue
@@ -793,15 +801,15 @@ class LocalEnergyMarket:
                 if val > 0:
                     if resource_type == 'res' and u in self.players_with_renewables:
                         # Renewable energy production
-                        price = self.params.get(f'pi_E_gri_{t}', 0.2)
+                        price = self.params.get(f'pi_E_gri_export_{t}', 0.2)
                         revenue_analysis['production']['renewables'] += val * price
                     elif resource_type == 'els' and u in self.players_with_electrolyzers:
                         # Electrolyzer production (hydrogen)
-                        price = self.params.get(f'pi_G_gri_{t}', 0.3)
+                        price = self.params.get(f'pi_G_gri_export_{t}', 0.3)
                         revenue_analysis['production']['electrolyzers'] += val * price
                     elif resource_type == 'hp' and u in self.players_with_heatpumps:
                         # Heat pump production
-                        price = self.params.get(f'pi_H_gri_{t}', 0.15)
+                        price = self.params.get(f'pi_H_gri_export_{t}', 0.15)
                         revenue_analysis['production']['heatpumps'] += val * price
         
         # Calculate totals
@@ -1515,7 +1523,7 @@ if __name__ == "__main__":
         'players_with_nfl_elec_demand': ['u4'],
         'players_with_nfl_hydro_demand': ['u5'],
         'players_with_nfl_heat_demand': ['u6'],
-        'players_with_fl_elec_demand': [],
+        'players_with_fl_elec_demand': ['u2'],  # u2 needs electricity to run electrolyzer
         'players_with_fl_hydro_demand': [],
         'players_with_fl_heat_demand': [],
         'nu_ch': 0.9,
@@ -1525,7 +1533,7 @@ if __name__ == "__main__":
         # Storage parameters (common for all types)
         'storage_power': 50,        # 50 kW power rating
         'storage_capacity': 200,    # 200 kWh capacity
-        'initial_soc': 100,         # Initial 100 kWh
+        'initial_soc': 0.0,         # Initial 100 kWh
         
         # Equipment capacities
         'renewable_cap_u1': 150,    # 150 kW solar
@@ -1551,12 +1559,12 @@ if __name__ == "__main__":
         'phi0_u2': 0.0,            # Electrolyzer efficiency parameter
     }
     parameters['players_with_fl_elec_demand'] = list(set(parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']))
-    # Add demand data
+    # Add demand data - Increased demand to encourage community trading
     for u in players:
         for t in time_periods:
-            parameters[f'd_E_nfl_{u}_{t}'] = 10 + 5 * np.sin(2 * np.pi * t / 24)  # Example demand pattern
-            parameters[f'd_H_nfl_{u}_{t}'] = 5 + 2 * np.sin(2 * np.pi * t / 24)
-            parameters[f'd_G_nfl_{u}_{t}'] = 2 + 1 * np.sin(2 * np.pi * t / 24)
+            parameters[f'd_E_nfl_{u}_{t}'] = 30 + 15 * np.sin(2 * np.pi * t / 24)  # Increased: 15~45 kW
+            parameters[f'd_H_nfl_{u}_{t}'] = 20 + 10 * np.sin(2 * np.pi * t / 24)  # Increased: 10~30 kW
+            parameters[f'd_G_nfl_{u}_{t}'] = 8 + 4 * np.sin(2 * np.pi * t / 24)    # Increased: 4~12 kg/day
     
     # Add cost parameters
     for u in players:
@@ -1566,11 +1574,21 @@ if __name__ == "__main__":
         parameters[f'c_su_{u}'] = 50
         parameters[f'c_sto_{u}'] = 0.01
     
-    # Add grid prices
+    # Add grid prices - Grid import is 0.1% more expensive than export to encourage community trading
     for t in time_periods:
-        parameters[f'pi_E_gri_{t}'] = 0.2 + 0.1 * np.sin(2 * np.pi * t / 24)
-        parameters[f'pi_H_gri_{t}'] = 0.15
-        parameters[f'pi_G_gri_{t}'] = 0.3
+        base_price_E = 0.5 + 0.2 * np.sin(2 * np.pi * t / 24)  # Base electricity price: 0.3~0.7
+        base_price_H = 0.4  # Base heat price
+        base_price_G = 1.0  # Base hydrogen price
+        
+        # Export prices (negative in objective function)
+        parameters[f'pi_E_gri_export_{t}'] = base_price_E
+        parameters[f'pi_H_gri_export_{t}'] = base_price_H
+        parameters[f'pi_G_gri_export_{t}'] = base_price_G
+        
+        # Import prices (positive in objective function) - 0.1% more expensive
+        parameters[f'pi_E_gri_import_{t}'] = base_price_E * 1.001
+        parameters[f'pi_H_gri_import_{t}'] = base_price_H * 1.001
+        parameters[f'pi_G_gri_import_{t}'] = base_price_G * 1.001
     
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
