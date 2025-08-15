@@ -650,12 +650,14 @@ class LocalEnergyMarket:
         
         # Analyze revenue by resource type
         revenue_analysis = self._analyze_revenue_by_resource(results)
-        
+        # Analyze energy flows
+        flow_analysis = self.analyze_energy_flows(results)
         return status, results, revenue_analysis
     
     def _analyze_revenue_by_resource(self, results):
         """
         Analyze revenue contribution by resource type from objective function
+        Based ONLY on addVar(obj=...) coefficients defined in the model
         
         Args:
             results: Dictionary containing optimization results
@@ -665,219 +667,455 @@ class LocalEnergyMarket:
         """
         revenue_analysis = {
             'electricity': {
-                'grid_export': 0.0,
-                'grid_import': 0.0,
-                'community_export': 0.0,
-                'community_import': 0.0,
-                'total': 0.0
+                'grid_export_revenue': 0.0,
+                'grid_import_cost': 0.0,
+                'production_cost': 0.0,
+                'storage_cost': 0.0,
+                'net': 0.0
+            },
+            'hydrogen': {
+                'grid_export_revenue': 0.0,
+                'grid_import_cost': 0.0,
+                'production_cost': 0.0,
+                'storage_cost': 0.0,
+                'startup_cost': 0.0,
+                'net': 0.0
             },
             'heat': {
-                'grid_export': 0.0,
-                'grid_import': 0.0,
-                'community_export': 0.0,
-                'community_import': 0.0,
-                'total': 0.0
+                'grid_export_revenue': 0.0,
+                'grid_import_cost': 0.0,
+                'production_cost': 0.0,
+                'storage_cost': 0.0,
+                'net': 0.0
             },
-            'hydro': {
-                'grid_export': 0.0,
-                'grid_import': 0.0,
-                'community_export': 0.0,
-                'community_import': 0.0,
-                'total': 0.0
+            'common': {
+                'peak_power_cost': 0.0
             },
-            'storage': {
-                'electricity': 0.0,
-                'heat': 0.0,
-                'hydro': 0.0,
-                'total': 0.0
-            },
-            'production': {
-                'renewables': 0.0,
-                'electrolyzers': 0.0,
-                'heatpumps': 0.0,
-                'total': 0.0
-            }
+            'total_revenue': 0.0,
+            'total_cost': 0.0,
+            'net_profit': 0.0
         }
         
-        # Calculate electricity revenue
+        c_sto = self.params.get('c_sto', 0.01)
+        nu_ch = self.params.get('nu_ch', 0.9)
+        nu_dis = self.params.get('nu_dis', 0.9)
+        
+        # ========== ELECTRICITY ==========
+        # Export revenue
         if 'e_E_gri' in results:
             for (u, t), val in results['e_E_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_E_gri_export_{t}', 0.2)
-                    revenue_analysis['electricity']['grid_export'] += val * price
+                    price = self.params.get(f'pi_E_gri_export_{t}', 0)
+                    revenue_analysis['electricity']['grid_export_revenue'] += val * price
         
+        # Import cost
         if 'i_E_gri' in results:
             for (u, t), val in results['i_E_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2)
-                    revenue_analysis['electricity']['grid_import'] += val * price
+                    price = self.params.get(f'pi_E_gri_import_{t}', 0)
+                    revenue_analysis['electricity']['grid_import_cost'] += val * price
         
-        if 'e_E_com' in results:
-            for (u, t), val in results['e_E_com'].items():
+        # Renewable production cost
+        if 'p' in results:
+            for (u, resource_type, t), val in results['p'].items():
+                if val > 0 and resource_type == 'res':
+                    cost = self.params.get(f'c_res_{u}', 0)
+                    revenue_analysis['electricity']['production_cost'] += val * cost
+        
+        # Electricity storage cost
+        if 'b_ch_E' in results:
+            for (u, t), val in results['b_ch_E'].items():
                 if val > 0:
-                    # Community price (could be different from grid price)
-                    price = self.params.get(f'pi_E_gri_export_{t}', 0.2) * 0.8  # Assume 20% discount
-                    revenue_analysis['electricity']['community_export'] += val * price
+                    revenue_analysis['electricity']['storage_cost'] += val * c_sto * nu_ch
         
-        if 'i_E_com' in results:
-            for (u, t), val in results['i_E_com'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2) * 0.8
-                    revenue_analysis['electricity']['community_import'] += val * price
-        
-        # Calculate heat revenue
-        if 'e_H_gri' in results:
-            for (u, t), val in results['e_H_gri'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_H_gri_export_{t}', 0.15)
-                    revenue_analysis['heat']['grid_export'] += val * price
-        
-        if 'i_H_gri' in results:
-            for (u, t), val in results['i_H_gri'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15)
-                    revenue_analysis['heat']['grid_import'] += val * price
-        
-        if 'e_H_com' in results:
-            for (u, t), val in results['e_H_com'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_H_gri_export_{t}', 0.15) * 0.8
-                    revenue_analysis['heat']['community_export'] += val * price
-        
-        if 'i_H_com' in results:
-            for (u, t), val in results['i_H_com'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15) * 0.8
-                    revenue_analysis['heat']['community_import'] += val * price
-        
-        # Calculate hydro revenue
-        if 'e_G_gri' in results:
-            for (u, t), val in results['e_G_gri'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_G_gri_export_{t}', 0.3)
-                    revenue_analysis['hydro']['grid_export'] += val * price
-        
-        if 'i_G_gri' in results:
-            for (u, t), val in results['i_G_gri'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3)
-                    revenue_analysis['hydro']['grid_import'] += val * price
-        
-        if 'e_G_com' in results:
-            for (u, t), val in results['e_G_com'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_G_gri_export_{t}', 0.3) * 0.8
-                    revenue_analysis['hydro']['community_export'] += val * price
-        
-        if 'i_G_com' in results:
-            for (u, t), val in results['i_G_com'].items():
-                if val > 0:
-                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3) * 0.8
-                    revenue_analysis['hydro']['community_import'] += val * price
-        
-        # Calculate storage revenue (avoided costs)
         if 'b_dis_E' in results:
             for (u, t), val in results['b_dis_E'].items():
                 if val > 0:
-                    # Storage discharge avoids grid import cost
-                    price = self.params.get(f'pi_E_gri_import_{t}', 0.2)
-                    revenue_analysis['storage']['electricity'] += val * price
+                    revenue_analysis['electricity']['storage_cost'] += val * c_sto * (1/nu_dis)
         
-        if 'b_dis_H' in results:
-            for (u, t), val in results['b_dis_H'].items():
+        # ========== HYDROGEN ==========
+        # Export revenue
+        if 'e_G_gri' in results:
+            for (u, t), val in results['e_G_gri'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_H_gri_import_{t}', 0.15)
-                    revenue_analysis['storage']['heat'] += val * price
+                    price = self.params.get(f'pi_G_gri_export_{t}', 0)
+                    revenue_analysis['hydrogen']['grid_export_revenue'] += val * price
+        
+        # Import cost
+        if 'i_G_gri' in results:
+            for (u, t), val in results['i_G_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_G_gri_import_{t}', 0)
+                    revenue_analysis['hydrogen']['grid_import_cost'] += val * price
+        
+        # Electrolyzer production cost
+        if 'p' in results:
+            for (u, resource_type, t), val in results['p'].items():
+                if val > 0 and resource_type == 'els':
+                    cost = self.params.get(f'c_els_{u}', 0)
+                    revenue_analysis['hydrogen']['production_cost'] += val * cost
+        
+        # Hydrogen storage cost
+        if 'b_ch_G' in results:
+            for (u, t), val in results['b_ch_G'].items():
+                if val > 0:
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_sto * nu_ch
         
         if 'b_dis_G' in results:
             for (u, t), val in results['b_dis_G'].items():
                 if val > 0:
-                    price = self.params.get(f'pi_G_gri_import_{t}', 0.3)
-                    revenue_analysis['storage']['hydro'] += val * price
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_sto * (1/nu_dis)
         
-        # Calculate production revenue
+        # Electrolyzer startup cost
+        if 'z_su' in results:
+            for (u, t), val in results['z_su'].items():
+                if val > 0:
+                    startup_cost = self.params.get(f'c_su_{u}', 50)
+                    revenue_analysis['hydrogen']['startup_cost'] += val * startup_cost
+        
+        # ========== HEAT ==========
+        # Export revenue
+        if 'e_H_gri' in results:
+            for (u, t), val in results['e_H_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_export_{t}', 0)
+                    revenue_analysis['heat']['grid_export_revenue'] += val * price
+        
+        # Import cost
+        if 'i_H_gri' in results:
+            for (u, t), val in results['i_H_gri'].items():
+                if val > 0:
+                    price = self.params.get(f'pi_H_gri_import_{t}', 0)
+                    revenue_analysis['heat']['grid_import_cost'] += val * price
+        
+        # Heat pump production cost
         if 'p' in results:
             for (u, resource_type, t), val in results['p'].items():
+                if val > 0 and resource_type == 'hp':
+                    cost = self.params.get(f'c_hp_{u}', 0)
+                    revenue_analysis['heat']['production_cost'] += val * cost
+        
+        # Heat storage cost
+        if 'b_ch_H' in results:
+            for (u, t), val in results['b_ch_H'].items():
                 if val > 0:
-                    if resource_type == 'res' and u in self.players_with_renewables:
-                        # Renewable energy production
-                        price = self.params.get(f'pi_E_gri_export_{t}', 0.2)
-                        revenue_analysis['production']['renewables'] += val * price
-                    elif resource_type == 'els' and u in self.players_with_electrolyzers:
-                        # Electrolyzer production (hydrogen)
-                        price = self.params.get(f'pi_G_gri_export_{t}', 0.3)
-                        revenue_analysis['production']['electrolyzers'] += val * price
-                    elif resource_type == 'hp' and u in self.players_with_heatpumps:
-                        # Heat pump production
-                        price = self.params.get(f'pi_H_gri_export_{t}', 0.15)
-                        revenue_analysis['production']['heatpumps'] += val * price
+                    revenue_analysis['heat']['storage_cost'] += val * c_sto * nu_ch
         
-        # Calculate totals
-        revenue_analysis['electricity']['total'] = (
-            revenue_analysis['electricity']['grid_export'] +
-            revenue_analysis['electricity']['community_export'] -
-            revenue_analysis['electricity']['grid_import'] -
-            revenue_analysis['electricity']['community_import']
+        if 'b_dis_H' in results:
+            for (u, t), val in results['b_dis_H'].items():
+                if val > 0:
+                    revenue_analysis['heat']['storage_cost'] += val * c_sto * (1/nu_dis)
+        
+        # ========== COMMON COSTS ==========
+        if 'chi_peak' in results:
+            peak_penalty = self.params.get('pi_peak', 0)
+            revenue_analysis['common']['peak_power_cost'] = results['chi_peak'] * peak_penalty
+        
+        # ========== CALCULATE NET VALUES ==========
+        # Electricity net
+        revenue_analysis['electricity']['net'] = (
+            revenue_analysis['electricity']['grid_export_revenue'] -
+            revenue_analysis['electricity']['grid_import_cost'] -
+            revenue_analysis['electricity']['production_cost'] -
+            revenue_analysis['electricity']['storage_cost']
         )
         
-        revenue_analysis['heat']['total'] = (
-            revenue_analysis['heat']['grid_export'] +
-            revenue_analysis['heat']['community_export'] -
-            revenue_analysis['heat']['grid_import'] -
-            revenue_analysis['heat']['community_import']
+        # Hydrogen net
+        revenue_analysis['hydrogen']['net'] = (
+            revenue_analysis['hydrogen']['grid_export_revenue'] -
+            revenue_analysis['hydrogen']['grid_import_cost'] -
+            revenue_analysis['hydrogen']['production_cost'] -
+            revenue_analysis['hydrogen']['storage_cost'] -
+            revenue_analysis['hydrogen']['startup_cost']
         )
         
-        revenue_analysis['hydro']['total'] = (
-            revenue_analysis['hydro']['grid_export'] +
-            revenue_analysis['hydro']['community_export'] -
-            revenue_analysis['hydro']['grid_import'] -
-            revenue_analysis['hydro']['community_import']
+        # Heat net
+        revenue_analysis['heat']['net'] = (
+            revenue_analysis['heat']['grid_export_revenue'] -
+            revenue_analysis['heat']['grid_import_cost'] -
+            revenue_analysis['heat']['production_cost'] -
+            revenue_analysis['heat']['storage_cost']
         )
         
-        revenue_analysis['storage']['total'] = (
-            revenue_analysis['storage']['electricity'] +
-            revenue_analysis['storage']['heat'] +
-            revenue_analysis['storage']['hydro']
+        # Total calculations
+        revenue_analysis['total_revenue'] = (
+            revenue_analysis['electricity']['grid_export_revenue'] +
+            revenue_analysis['hydrogen']['grid_export_revenue'] +
+            revenue_analysis['heat']['grid_export_revenue']
         )
         
-        revenue_analysis['production']['total'] = (
-            revenue_analysis['production']['renewables'] +
-            revenue_analysis['production']['electrolyzers'] +
-            revenue_analysis['production']['heatpumps']
+        revenue_analysis['total_cost'] = (
+            revenue_analysis['electricity']['grid_import_cost'] +
+            revenue_analysis['electricity']['production_cost'] +
+            revenue_analysis['electricity']['storage_cost'] +
+            revenue_analysis['hydrogen']['grid_import_cost'] +
+            revenue_analysis['hydrogen']['production_cost'] +
+            revenue_analysis['hydrogen']['storage_cost'] +
+            revenue_analysis['hydrogen']['startup_cost'] +
+            revenue_analysis['heat']['grid_import_cost'] +
+            revenue_analysis['heat']['production_cost'] +
+            revenue_analysis['heat']['storage_cost'] +
+            revenue_analysis['common']['peak_power_cost']
         )
         
-        # Print summary
-        print("\n=== REVENUE ANALYSIS BY RESOURCE TYPE ===")
-        print(f"Electricity: {revenue_analysis['electricity']['total']:.2f}")
-        print(f"  - Grid export: {revenue_analysis['electricity']['grid_export']:.2f}")
-        print(f"  - Grid import: {revenue_analysis['electricity']['grid_import']:.2f}")
-        print(f"  - Community export: {revenue_analysis['electricity']['community_export']:.2f}")
-        print(f"  - Community import: {revenue_analysis['electricity']['community_import']:.2f}")
+        revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost']
         
-        print(f"Heat: {revenue_analysis['heat']['total']:.2f}")
-        print(f"  - Grid export: {revenue_analysis['heat']['grid_export']:.2f}")
-        print(f"  - Grid import: {revenue_analysis['heat']['grid_import']:.2f}")
-        print(f"  - Community export: {revenue_analysis['heat']['community_export']:.2f}")
-        print(f"  - Community import: {revenue_analysis['heat']['community_import']:.2f}")
+        # ========== PRINT SUMMARY ==========
+        print("\n=== OBJECTIVE FUNCTION ANALYSIS BY ENERGY TYPE ===")
         
-        print(f"Hydrogen: {revenue_analysis['hydro']['total']:.2f}")
-        print(f"  - Grid export: {revenue_analysis['hydro']['grid_export']:.2f}")
-        print(f"  - Grid import: {revenue_analysis['hydro']['grid_import']:.2f}")
-        print(f"  - Community export: {revenue_analysis['hydro']['community_export']:.2f}")
-        print(f"  - Community import: {revenue_analysis['hydro']['community_import']:.2f}")
+        print(f"\n[ELECTRICITY]")
+        print(f"  Grid export revenue:  {revenue_analysis['electricity']['grid_export_revenue']:10.4f}")
+        print(f"  Grid import cost:    -{revenue_analysis['electricity']['grid_import_cost']:10.4f}")
+        print(f"  Production cost:     -{revenue_analysis['electricity']['production_cost']:10.4f}")
+        print(f"  Storage cost:        -{revenue_analysis['electricity']['storage_cost']:10.4f}")
+        print(f"  Net:                  {revenue_analysis['electricity']['net']:10.4f}")
         
-        print(f"Storage benefits: {revenue_analysis['storage']['total']:.2f}")
-        print(f"  - Electricity: {revenue_analysis['storage']['electricity']:.2f}")
-        print(f"  - Heat: {revenue_analysis['storage']['heat']:.2f}")
-        print(f"  - Hydrogen: {revenue_analysis['storage']['hydro']:.2f}")
+        print(f"\n[HYDROGEN]")
+        print(f"  Grid export revenue:  {revenue_analysis['hydrogen']['grid_export_revenue']:10.4f}")
+        print(f"  Grid import cost:    -{revenue_analysis['hydrogen']['grid_import_cost']:10.4f}")
+        print(f"  Production cost:     -{revenue_analysis['hydrogen']['production_cost']:10.4f}")
+        print(f"  Storage cost:        -{revenue_analysis['hydrogen']['storage_cost']:10.4f}")
+        print(f"  Startup cost:        -{revenue_analysis['hydrogen']['startup_cost']:10.4f}")
+        print(f"  Net:                  {revenue_analysis['hydrogen']['net']:10.4f}")
         
-        print(f"Production revenue: {revenue_analysis['production']['total']:.2f}")
-        print(f"  - Renewables: {revenue_analysis['production']['renewables']:.2f}")
-        print(f"  - Electrolyzers: {revenue_analysis['production']['electrolyzers']:.2f}")
-        print(f"  - Heat pumps: {revenue_analysis['production']['heatpumps']:.2f}")
+        print(f"\n[HEAT]")
+        print(f"  Grid export revenue:  {revenue_analysis['heat']['grid_export_revenue']:10.4f}")
+        print(f"  Grid import cost:    -{revenue_analysis['heat']['grid_import_cost']:10.4f}")
+        print(f"  Production cost:     -{revenue_analysis['heat']['production_cost']:10.4f}")
+        print(f"  Storage cost:        -{revenue_analysis['heat']['storage_cost']:10.4f}")
+        print(f"  Net:                  {revenue_analysis['heat']['net']:10.4f}")
+        
+        print(f"\n[COMMON]")
+        print(f"  Peak power penalty:  -{revenue_analysis['common']['peak_power_cost']:10.4f}")
+        
+        print(f"\n[TOTAL]")
+        print(f"  Total revenue:        {revenue_analysis['total_revenue']:10.4f}")
+        print(f"  Total cost:          -{revenue_analysis['total_cost']:10.4f}")
+        print(f"  Net profit:           {revenue_analysis['net_profit']:10.4f}")
+        
+        print(f"\n[VERIFICATION]")
+        print(f"  Calculated profit:    {revenue_analysis['net_profit']:10.6f}")
+        print(f"  Solver objective:     {-1*self.model.getObjVal():10.6f}")
+        print(f"  Difference:           {abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())):10.10f}")
+        
+        if abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())) > 1e-6:
+            print("  ⚠️  WARNING: Calculated profit doesn't match solver objective value!")
+        else:
+            print("  ✓  Verification passed!")
         
         return revenue_analysis
+    def analyze_energy_flows(self, results):
+        """
+        Analyze energy flows including community internal conversions
+        
+        Args:
+            results: Dictionary containing optimization results
+            
+        Returns:
+            Dictionary with energy flow analysis
+        """
+        flow_analysis = {}
+        
+        for t in self.time_periods:
+            flow_analysis[t] = {
+                'elec_to_hydro': 0.0,
+                'hydro_produced': 0.0,
+                'elec_to_heat': 0.0,
+                'heat_produced': 0.0,
+                'elec_to_grid': 0.0,
+                'elec_from_grid': 0.0,
+                'elec_renewable': 0.0,
+                'elec_storage_charge': 0.0,    # 추가: 전기 저장소 충전
+                'elec_storage_discharge': 0.0,  # 추가: 전기 저장소 방전
+                'elec_nfl_demand': 0.0,         # 추가: 비유연 전기 수요
+                'elec_net_comm': 0.0,
+                'hydro_to_grid': 0.0,
+                'hydro_from_grid': 0.0,
+                'heat_to_grid': 0.0,
+                'heat_from_grid': 0.0,
+            }
+            
+            # Electricity flows
+            if 'e_E_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['e_E_gri']:
+                        flow_analysis[t]['elec_to_grid'] += results['e_E_gri'][u, t]
+            
+            if 'i_E_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['i_E_gri']:
+                        flow_analysis[t]['elec_from_grid'] += results['i_E_gri'][u, t]
+            
+            # Renewable generation
+            if 'p' in results:
+                for u in self.players_with_renewables:
+                    if (u, 'res', t) in results['p']:
+                        flow_analysis[t]['elec_renewable'] += results['p'][u, 'res', t]
+            
+            # Electrolyzer (Electricity → Hydrogen)
+            if 'fl_d' in results:
+                for u in self.players_with_electrolyzers:
+                    if (u, 'elec', t) in results['fl_d']:
+                        flow_analysis[t]['elec_to_hydro'] += results['fl_d'][u, 'elec', t]
+            
+            if 'p' in results:
+                for u in self.players_with_electrolyzers:
+                    if (u, 'els', t) in results['p']:
+                        flow_analysis[t]['hydro_produced'] += results['p'][u, 'els', t]
+            
+            # Heat pump (Electricity → Heat)
+            if 'fl_d' in results:
+                for u in self.players_with_heatpumps:
+                    if (u, 'elec', t) in results['fl_d']:
+                        flow_analysis[t]['elec_to_heat'] += results['fl_d'][u, 'elec', t]
+            
+            if 'p' in results:
+                for u in self.players_with_heatpumps:
+                    if (u, 'hp', t) in results['p']:
+                        flow_analysis[t]['heat_produced'] += results['p'][u, 'hp', t]
+            
+            # Hydrogen flows
+            if 'e_G_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['e_G_gri']:
+                        flow_analysis[t]['hydro_to_grid'] += results['e_G_gri'][u, t]
+            
+            if 'i_G_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['i_G_gri']:
+                        flow_analysis[t]['hydro_from_grid'] += results['i_G_gri'][u, t]
+            
+            # Heat flows
+            if 'e_H_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['e_H_gri']:
+                        flow_analysis[t]['heat_to_grid'] += results['e_H_gri'][u, t]
+            
+            if 'i_H_gri' in results:
+                for u in self.players:
+                    if (u, t) in results['i_H_gri']:
+                        flow_analysis[t]['heat_from_grid'] += results['i_H_gri'][u, t]
+            
+# Electricity storage
+        if 'b_ch_E' in results:
+            for u in self.players:
+                if (u, t) in results['b_ch_E']:
+                    flow_analysis[t]['elec_storage_charge'] += results['b_ch_E'][u, t]
+        
+        if 'b_dis_E' in results:
+            for u in self.players:
+                if (u, t) in results['b_dis_E']:
+                    flow_analysis[t]['elec_storage_discharge'] += results['b_dis_E'][u, t]
+        
+        # Non-flexible electricity demand
+        if 'nfl_d' in results:
+            for u in self.players:
+                if (u, 'elec', t) in results['nfl_d']:
+                    flow_analysis[t]['elec_nfl_demand'] += results['nfl_d'][u, 'elec', t]
+        
+        # Recalculate Net Community with complete balance
+        flow_analysis[t]['elec_net_comm'] = (
+            flow_analysis[t]['elec_renewable'] +
+            flow_analysis[t]['elec_from_grid'] +
+            flow_analysis[t]['elec_storage_discharge'] -
+            flow_analysis[t]['elec_to_grid'] -
+            flow_analysis[t]['elec_to_hydro'] -
+            flow_analysis[t]['elec_to_heat'] -
+            flow_analysis[t]['elec_storage_charge'] -
+            flow_analysis[t]['elec_nfl_demand']
+        )
+        
+        # Print analysis
+        self._print_energy_flow_analysis(flow_analysis)
+        
+        return flow_analysis
 
+    def _print_energy_flow_analysis(self, flow_analysis):
+        """
+        Print energy flow analysis in a formatted table
+        """
+        print("\n" + "="*130)
+        print("ENERGY FLOW ANALYSIS BY TIME PERIOD")
+        print("="*130)
+        
+        # Header - 포맷 수정
+        print(f"{'Time':^4} | {'='*27} ELECTRICITY {'='*27} | {'='*5} HYDROGEN {'='*5} | {'='*7} HEAT {'='*7}")
+        print(f"{'':^4} | {'Renewable':^10} {'From Grid':^10} {'To Grid':^10} {'→Hydro':^10} {'→Heat':^10} {'Net Comm':^10} | {'Produced':^10} {'To/From':^10} | {'Produced':^10} {'To/From':^10}")
+        print("-"*130)
+        
+        # Data rows - 포맷 조정
+        for t in self.time_periods:
+            flow = flow_analysis[t]
+            
+            # Calculate net flows for display
+            hydro_net = flow['hydro_to_grid'] - flow['hydro_from_grid']
+            hydro_net_str = f"{hydro_net:+10.2f}" if hydro_net != 0 else "      0.00"
+            
+            heat_net = flow['heat_to_grid'] - flow['heat_from_grid']
+            heat_net_str = f"{heat_net:+10.2f}" if heat_net != 0 else "      0.00"
+            
+            print(f"{t:^4} | "
+                f"{flow['elec_renewable']:^10.2f} "
+                f"{flow['elec_from_grid']:^10.2f} "
+                f"{flow['elec_to_grid']:^10.2f} "
+                f"{flow['elec_to_hydro']:^10.2f} "
+                f"{flow['elec_to_heat']:^10.2f} "
+                f"{flow['elec_net_comm']:^10.2f} | "
+                f"{flow['hydro_produced']:^10.2f} "
+                f"{hydro_net_str} | "
+                f"{flow['heat_produced']:^10.2f} "
+                f"{heat_net_str}")
+        
+        # Summary statistics
+        print("-"*120)
+        print("\nSUMMARY STATISTICS:")
+        
+        total_renewable = sum(f['elec_renewable'] for f in flow_analysis.values())
+        total_elec_import = sum(f['elec_from_grid'] for f in flow_analysis.values())
+        total_elec_export = sum(f['elec_to_grid'] for f in flow_analysis.values())
+        total_elec_to_hydro = sum(f['elec_to_hydro'] for f in flow_analysis.values())
+        total_elec_to_heat = sum(f['elec_to_heat'] for f in flow_analysis.values())
+        total_hydro_produced = sum(f['hydro_produced'] for f in flow_analysis.values())
+        total_heat_produced = sum(f['heat_produced'] for f in flow_analysis.values())
+        
+        print(f"\nElectricity:")
+        print(f"  Total renewable generated:     {total_renewable:10.2f} kWh")
+        print(f"  Total imported from grid:      {total_elec_import:10.2f} kWh")
+        print(f"  Total exported to grid:        {total_elec_export:10.2f} kWh")
+        print(f"  Total used for hydrogen:       {total_elec_to_hydro:10.2f} kWh")
+        print(f"  Total used for heat:           {total_elec_to_heat:10.2f} kWh")
+        print(f"  Net grid position:             {total_elec_import - total_elec_export:+10.2f} kWh (+ = import, - = export)")
+        
+        print(f"\nHydrogen:")
+        print(f"  Total produced:                {total_hydro_produced:10.2f} kg")
+        print(f"  Conversion efficiency:         {total_hydro_produced/total_elec_to_hydro*100 if total_elec_to_hydro > 0 else 0:10.2f} %")
+        
+        print(f"\nHeat:")
+        print(f"  Total produced:                {total_heat_produced:10.2f} kWh")
+        print(f"  COP (efficiency):              {total_heat_produced/total_elec_to_heat if total_elec_to_heat > 0 else 0:10.2f}")
+        
+        # Check for community internal hydrogen trading
+        hydro_community_trade = self._check_community_hydrogen_trade(flow_analysis)
+        if hydro_community_trade > 0:
+            print(f"\n⚠️  Community hydrogen trade detected: {hydro_community_trade:.2f} kg")
+        else:
+            print(f"\n❌ No community hydrogen trading detected (all hydrogen goes through grid)")
+
+    def _check_community_hydrogen_trade(self, results):
+        """
+        Check if there's any hydrogen trading within the community
+        """
+        total_community_hydro = 0.0
+        
+        if 'e_G_com' in results:
+            for key, val in results['e_G_com'].items():
+                total_community_hydro += val
+        
+        if 'i_G_com' in results:
+            for key, val in results['i_G_com'].items():
+                total_community_hydro += val
+        
+        return total_community_hydro
     def solve_with_restricted_pricing(self):
         """
         Solve with Restricted Pricing mechanism:
