@@ -207,7 +207,7 @@ class LocalEnergyMarket:
                     self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0, ub=100)
                 # Production variables (for renewables, heat pumps, electrolyzers) with capacity limits
                 if u in self.players_with_renewables:  # Renewable generators
-                    renewable_cap = self.params.get(f'renewable_cap_{u}', 200)  # Default 200 kW
+                    renewable_cap = self.params.get(f'renewable_cap_{u}_{t}', 200)  # Default 200 kW, now time-dependent
                     c_res = self.params.get(f'c_res_{u}', 0)
                     self.p[u,'res',t] = self.model.addVar(vtype="C", name=f"p_res_{u}_{t}", 
                                                         lb=0, ub=renewable_cap, obj=c_res)
@@ -279,7 +279,7 @@ class LocalEnergyMarket:
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 # Storage variables by type with capacity constraints
                 storage_power = self.params.get(f'storage_power', 50)  # kW power rating
-                storage_capacity = self.params.get(f'storage_capacity', 200)  # kWh capacity
+                storage_capacity = self.params.get(f'storage_capacity', 100)  # kWh capacity
                 c_sto = self.params.get(f'c_sto', 0.01)  # Common storage cost
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)
@@ -560,7 +560,6 @@ class LocalEnergyMarket:
                         name=f"electrolyzer_startup_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_startup_{u}_{t}"] = cons
-                    
                     # off to standby is not allowed
                     cons = self.model.addCons(
                         self.z_off[u,t-1] + self.z_sb[u,t] <= 1.0,
@@ -573,8 +572,36 @@ class LocalEnergyMarket:
                         name=f"electrolyzer_initial_state_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
-
-        
+                    cons = self.model.addCons(
+                        self.z_su[u,t] <= 0.0,
+                        name=f"electrolyzer_initial_su_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_initial_su_{u}_{t}"] = cons
+        # # Maximum up time constraints (최대 연속 운전 시간)
+        # for u in self.players_with_electrolyzers:
+        #     max_up = self.params.get('max_up_time', 4)
+            
+        #     for t in range(max_up, len(self.time_periods)):
+        #         # Cannot be ON for more than max_up consecutive periods
+        #         cons = self.model.addCons(
+        #             quicksum(self.z_on[u, tau] for tau in range(t - max_up + 1, t + 1)) <= max_up,
+        #             name=f"max_up_time_{u}_{t}"
+        #         )
+        #         self.electrolyzer_cons[f"max_up_time_{u}_{t}"] = cons
+            
+        # # Minimum down time constraints (최소 정지 시간)
+        # for u in self.players_with_electrolyzers:
+        #     min_down = self.params.get('min_down_time', 1)
+            
+        #     for t in range(1, len(self.time_periods)):
+        #         if t >= min_down:
+        #             # If switched off at t-min_down, cannot be on until t
+        #             for tau in range(max(0, t - min_down + 1), t):
+        #                 cons = self.model.addCons(
+        #                     self.z_on[u,t] + self.z_off[u,tau] <= 1,
+        #                     name=f"min_down_time_{u}_{t}_{tau}"
+        #                 )
+        #                 self.electrolyzer_cons[f"min_down_time_{u}_{t}_{tau}"] = cons
         # hydro storage SOC transition
         for u in self.players_with_hydro_storage:
             # Set initial SOC
@@ -605,14 +632,7 @@ class LocalEnergyMarket:
             cons = self.model.addCons(community_hydro_balance == 0, name=f"community_hydro_balance_{t}")
             self.community_hydro_balance_cons[f"community_hydro_balance_{t}"] = cons
         
-        # Force u5 to only import hydrogen from community (not from grid)
-        # for t in self.time_periods:
-        #     if t==10:
-        #         cons = self.model.addCons(
-        #             self.i_G_gri.get(('u5',t),0) == 0, 
-        #             name=f"force_u5_community_only_{t}"
-        #         )
-        #         self.storage_cons[f"force_u5_community_only_{t}"] = cons
+        # self.model.addCons(quicksum(self.z_su["u2",tau] for tau in range(24)) >= 3.0)
     
     
     def solve(self):
@@ -1547,7 +1567,7 @@ class LocalEnergyMarket:
                 if (u,'els',t) in self.lp_d:
                     C_max = self.params.get(f'C_max_{u}', 100)
                     C_sb = self.params.get(f'C_sb_{u}', 10)
-                    C_min = self.params.get(f'C_min_{u}', 20)
+                    C_min = self.params.get(f'C_min_{u}', 80)
                     
                     # Use FIXED binary values instead of binary variables
                     z_on_val = binary_values.get(('z_on', u, t), 0)
@@ -1774,7 +1794,7 @@ if __name__ == "__main__":
         'initial_soc': 0.0,         # Initial 100 kWh
         
         # Equipment capacities
-        'renewable_cap_u1': 150,    # 150 kW solar
+    # 'renewable_cap_u1' is now replaced by time-dependent 'renewable_cap_u1_t' below
         'hp_cap_u3': 80,           # 80 kW thermal heat pump
         'els_cap_u2': 100,         # 100 kg/day electrolyzer
         
@@ -1795,6 +1815,8 @@ if __name__ == "__main__":
         'C_sb_u2': 10,             # Standby capacity
         'phi1_u2': 0.7,            # Electrolyzer efficiency parameter
         'phi0_u2': 0.0,            # Electrolyzer efficiency parameter
+        'max_up_time': 4,          # 최대 4시간 연속 운전
+        'min_down_time': 1         # 최소 2시간 연속 정지
     }
     parameters['players_with_fl_elec_demand'] = list(set(parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']))
     # Add demand data - Increased demand to encourage community trading
@@ -1802,7 +1824,17 @@ if __name__ == "__main__":
         for t in time_periods:
             parameters[f'd_E_nfl_{u}_{t}'] = 30 + 15 * np.sin(2 * np.pi * t / 24)  # Increased: 15~45 kW
             parameters[f'd_H_nfl_{u}_{t}'] = 20 + 10 * np.sin(2 * np.pi * t / 24)  # Increased: 10~30 kW
-            parameters[f'd_G_nfl_{u}_{t}'] = 8 + 4 * np.sin(2 * np.pi * t / 24)    # Increased: 4~12 kg/day
+            parameters[f'd_G_nfl_{u}_{t}'] = 20 + 4 * np.sin(2 * np.pi * t / 24)    # Increased: 4~12 kg/day
+
+    # Set renewable capacity to be very low or zero for some hours (simulate night or cloudy periods)
+    for t in time_periods:
+        # Night hours: 0~6 and 20~23, almost no capacity
+        if 0 <= t <= 6 or 20 <= t <= 23:
+            parameters[f'renewable_cap_u1_{t}'] = 5  # minimal capacity
+        # Daytime: 7~19, variable capacity
+        else:
+            # Simulate a peak at noon, low at morning/evening
+            parameters[f'renewable_cap_u1_{t}'] = 20 + 130 * np.exp(-((t-12)/4)**2)  # bell curve, max ~150 at t=12
     
     # Add cost parameters
     for u in players:
