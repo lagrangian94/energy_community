@@ -73,20 +73,21 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, iter
     for t in time_periods:
         # Grid/community trading variables - only if player has the capability
         if player in players_with_renewables or player in players_with_elec_storage or player in players_with_nfl_elec_demand or player in players_with_fl_elec_demand:
-            e_E_gri[t] = model.addVar(vtype="C", name=f"e_E_gri_{t}", lb=0, ub=params.get(f'e_E_cap_{player}_{t}', 1000))
-            i_E_gri[t] = model.addVar(vtype="C", name=f"i_E_gri_{t}", lb=0, ub=params.get(f'i_E_cap_{player}_{t}', 1000))
+            res_capacity = 2
+            e_E_gri[t] = model.addVar(vtype="C", name=f"e_E_gri_{t}", lb=0, ub=params.get(f'e_E_cap', 1000))
+            i_E_gri[t] = model.addVar(vtype="C", name=f"i_E_gri_{t}", lb=0, ub=params.get(f'i_E_cap', 1000))
             e_E_com[t] = model.addVar(vtype="C", name=f"e_E_com_{t}", lb=0, ub=1000)
             i_E_com[t] = model.addVar(vtype="C", name=f"i_E_com_{t}", lb=0, ub=1000)
         
         if player in players_with_heatpumps or player in players_with_heat_storage or player in players_with_nfl_heat_demand:
-            e_H_gri[t] = model.addVar(vtype="C", name=f"e_H_gri_{t}", lb=0, ub=params.get(f'e_H_cap_{player}_{t}', 500))
-            i_H_gri[t] = model.addVar(vtype="C", name=f"i_H_gri_{t}", lb=0, ub=params.get(f'i_H_cap_{player}_{t}', 500))
+            e_H_gri[t] = model.addVar(vtype="C", name=f"e_H_gri_{t}", lb=0, ub=params.get(f'e_H_cap', 500))
+            i_H_gri[t] = model.addVar(vtype="C", name=f"i_H_gri_{t}", lb=0, ub=params.get(f'i_H_cap', 500))
             e_H_com[t] = model.addVar(vtype="C", name=f"e_H_com_{t}", lb=0, ub=500)
             i_H_com[t] = model.addVar(vtype="C", name=f"i_H_com_{t}", lb=0, ub=500)
         
         if player in players_with_electrolyzers or player in players_with_hydro_storage or player in players_with_nfl_hydro_demand:
-            e_G_gri[t] = model.addVar(vtype="C", name=f"e_G_gri_{t}", lb=0, ub=params.get(f'e_G_cap_{player}_{t}', 100))
-            i_G_gri[t] = model.addVar(vtype="C", name=f"i_G_gri_{t}", lb=0, ub=params.get(f'i_G_cap_{player}_{t}', 100))
+            e_G_gri[t] = model.addVar(vtype="C", name=f"e_G_gri_{t}", lb=0, ub=params.get(f'e_G_cap', 100))
+            i_G_gri[t] = model.addVar(vtype="C", name=f"i_G_gri_{t}", lb=0, ub=params.get(f'i_G_cap', 100))
             e_G_com[t] = model.addVar(vtype="C", name=f"e_G_com_{t}", lb=0, ub=100)
             i_G_com[t] = model.addVar(vtype="C", name=f"i_G_com_{t}", lb=0, ub=100)
         
@@ -250,7 +251,7 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, iter
     for t in time_periods:
         if t in i_E_gri or t in e_E_gri:
             lhs = i_E_gri.get(t, 0) - e_E_gri.get(t, 0) + i_E_com.get(t, 0) - e_E_com.get(t, 0)
-            lhs += p.get(('redkdk s', t), 0)
+            lhs += p.get(('res', t), 0)
             lhs += b_dis_E.get(t, 0) - b_ch_E.get(t, 0)
             rhs = nfl_d.get(('elec', t), 0) + fl_d.get(('elec', t), 0)
             if type(lhs) != int or type(rhs) != int:

@@ -133,7 +133,7 @@ class EnergyCommunitySolver:
                 self.model.addConsCoeff(cons_h, var, h_coeff)
             
             # Hydrogen balance coefficient (note: opposite sign)
-            g_coeff = pattern.get('e_G_com', {}).get(t, 0) - pattern.get('i_G_com', {}).get(t, 0)
+            g_coeff = pattern.get('i_G_com', {}).get(t, 0) - pattern.get('e_G_com', {}).get(t, 0)
             if g_coeff != 0:
                 cons_g = self.model.data["cons"]["community_hydro_balance"][f"community_hydro_balance_{t}"]
                 self.model.addConsCoeff(cons_g, var, g_coeff)

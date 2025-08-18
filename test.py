@@ -33,8 +33,8 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
                 pattern['p_res'][t] = renewable_cap * 0.8  # Use 80% of capacity
                 
                 # Export excess to grid (not community initially)
-                pattern['e_E_gri'][t] = min(pattern['p_res'][t], parameters.get(f'e_E_cap_{player}_{t}', 0.1))
-                pattern['i_E_gri'][t] = 0.0
+                pattern['e_E_gri'][t] = 0.0
+                pattern['i_E_gri'][t] = parameters.get(f'i_E_cap', 0.5)
                 
                 # No community trading initially
                 pattern['i_E_com'][t] = 0.0
@@ -86,8 +86,8 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
                     pattern['z_su'][t] = 1.0 if (pattern['z_on'][t] > 0 and pattern['z_on'][t-1] == 0) else 0.0
                 
                 # Export hydrogen to grid
-                pattern['e_G_gri'][t] = min(pattern['p_els'][t], parameters.get(f'e_G_cap_{player}_{t}', 50))
-                pattern['i_G_gri'][t] = 0.0
+                pattern['e_G_gri'][t] = 0.0
+                pattern['i_G_gri'][t] = parameters.get(f'i_G_cap', 30)
                 
                 # No electricity export
                 pattern['e_E_gri'][t] = 0.0
@@ -121,7 +121,7 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
             for t in time_periods:
                 # Simple heat pump operation
                 pattern['p_hp'][t] = 0.0  # No heat production initially
-                pattern['i_E_gri'][t] = 0.0  # No electricity import for heat pump
+                pattern['i_E_gri'][t] = parameters.get(f'i_E_cap', 0.5)  # No electricity import for heat pump
                 pattern['e_E_gri'][t] = 0.0
                 
                 # No heat trade
@@ -149,7 +149,7 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
             for t in time_periods:
                 # Import all demand from grid
                 demand = parameters.get(f'd_E_nfl_{player}_{t}', 0)
-                pattern['i_E_gri'][t] = demand
+                pattern['i_E_gri'][t] = min(demand, parameters.get(f'i_E_cap', 0.5))
                 pattern['e_E_gri'][t] = 0.0
                 
                 # No community trading
@@ -166,7 +166,7 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
             for t in time_periods:
                 # Import all demand from grid
                 demand = parameters.get(f'd_G_nfl_{player}_{t}', 0)
-                pattern['i_G_gri'][t] = demand
+                pattern['i_G_gri'][t] = min(demand, parameters.get(f'i_G_cap', 30))
                 pattern['e_G_gri'][t] = 0.0
                 
                 # No community trading
@@ -183,7 +183,7 @@ def create_initial_patterns_for_players(players, time_periods, parameters):
             for t in time_periods:
                 # Import all demand from grid
                 demand = parameters.get(f'd_H_nfl_{player}_{t}', 0)
-                pattern['i_H_gri'][t] = demand
+                pattern['i_H_gri'][t] = min(demand, parameters.get(f'i_H_cap', 0.08))
                 pattern['e_H_gri'][t] = 0.0
                 
                 # No community trading
@@ -359,14 +359,12 @@ if __name__ == "__main__":
         'min_down_time': 2,
 
         # Grid connection limits
-        'e_E_cap_u1_t': 0.1,       # 100 kW export limit (0.1 MW)
-        'i_E_cap_u1_t': 0.5,       # 50%
-        'i_E_cap_u2_t': 0.5,       # 50%
-        'i_E_cap_u3_t': 0.5,       # 50%
-        'e_H_cap_u3_t': 0.06,        # 60 kW heat export (0.06 MW)
-        'i_H_cap_u3_t': 0.08,        # 80 kW heat import (0.08 MW)
-        'e_G_cap_u2_t': 50,        # 50 kg/day hydro export
-        'i_G_cap_u2_t': 30,        # 30 kg/day hydro import
+        'e_E_cap': 0.1,       # 100 kW export limit (0.1 MW)
+        'i_E_cap': 0.5,       # 50%
+        'e_H_cap': 0.06,        # 60 kW heat export (0.06 MW)
+        'i_H_cap': 0.08,        # 80 kW heat import (0.08 MW)
+        'e_G_cap': 50,        # 50 kg/day hydro export
+        'i_G_cap': 30,        # 30 kg/day hydro import
         
         # Cost parameters
         'c_sto': 0.01,             # Common storage cost

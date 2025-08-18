@@ -81,8 +81,7 @@ class EnergyPricer(Pricer):
                 if min_redcost < -1e-6:  # For regular pricing, we want negative reduced cost
                     found_improving_pattern = True
                     self.add_pattern_to_rmp(u, pattern)
-        if self.iter >20:
-            print(1)
+
         # Return result to SCIP
         if found_improving_pattern:
             return {'result': SCIP_RESULT.SUCCESS}
@@ -183,24 +182,21 @@ class EnergyPricer(Pricer):
         for t in self.time_periods:
             # Electricity balance coefficient
             e_coeff = pattern.get('i_E_com', {}).get(t, 0) - pattern.get('e_E_com', {}).get(t, 0)
-            if abs(e_coeff) > 1e-10:
-                cons_e = self.cons_flatten["community_elec_balance"][f"community_elec_balance_{t}"]
-                t_cons_e = self.model.getTransformedCons(cons_e)
-                self.model.addConsCoeff(t_cons_e, var, e_coeff)
+            cons_e = self.cons_flatten["community_elec_balance"][f"community_elec_balance_{t}"]
+            t_cons_e = self.model.getTransformedCons(cons_e)
+            self.model.addConsCoeff(t_cons_e, var, e_coeff)
             
             # Heat balance coefficient
             h_coeff = pattern.get('i_H_com', {}).get(t, 0) - pattern.get('e_H_com', {}).get(t, 0)
-            if abs(h_coeff) > 1e-10:
-                cons_h = self.cons_flatten["community_heat_balance"][f"community_heat_balance_{t}"]
-                t_cons_h = self.model.getTransformedCons(cons_h)
-                self.model.addConsCoeff(t_cons_h, var, h_coeff)
-            
+            cons_h = self.cons_flatten["community_heat_balance"][f"community_heat_balance_{t}"]
+            t_cons_h = self.model.getTransformedCons(cons_h)
+            self.model.addConsCoeff(t_cons_h, var, h_coeff)
+        
             # Hydrogen balance coefficient (note: opposite sign)
-            g_coeff = pattern.get('e_G_com', {}).get(t, 0) - pattern.get('i_G_com', {}).get(t, 0)
-            if abs(g_coeff) > 1e-10:
-                cons_g = self.cons_flatten["community_hydro_balance"][f"community_hydro_balance_{t}"]
-                t_cons_g = self.model.getTransformedCons(cons_g)
-                self.model.addConsCoeff(t_cons_g, var, g_coeff)
+            g_coeff = pattern.get('i_G_com', {}).get(t, 0) - pattern.get('e_G_com', {}).get(t, 0)
+            cons_g = self.cons_flatten["community_hydro_balance"][f"community_hydro_balance_{t}"]
+            t_cons_g = self.model.getTransformedCons(cons_g)
+            self.model.addConsCoeff(t_cons_g, var, g_coeff)
             
             # # Peak power coefficient
             # p_coeff = pattern.get('i_E_gri', {}).get(t, 0) - pattern.get('e_E_gri', {}).get(t, 0)
