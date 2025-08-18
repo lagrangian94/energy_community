@@ -1,6 +1,7 @@
 from pyscipopt import Model, quicksum
 import numpy as np
 from compact import process_cons_arr, solve_and_extract_results
+from create_initial_patterns import create_initial_patterns_for_players
 class EnergyCommunitySolver:
     """
     Energy Community Solver using Convex Hull Pricing
@@ -19,12 +20,23 @@ class EnergyCommunitySolver:
         self.players_with_elec_storage = self.params.get('players_with_elec_storage', [])
         self.players_with_hydro_storage = self.params.get('players_with_hydro_storage', [])
         self.players_with_heat_storage = self.params.get('players_with_heat_storage', [])
-        
+        self.players_with_nfl_elec_demand = self.params.get('players_with_nfl_elec_demand', [])
+        self.players_with_nfl_hydro_demand = self.params.get('players_with_nfl_hydro_demand', [])
+        self.players_with_nfl_heat_demand = self.params.get('players_with_nfl_heat_demand', [])
+        self.players_with_fl_elec_demand = self.params.get('players_with_fl_elec_demand', [])
+        self.players_with_fl_hydro_demand = self.params.get('players_with_fl_hydro_demand', [])
+        self.players_with_fl_heat_demand = self.params.get('players_with_fl_heat_demand', [])
         # Combined sets
         self.U_E = list(set(self.players_with_renewables + self.players_with_elec_storage))
         self.U_G = list(set(self.players_with_electrolyzers + self.players_with_hydro_storage))
         self.U_H = list(set(self.players_with_heatpumps + self.players_with_heat_storage))
-        
+        ## 추후에 non-flexible demand를 가진 player들이 storage를 가지고 있다고 고려할 수도 있음.
+        self.U_E_nfl = list(set(self.players_with_nfl_elec_demand))
+        self.U_G_nfl = list(set(self.players_with_nfl_hydro_demand))
+        self.U_H_nfl = list(set(self.players_with_nfl_heat_demand))
+        self.U_E_fl = list(set(self.players_with_fl_elec_demand))
+        self.U_G_fl = list(set(self.players_with_fl_hydro_demand))
+        self.U_H_fl = list(set(self.players_with_fl_heat_demand))
         # Model data storage
         self.model.data = {}
         self.model.data["vars_pattern"] = {}
@@ -51,13 +63,13 @@ class EnergyCommunitySolver:
         # Create community balance constraints (these will have patterns added)
         self.model.data["cons"]["community_elec_balance"] = {}
         self.model.data["cons"]["community_heat_balance"] = {}
-        self.model.data["cons"]["community_hydrogen_balance"] = {}
-        self.model.data["cons"]["peak_power"] = {}
+        self.model.data["cons"]["community_hydro_balance"] = {}
+        # self.model.data["cons"]["peak_power"] = {}
         
         # Create chi_peak variable first
-        pi_peak = self.params.get('pi_peak', 100)
-        self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0, obj=pi_peak)
-        self.model.data["vars"]["chi_peak"] = self.chi_peak
+        # pi_peak = self.params.get('pi_peak', 0)
+        # self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0, obj=pi_peak)
+        # self.model.data["vars"]["chi_peak"] = self.chi_peak
         for t in self.time_periods:
             # Community electricity balance: sum(i_E_com - e_E_com) == 0
             cons_e = self.model.addCons(quicksum([]) == 0, name=f"community_elec_balance_{t}", modifiable=True)
@@ -68,12 +80,12 @@ class EnergyCommunitySolver:
             self.model.data["cons"]["community_heat_balance"][f"community_heat_balance_{t}"] = cons_h
             
             # Community hydrogen balance: sum(e_G_com - i_G_com) == 0 (note: opposite sign)
-            cons_g = self.model.addCons(quicksum([]) == 0, name=f"community_hydrogen_balance_{t}", modifiable=True)
-            self.model.data["cons"]["community_hydrogen_balance"][f"community_hydrogen_balance_{t}"] = cons_g
+            cons_g = self.model.addCons(quicksum([]) == 0, name=f"community_hydro_balance_{t}", modifiable=True)
+            self.model.data["cons"]["community_hydro_balance"][f"community_hydro_balance_{t}"] = cons_g
             
-            # Peak power constraint: sum(i_E_gri - e_E_gri) <= chi_peak
-            cons_p = self.model.addCons(quicksum([]) <= self.chi_peak, name=f"peak_power_{t}", modifiable=True)
-            self.model.data["cons"]["peak_power"][f"peak_power_{t}"] = cons_p
+            # # Peak power constraint: sum(i_E_gri - e_E_gri) <= chi_peak
+            # cons_p = self.model.addCons(quicksum([]) <= self.chi_peak, name=f"peak_power_{t}", modifiable=True)
+            # self.model.data["cons"]["peak_power"][f"peak_power_{t}"] = cons_p
         
         # Add initial patterns
         for u in self.players:
@@ -103,7 +115,7 @@ class EnergyCommunitySolver:
         self.model.data["vars_pattern"][player].append(var)
         
         # Add to convexity constraint
-        cons_conv = self.model.data["cons"]["cons_convexity"][player]
+        cons_conv = self.model.data["cons"]["cons_convexity"][f"cons_convexity_{player}"]
         self.model.addConsCoeff(cons_conv, var, 1.0)
         
         # Calculate pattern coefficients for community constraints
@@ -123,14 +135,14 @@ class EnergyCommunitySolver:
             # Hydrogen balance coefficient (note: opposite sign)
             g_coeff = pattern.get('e_G_com', {}).get(t, 0) - pattern.get('i_G_com', {}).get(t, 0)
             if g_coeff != 0:
-                cons_g = self.model.data["cons"]["community_hydrogen_balance"][f"community_hydrogen_balance_{t}"]
+                cons_g = self.model.data["cons"]["community_hydro_balance"][f"community_hydro_balance_{t}"]
                 self.model.addConsCoeff(cons_g, var, g_coeff)
             
-            # Peak power coefficient
-            p_coeff = pattern.get('i_E_gri', {}).get(t, 0) - pattern.get('e_E_gri', {}).get(t, 0)
-            if p_coeff != 0:
-                cons_p = self.model.data["cons"]["peak_power"][f"peak_power_{t}"]
-                self.model.addConsCoeff(cons_p, var, p_coeff)
+            # # Peak power coefficient
+            # p_coeff = pattern.get('i_E_gri', {}).get(t, 0) - pattern.get('e_E_gri', {}).get(t, 0)
+            # if p_coeff != 0:
+            #     cons_p = self.model.data["cons"]["peak_power"][f"peak_power_{t}"]
+            #     self.model.addConsCoeff(cons_p, var, p_coeff)
         
     def calculate_pattern_cost(self, player, pattern):
         """Calculate the cost of a pattern"""
@@ -216,14 +228,11 @@ class EnergyCommunitySolver:
             dual_values[f"community_heat_balance_{t}"] = self.model.getDualsolLinear(trans_cons_h)
             
             # Hydrogen
-            cons_g = self.model.data["cons"]["community_hydrogen_balance"][f"community_hydrogen_balance_{t}"]
+            cons_g = self.model.data["cons"]["community_hydro_balance"][f"community_hydro_balance_{t}"]
             trans_cons_g = self.model.getTransformedCons(cons_g)
-            dual_values[f"community_hydrogen_balance_{t}"] = self.model.getDualsolLinear(trans_cons_g)
+            dual_values[f"community_hydro_balance_{t}"] = self.model.getDualsolLinear(trans_cons_g)
             
-            # Peak power
-            cons_p = self.model.data["cons"]["peak_power"][f"peak_power_{t}"]
-            trans_cons_p = self.model.getTransformedCons(cons_p)
-            dual_values[f"peak_power_{t}"] = self.model.getDualsolLinear(trans_cons_p)
+
         
         return dual_values
     
@@ -244,7 +253,7 @@ class EnergyCommunitySolver:
                 solution[player] = {}
                 for var in self.model.data["vars_pattern"][player]:
                     solution[player][var.name] = self.model.getVal(var)
-        solution['chi_peak'] = self.model.getVal(self.chi_peak)
+        # solution['chi_peak'] = self.model.getVal(self.chi_peak)
         return solution
     def gen_initial_cols(self, folder_path=None):
         import os
