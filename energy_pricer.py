@@ -66,6 +66,7 @@ class EnergyPricer(Pricer):
                 time_periods=self.time_periods,
                 params=self.params,
                 subprob_obj=subprob_obj,
+                iter=self.iter,
                 current_node=self.model.getCurrentNode()
             )
             
@@ -155,7 +156,7 @@ class EnergyPricer(Pricer):
         
         # Pass dual values directly to the pricing problem
         # The pricing problem will handle the signs correctly
-        subprob_obj = dual_values.copy()
+        subprob_obj = {k:-1*v for k,v in dual_values.items()}
         
         return subprob_obj
     

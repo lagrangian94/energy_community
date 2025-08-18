@@ -1,7 +1,7 @@
 from pyscipopt import Model, quicksum
 import numpy as np
 
-def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, current_node=None):
+def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, iter=0,current_node=None):
     """
     Solve the pricing problem for a single player
     
@@ -219,30 +219,27 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, curr
     for t in time_periods:
         # Electricity community balance dual
         if player in players_with_renewables or player in players_with_elec_storage or player in players_with_nfl_elec_demand or player in players_with_fl_elec_demand:
-            pi_com_elec_export = subprob_obj.get(f"e_E_com_{t}",0)
-            pi_com_elec_import = subprob_obj.get(f"i_E_com_{t}",0)
+            pi_com_elec_export = subprob_obj.get(f"e_E_com_{player}_{t}",0)
+            pi_com_elec_import = subprob_obj.get(f"i_E_com_{player}_{t}",0)
             dual_obj_terms.append(pi_com_elec_import * i_E_com[t])
             dual_obj_terms.append(pi_com_elec_export * e_E_com[t])
         
         # Heat community balance dual
         if player in players_with_heatpumps or player in players_with_heat_storage or player in players_with_nfl_heat_demand:
-            pi_com_heat_export = subprob_obj.get(f"e_H_com_{t}",0)
-            pi_com_heat_import = subprob_obj.get(f"i_H_com_{t}",0)
+            pi_com_heat_export = subprob_obj.get(f"e_H_com_{player}_{t}",0)
+            pi_com_heat_import = subprob_obj.get(f"i_H_com_{player}_{t}",0)
             dual_obj_terms.append(pi_com_heat_import * i_H_com[t])
             dual_obj_terms.append(pi_com_heat_export * e_H_com[t])
         
         # Hydrogen community balance dual (note: opposite sign)
         if player in players_with_electrolyzers or player in players_with_hydro_storage or player in players_with_nfl_hydro_demand:
-            pi_com_hydro_export = subprob_obj.get(f"e_G_com_{t}",0)
-            pi_com_hydro_import = subprob_obj.get(f"i_G_com_{t}",0)
+            pi_com_hydro_export = subprob_obj.get(f"e_G_com_{player}_{t}",0)
+            pi_com_hydro_import = subprob_obj.get(f"i_G_com_{player}_{t}",0)
             dual_obj_terms.append(pi_com_hydro_import * i_G_com[t])
             dual_obj_terms.append(pi_com_hydro_export * e_G_com[t])
+            if iter > 10 and player == "u2" and t >=23:
+                print(pi_com_hydro_export, pi_com_hydro_import)
         
-        
-    
-    # Convexity constraint dual
-    if f"cons_convexity_{player}" in subprob_obj:
-        dual_obj_terms.append(subprob_obj[f"cons_convexity_{player}"])
     
     # Set objective
     model.setObjective(quicksum(obj_terms + dual_obj_terms), "minimize")
@@ -253,7 +250,7 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, curr
     for t in time_periods:
         if t in i_E_gri or t in e_E_gri:
             lhs = i_E_gri.get(t, 0) - e_E_gri.get(t, 0) + i_E_com.get(t, 0) - e_E_com.get(t, 0)
-            lhs += p.get(('res', t), 0)
+            lhs += p.get(('redkdk s', t), 0)
             lhs += b_dis_E.get(t, 0) - b_ch_E.get(t, 0)
             rhs = nfl_d.get(('elec', t), 0) + fl_d.get(('elec', t), 0)
             if type(lhs) != int or type(rhs) != int:
@@ -399,6 +396,8 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, curr
                         name="soc_H_wrap")
     
     # Solve
+    # if iter > 10 and player == "u2":
+    #     model.addCons(z_on[10] == 1)
     model.optimize()
     status = model.getStatus()
     
@@ -407,9 +406,7 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, curr
         return float('inf'), {}, float('inf')
     
     # Extract solution
-    min_redcost = model.getObjVal()
-    if player == "u2":
-        print(min_redcost)
+    min_redcost = model.getObjVal() + subprob_obj.get(f"cons_convexity_{player}",0)
     # Build pattern dictionary
     pattern = {}
     
@@ -473,8 +470,7 @@ def solve_energy_pricing_problem(player, time_periods, params, subprob_obj, curr
                 pattern[var_name][t] = model.getVal(var_dict[t])
     
     # Calculate original objective (without duals)
-    objval = calculate_original_objective(player, pattern, params)
-    
+    objval = model.getObjVal()
     return min_redcost, pattern, objval
 
 
