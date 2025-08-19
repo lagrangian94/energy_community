@@ -321,21 +321,21 @@ class LocalEnergyMarket:
                     self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=nfl_elec_demand_t, ub=nfl_elec_demand_t)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap', 0.5) * res_capacity, obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap', 0.5) * res_capacity)
+                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity, obj=self.params.get(f'pi_E_gri_import_{t}', 0))
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity)
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=nfl_hydro_demand_t, ub=nfl_hydro_demand_t)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=nfl_heat_demand_t, ub=nfl_heat_demand_t)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 
                 # Flexible demand variables
@@ -344,21 +344,21 @@ class LocalEnergyMarket:
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=0.0, ub=fl_elec_demand_cap)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap', 1000), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
                 if u in self.players_with_fl_hydro_demand:
                     fl_hydro_demand_cap = 10**6
                     self.fl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=0.0, ub=fl_hydro_demand_cap)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_fl_heat_demand:
                     fl_heat_demand_cap = 10**6
                     self.fl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=0.0, ub=fl_heat_demand_cap)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 # Storage variables by type with capacity constraints
                 storage_power = self.params.get(f'storage_power', 50)  # kW power rating
@@ -789,7 +789,7 @@ class LocalEnergyMarket:
         if not self.dwr:
         # Community hydro balance
             for t in self.time_periods:
-                community_hydro_balance = quicksum(self.i_G_com.get((u,t),0) - self.e_G_com.get((u,t),0) for u in self.players)
+                community_hydro_balance = quicksum(self.e_G_com.get((u,t),0) - self.i_G_com.get((u,t),0) for u in self.players)
                 cons = self.model.addCons(community_hydro_balance == 0, name=f"community_hydro_balance_{t}")
                 self.community_hydro_balance_cons[f"community_hydro_balance_{t}"] = cons
     
@@ -2426,14 +2426,14 @@ if __name__ == "__main__":
         'min_down_time': 2,
         
         # Grid connection limits
-        'e_E_cap': 0.1,       # 100 kW export limit (0.1 MW)
-        'i_E_cap': 0.5,       # 50%
-        'i_E_cap': 0.5,       # 50%
-        'i_E_cap': 0.5,       # 50%
-        'e_H_cap': 0.06,        # 60 kW heat export (0.06 MW)
-        'i_H_cap': 0.08,        # 80 kW heat import (0.08 MW)
-        'e_G_cap': 50,        # 50 kg/day hydro export
-        'i_G_cap': 30,        # 30 kg/day hydro import
+        'e_E_cap_u1_t': 0.1,       # 100 kW export limit (0.1 MW)
+        'i_E_cap_u1_t': 0.5,       # 50%
+        'i_E_cap_u2_t': 0.5,       # 50%
+        'i_E_cap_u3_t': 0.5,       # 50%
+        'e_H_cap_u3_t': 0.06,        # 60 kW heat export (0.06 MW)
+        'i_H_cap_u3_t': 0.08,        # 80 kW heat import (0.08 MW)
+        'e_G_cap_u2_t': 50,        # 50 kg/day hydro export
+        'i_G_cap_u2_t': 30,        # 30 kg/day hydro import
         
         # Cost parameters
         'c_sto': 0.01,             # Common storage cost
