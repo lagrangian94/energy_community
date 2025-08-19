@@ -740,7 +740,7 @@ class LocalEnergyMarket:
                 for t in [tau for tau in self.time_periods if tau != 6]:
                 # t시점에 off로 전환되었는지 확인 (z_off_t - z_off_{t-1})
                 # 만약 전환되었다면, 다음 min_down 기간 동안 off 유지
-                    down_time_idx = [tau for tau in range(t, t + min_down)]
+                    down_time_idx = [tau for tau in range(t+1, t + min_down+1)]
                     down_time_idx = [tau if tau < 24 else tau - 24 for tau in down_time_idx]
                     # for n in range(t, min(t + min_down, len(self.time_periods))):
                     if t != 0:
@@ -748,8 +748,8 @@ class LocalEnergyMarket:
                             cons = self.model.addCons(
                             self.z_off[u,t] - self.z_off[u,t-1] <= self.z_off[u,n],
                             name=f"min_downtime_{u}_{t}_{n}"
-                        )
-                        self.electrolyzer_cons[f"min_downtime_{u}_{t}_{n}"] = cons
+                            )
+                            self.electrolyzer_cons[f"min_downtime_{u}_{t}_{n}"] = cons
                     else:
                         for n in down_time_idx:
                             cons = self.model.addCons(

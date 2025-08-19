@@ -1,201 +1,132 @@
 import numpy as np
-from pyscipopt import SCIP_PARAMSETTING
+from pyscipopt import SCIP_PARAMSETTING, quicksum
 from energy_solver import EnergyCommunitySolver
 from energy_pricer import EnergyPricer
 from energy_pricing_network import solve_energy_pricing_problem
-from compact import load_korean_electricity_prices, calculate_hydrogen_prices
+from compact import load_korean_electricity_prices, calculate_hydrogen_prices, LocalEnergyMarket, solve_and_extract_results
 def create_initial_patterns_for_players(players, time_periods, parameters):
     """
     Create simple initial patterns for each player
     Each player satisfies their demand using only grid imports/exports
     No community trading in initial patterns
     """
-    
+    ## 여기에 임시적으로 compact 파일의 다른 LEM instance를 다시 만든다. 같은 파라미터를 가지고.
     initial_patterns = {}
-    
+    lem_temp = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
+    ## e_E_com, e_G_com, e_H_com, i_E_com, i_G_com, i_H_com의 합을 maximize하는 objective 설정
+    lem_temp.model.setObjective(quicksum(lem_temp.e_E_com.get((player, t),0) + lem_temp.e_G_com.get((player, t),0) + lem_temp.e_H_com.get((player, t),0) + lem_temp.i_E_com.get((player, t),0) + lem_temp.i_G_com.get((player, t),0) + lem_temp.i_H_com.get((player, t),0) for player in players for t in time_periods), 'maximize')
+    lem_temp.model.optimize()
+    status, results = solve_and_extract_results(lem_temp.model)
     for player in players:
         pattern = {}
-        
         # Player u1: Renewable generator with storage
         if player == 'u1':
-            pattern['i_E_gri'] = {}
-            pattern['e_E_gri'] = {}
-            pattern['i_E_com'] = {}
-            pattern['e_E_com'] = {}
-            pattern['p_res'] = {}
-            pattern['b_ch_E'] = {}
-            pattern['b_dis_E'] = {}
-            pattern['s_E'] = {}
-            
-            for t in time_periods:
-                # Generate renewable when available
-                renewable_cap = parameters.get(f'renewable_cap_{player}_{t}', 0)
-                pattern['p_res'][t] = renewable_cap * 0.8  # Use 80% of capacity
-                
-                # Export excess to grid (not community initially)
-                pattern['e_E_gri'][t] = 0.0
-                pattern['i_E_gri'][t] = parameters.get(f'i_E_cap', 0.5)
-                
-                # No community trading initially
-                pattern['i_E_com'][t] = 0.0
-                pattern['e_E_com'][t] = 0.0
-                
-                # Simple storage operation
-                pattern['b_ch_E'][t] = 0.0
-                pattern['b_dis_E'][t] = 0.0
-                pattern['s_E'][t] = parameters.get('initial_soc', 0.5)
+            pattern['i_E_gri'] = {t: results['i_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_gri'] = {t: results['e_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_E_com'] = {t: results['i_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_com'] = {t: results['e_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['p_res'] = {t: results['p'].get((player, 'res', t), 0) for t in time_periods}
+            pattern['b_ch_E'] = {t: results['b_ch_E'].get((player,t), 0) for t in time_periods}
+            pattern['b_dis_E'] = {t: results['b_dis_E'].get((player,t), 0) for t in time_periods}
+            pattern['s_E'] = {t: results['s_E'].get((player,t), 0) for t in time_periods}
         
         # Player u2: Electrolyzer with hydrogen storage
         elif player == 'u2':
-            pattern['i_E_gri'] = {}
-            pattern['e_E_gri'] = {}
-            pattern['i_E_com'] = {}
-            pattern['e_E_com'] = {}
-            pattern['i_G_gri'] = {}
-            pattern['e_G_gri'] = {}
-            pattern['i_G_com'] = {}
-            pattern['e_G_com'] = {}
-            pattern['p_els'] = {}
-            pattern['z_su'] = {}
-            pattern['z_on'] = {}
-            pattern['z_off'] = {}
-            pattern['z_sb'] = {}
-            pattern['b_ch_G'] = {}
-            pattern['b_dis_G'] = {}
-            pattern['s_G'] = {}
-            
-            for t in time_periods:
-                # Simple operation: off most of the time, on during cheap hours
-                if t in [0, 1, 2, 3, 4, 5]:  # Night hours - operate
-                    pattern['z_on'][t] = 1.0
-                    pattern['z_off'][t] = 0.0
-                    pattern['z_sb'][t] = 0.0
-                    pattern['p_els'][t] = 10.0  # Produce 10 kg/h hydrogen
-                    pattern['i_E_gri'][t] = 0.5  # Import electricity for electrolyzer
-                else:
-                    pattern['z_on'][t] = 0.0
-                    pattern['z_off'][t] = 1.0
-                    pattern['z_sb'][t] = 0.0
-                    pattern['p_els'][t] = 0.0
-                    pattern['i_E_gri'][t] = 0.0
-                
-                # Startup detection
-                if t == 0:
-                    pattern['z_su'][t] = 1.0 if pattern['z_on'][t] > 0 else 0.0
-                else:
-                    pattern['z_su'][t] = 1.0 if (pattern['z_on'][t] > 0 and pattern['z_on'][t-1] == 0) else 0.0
-                
-                # Export hydrogen to grid
-                pattern['e_G_gri'][t] = 0.0
-                pattern['i_G_gri'][t] = parameters.get(f'i_G_cap', 30)
-                
-                # No electricity export
-                pattern['e_E_gri'][t] = 0.0
-                
-                # No community trading
-                pattern['i_E_com'][t] = 0.0
-                pattern['e_E_com'][t] = 0.0
-                pattern['i_G_com'][t] = 0.0
-                pattern['e_G_com'][t] = 0.0
-                
-                # No storage use initially
-                pattern['b_ch_G'][t] = 0.0
-                pattern['b_dis_G'][t] = 0.0
-                pattern['s_G'][t] = 0.0
-        
+            pattern['i_E_gri'] = {t: results['i_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_gri'] = {t: results['e_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_E_com'] = {t: results['i_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_com'] = {t: results['e_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['i_G_gri'] = {t: results['i_G_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_G_gri'] = {t: results['e_G_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_G_com'] = {t: results['i_G_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_G_com'] = {t: results['e_G_com'].get((player,t), 0) for t in time_periods}
+            pattern['p_els'] = {t: results['p'].get((player, 'els', t), 0) for t in time_periods}
+            """
+            ## z_su가 전부 1.0으로 찍힘. e_G_com,gri을 maximize하니까..
+            """
+            pattern['z_su'] = {t: results['z_su'].get((player,t), 0) for t in time_periods}
+            pattern['z_on'] = {t: results['z_on'].get((player,t), 0) for t in time_periods}
+            pattern['z_off'] = {t: results['z_off'].get((player,t), 0) for t in time_periods}
+            pattern['z_sb'] = {t: results['z_sb'].get((player,t), 0) for t in time_periods}
+            pattern['b_ch_G'] = {t: results['b_ch_G'].get((player,t), 0) for t in time_periods}
+            pattern['b_dis_G'] = {t: results['b_dis_G'].get((player,t), 0) for t in time_periods}
+            pattern['s_G'] = {t: results['s_G'].get((player,t), 0) for t in time_periods}        
         # Player u3: Heat pump with heat storage
         elif player == 'u3':
-            pattern['i_E_gri'] = {}
-            pattern['e_E_gri'] = {}
-            pattern['i_E_com'] = {}
-            pattern['e_E_com'] = {}
-            pattern['i_H_gri'] = {}
-            pattern['e_H_gri'] = {}
-            pattern['i_H_com'] = {}
-            pattern['e_H_com'] = {}
-            pattern['p_hp'] = {}
-            pattern['b_ch_H'] = {}
-            pattern['b_dis_H'] = {}
-            pattern['s_H'] = {}
-            
-            for t in time_periods:
-                # Simple heat pump operation
-                pattern['p_hp'][t] = 0.0  # No heat production initially
-                pattern['i_E_gri'][t] = parameters.get(f'i_E_cap', 0.5)  # No electricity import for heat pump
-                pattern['e_E_gri'][t] = 0.0
-                
-                # No heat trade
-                pattern['i_H_gri'][t] = 0.0
-                pattern['e_H_gri'][t] = 0.0
-                
-                # No community trading
-                pattern['i_E_com'][t] = 0.0
-                pattern['e_E_com'][t] = 0.0
-                pattern['i_H_com'][t] = 0.0
-                pattern['e_H_com'][t] = 0.0
-                
-                # No storage use
-                pattern['b_ch_H'][t] = 0.0
-                pattern['b_dis_H'][t] = 0.0
-                pattern['s_H'][t] = parameters.get('initial_soc', 50)
-        
+            pattern['i_E_gri'] = {t: results['i_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_gri'] = {t: results['e_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_E_com'] = {t: results['i_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_com'] = {t: results['e_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['i_H_gri'] = {t: results['i_H_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_H_gri'] = {t: results['e_H_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_H_com'] = {t: results['i_H_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_H_com'] = {t: results['e_H_com'].get((player,t), 0) for t in time_periods}
+            pattern['p_hp'] = {t: results['p'].get((player, 'hp', t), 0) for t in time_periods}
+            pattern['b_ch_H'] = {t: results['b_ch_H'].get((player,t), 0) for t in time_periods}
+            pattern['b_dis_H'] = {t: results['b_dis_H'].get((player,t), 0) for t in time_periods}
+            pattern['s_H'] = {t: results['s_H'].get((player,t), 0) for t in time_periods}
         # Player u4: Electricity consumer
         elif player == 'u4':
-            pattern['i_E_gri'] = {}
-            pattern['e_E_gri'] = {}
-            pattern['i_E_com'] = {}
-            pattern['e_E_com'] = {}
+            pattern['i_E_gri'] = {t: results['i_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_gri'] = {t: results['e_E_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_E_com'] = {t: results['i_E_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_E_com'] = {t: results['e_E_com'].get((player,t), 0) for t in time_periods}
             
-            for t in time_periods:
-                # Import all demand from grid
-                demand = parameters.get(f'd_E_nfl_{player}_{t}', 0)
-                pattern['i_E_gri'][t] = min(demand, parameters.get(f'i_E_cap', 0.5))
-                pattern['e_E_gri'][t] = 0.0
-                
-                # No community trading
-                pattern['i_E_com'][t] = 0.0
-                pattern['e_E_com'][t] = 0.0
-        
         # Player u5: Hydrogen consumer
         elif player == 'u5':
-            pattern['i_G_gri'] = {}
-            pattern['e_G_gri'] = {}
-            pattern['i_G_com'] = {}
-            pattern['e_G_com'] = {}
-            
-            for t in time_periods:
-                # Import all demand from grid
-                demand = parameters.get(f'd_G_nfl_{player}_{t}', 0)
-                pattern['i_G_gri'][t] = min(demand, parameters.get(f'i_G_cap', 30))
-                pattern['e_G_gri'][t] = 0.0
-                
-                # No community trading
-                pattern['i_G_com'][t] = 0.0
-                pattern['e_G_com'][t] = 0.0
-        
+            pattern['i_G_gri'] = {t: results['i_G_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_G_gri'] = {t: results['e_G_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_G_com'] = {t: results['i_G_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_G_com'] = {t: results['e_G_com'].get((player,t), 0) for t in time_periods}
+                    
         # Player u6: Heat consumer
         elif player == 'u6':
-            pattern['i_H_gri'] = {}
-            pattern['e_H_gri'] = {}
-            pattern['i_H_com'] = {}
-            pattern['e_H_com'] = {}
-            
-            for t in time_periods:
-                # Import all demand from grid
-                demand = parameters.get(f'd_H_nfl_{player}_{t}', 0)
-                pattern['i_H_gri'][t] = min(demand, parameters.get(f'i_H_cap', 0.08))
-                pattern['e_H_gri'][t] = 0.0
-                
-                # No community trading
-                pattern['i_H_com'][t] = 0.0
-                pattern['e_H_com'][t] = 0.0
+            pattern['i_H_gri'] = {t: results['i_H_gri'].get((player,t), 0) for t in time_periods}
+            pattern['e_H_gri'] = {t: results['e_H_gri'].get((player,t), 0) for t in time_periods}
+            pattern['i_H_com'] = {t: results['i_H_com'].get((player,t), 0) for t in time_periods}
+            pattern['e_H_com'] = {t: results['e_H_com'].get((player,t), 0) for t in time_periods}
         
         initial_patterns[player] = pattern
     
     return initial_patterns
+# def create_initial_patterns_for_players(pricer, player_subprob):
+#     from pyscipopt import quicksum
+#     player = player_subprob.players[0]
+#     model = player_subprob.model
+#     if len(player_subprob.players) > 1:
+#         print("Error: create_initial_patterns_for_players only supports single player subproblems")
+#         return None
+#     if player == 'u1':
+#         ## e_E_gri = 0 으로 고정
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.e_E_gri[player, t], 0)
+#             model.chgVarLb(player_subprob.e_E_com[player, t], )
+#     elif player == 'u2':
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.e_G_gri[player, t], 0)
+#     elif player == 'u3':
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.e_H_gri[player, t], 0)
+#     elif player == 'u4':
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.i_E_gri[player, t], 0)
+#     elif player == 'u5':
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.i_G_gri[player, t], 0)
+#     elif player == 'u6':
+#         for t in time_periods:
+#             model.chgVarUb(player_subprob.i_H_gri[player, t], 0)
+#     else:
+#         print("Error: create_initial_patterns_for_players only supports u1, u2, u3, u4, u5, u6")
+#         return None
+#     model.optimize()
+#     pattern = pricer.extract_pattern_from_subproblem(player_subprob)
+#     for t in time_periods:
+#         pattern['p_res'][t] = player_subprob.p_res[player, t]
+#         pattern['i_E_gri'][t] = player_subprob.i_E_gri[player, t]
+#     return pattern
 
-
-def solve_convex_hull_pricing(players, time_periods, parameters):
+def build_convex_hull_pricing(players, time_periods, parameters):
     """
     Main function to solve Energy Community problem with Convex Hull Pricing
     """
@@ -209,16 +140,6 @@ def solve_convex_hull_pricing(players, time_periods, parameters):
     solver = EnergyCommunitySolver(players, time_periods, parameters)
     init_patterns = solver.gen_initial_cols(folder_path=None)
     init_patterns = create_initial_patterns_for_players(players, time_periods, parameters)
-
-    solver.init_rmp(init_patterns)
-    
-    # Configure SCIP
-    solver.model.setPresolve(SCIP_PARAMSETTING.OFF)
-    solver.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-    solver.model.disablePropagation()
-    solver.model.setSeparating(SCIP_PARAMSETTING.OFF)
-    
-    # Step 3: Create pricer and include in model
     print("Step 3: Setting up column generation pricer...")
     pricer = EnergyPricer(
         players=players,
@@ -227,13 +148,23 @@ def solve_convex_hull_pricing(players, time_periods, parameters):
         cons_flatten=solver.cons_flatten,
         cons_coeff=solver.cons_coeff
     )
-    
+    pricer.create_subproblems()
+    # init_patterns = {}
+    # for player in players:
+    #     init_patterns[player] = create_initial_patterns_for_players(pricer, player, pricer.subproblems)
+    solver.init_rmp(init_patterns)
     solver.model.includePricer(
         pricer, 
         "EnergyPricer",
         "Pricer for Energy Community Column Generation"
     )
-    
+    return solver, pricer
+def solve_convex_hull_pricing(players, time_periods, parameters):
+    # Configure SCIP
+    solver.model.setPresolve(SCIP_PARAMSETTING.OFF)
+    solver.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+    solver.model.disablePropagation()
+    solver.model.setSeparating(SCIP_PARAMSETTING.OFF)    
     # Step 4: Solve with column generation
     print("Step 4: Solving with column generation...\n")
     solver.model.optimize()
@@ -535,6 +466,7 @@ if __name__ == "__main__":
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
     
     # Solve with convex hull pricing
+    solver, pricer = build_convex_hull_pricing(players, time_periods, parameters)
     solver, pricer, prices = solve_convex_hull_pricing(players, time_periods, parameters)
     
     if solver is not None:
