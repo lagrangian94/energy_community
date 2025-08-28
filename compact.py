@@ -833,6 +833,152 @@ class LocalEnergyMarket:
         flow_analysis = self._analyze_energy_flows(results)
         # Analyze electrolyzer operation
         electrolyzer_operation = self._analyze_electrolyzer_operations(results)
+
+        prices = {}
+        prices['electricity'] = {}
+        prices['heat'] = {}
+        prices['hydro'] = {}
+        
+        for t in self.time_periods:
+            # Get dual multipliers for community balance constraints
+            # Note: Must use getTransformedCons() to get transformed constraints for dual solution
+            t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
+            pi = self.model.getDualsolLinear(t_cons)
+            prices['electricity'][t] = np.round(np.abs(pi), 2)
+            t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
+            pi = self.model.getDualsolLinear(t_cons)
+            prices['heat'][t] = np.round(np.abs(pi), 2)
+            t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
+            pi = self.model.getDualsolLinear(t_cons)
+            prices['hydro'][t] = np.round(np.abs(pi), 2)
+        energy = ['electricity', 'heat', 'hydro']
+        for e in energy:
+            print(f"{e} price:")
+            for t in self.time_periods:
+                print(f"  {t}: {prices[e][t]}")
+            print(f"--------------------------------")
+        e_import_prices = [self.params[f'pi_E_gri_import_{t}'] for t in self.time_periods]
+        e_export_prices = [self.params[f'pi_E_gri_export_{t}'] for t in self.time_periods]
+        g_import_prices = [self.params[f'pi_G_gri_import_{t}'] for t in self.time_periods]
+        g_export_prices = [self.params[f'pi_G_gri_export_{t}'] for t in self.time_periods]
+        h_import_prices = [self.params[f'pi_H_gri_import_{t}'] for t in self.time_periods]
+        h_export_prices = [self.params[f'pi_H_gri_export_{t}'] for t in self.time_periods]
+        import matplotlib.pyplot as plt
+        
+        # matplotlib 백엔드를 Agg로 설정 (GUI 없이 파일 저장용)
+        plt.switch_backend('Agg')
+        
+        print("Creating and saving individual price plots...")
+        
+        # 1. Electricity Price Plot
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
+                label='Community Elec Price', marker='o', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, e_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, e_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        plt.ylabel('Electricity Price (€/kWh)', fontsize=12)
+        plt.title('Electricity Prices by Time Period', fontsize=14, fontweight='bold')
+        plt.xlabel('Time Period (Hour)', fontsize=12)
+        plt.legend(fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.xticks(self.time_periods)
+        plt.tight_layout()
+        plt.savefig('electricity_prices.png', dpi=300, bbox_inches='tight')
+        print("✓ Electricity price plot saved as 'electricity_prices.png'")
+        plt.close()
+        
+        # 2. Heat Price Plot
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
+                label='Community Heat Price', marker='o', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, h_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, h_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        plt.ylabel('Heat Price (€/kWh)', fontsize=12)
+        plt.title('Heat Prices by Time Period', fontsize=14, fontweight='bold')
+        plt.xlabel('Time Period (Hour)', fontsize=12)
+        plt.legend(fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.xticks(self.time_periods)
+        plt.tight_layout()
+        plt.savefig('heat_prices.png', dpi=300, bbox_inches='tight')
+        print("✓ Heat price plot saved as 'heat_prices.png'")
+        plt.close()
+        
+        # 3. Hydrogen Price Plot
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
+                label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, g_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        plt.plot(self.time_periods, g_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        plt.ylabel('Hydrogen Price (€/kg)', fontsize=12)
+        plt.title('Hydrogen Prices by Time Period', fontsize=14, fontweight='bold')
+        plt.xlabel('Time Period (Hour)', fontsize=12)
+        plt.legend(fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.xticks(self.time_periods)
+        plt.tight_layout()
+        plt.savefig('hydrogen_prices.png', dpi=300, bbox_inches='tight')
+        print("✓ Hydrogen price plot saved as 'hydrogen_prices.png'")
+        plt.close()
+        
+        # 4. Combined Price Plot (all three energy types)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+        
+        # Electricity
+        ax1.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
+                label='Community Elec Price', marker='o', linewidth=2, markersize=6)
+        ax1.plot(self.time_periods, e_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        ax1.plot(self.time_periods, e_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        ax1.set_ylabel('Electricity Price (€/kWh)', fontsize=12)
+        ax1.set_title('Electricity Prices', fontsize=14, fontweight='bold')
+        ax1.legend(fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        
+        # Heat
+        ax2.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
+                label='Community Heat Price', marker='o', linewidth=2, markersize=6)
+        ax2.plot(self.time_periods, h_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        ax2.plot(self.time_periods, h_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        ax2.set_ylabel('Heat Price (€/kWh)', fontsize=12)
+        ax2.set_title('Heat Prices', fontsize=14, fontweight='bold')
+        ax2.legend(fontsize=10)
+        ax2.grid(True, alpha=0.3)
+        
+        # Hydrogen
+        ax3.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
+                label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
+        ax3.plot(self.time_periods, g_import_prices, 
+                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+        ax3.plot(self.time_periods, g_export_prices, 
+                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+        ax3.set_ylabel('Hydrogen Price (€/kg)', fontsize=12)
+        ax3.set_title('Hydrogen Prices', fontsize=14, fontweight='bold')
+        ax3.set_xlabel('Time Period (Hour)', fontsize=12)
+        ax3.legend(fontsize=10)
+        ax3.grid(True, alpha=0.3)
+        ax3.set_xticks(self.time_periods)
+        
+        plt.tight_layout()
+        plt.savefig('combined_energy_prices.png', dpi=300, bbox_inches='tight')
+        print("✓ Combined energy prices plot saved as 'combined_energy_prices.png'")
+        plt.close()
+        
+        print("\nAll price plots have been saved successfully!")
+        print("Files created:")
+        print("  - electricity_prices.png")
+        print("  - heat_prices.png") 
+        print("  - hydrogen_prices.png")
+        print("  - combined_energy_prices.png")
         return status, results, revenue_analysis
     
     def _analyze_revenue_by_resource(self, results):
@@ -1366,7 +1512,7 @@ class LocalEnergyMarket:
         print("DEMAND SOURCE BREAKDOWN BY TIME PERIOD")
         print("="*130)
         
-        print(f"{'Time':^4} | {'='*27} ELECTRICITY {'='*27} | {'='*15} HYDROGEN {'='*15} | {'='*15} HEAT {'='*15}")
+        print(f"{'Time':^4} | {'='*15} ELECTRICITY {'='*15} | {'='*15} HYDROGEN {'='*15} | {'='*15} HEAT {'='*15}")
         print(f"{'':^4} | {'NFL Demand':^10} {'From Grid':^10} {'From Comm':^10} {'Comm %':^10} | {'NFL Demand':^10} {'From Grid':^10} {'From Comm':^10} {'Comm %':^10} | {'NFL Demand':^10} {'From Grid':^10} {'From Comm':^10} {'Comm %':^10}")
         print("-"*130)
         
@@ -1403,7 +1549,7 @@ class LocalEnergyMarket:
         print("STORAGE OPERATION BY TIME PERIOD")
         print("="*130)
         
-        print(f"{'Time':^4} | {'='*22} ELECTRICITY STORAGE {'='*22} | {'='*12} HYDROGEN STORAGE {'='*12} | {'='*14} HEAT STORAGE {'='*14}")
+        print(f"{'Time':^4} | {'='*12} ELECTRICITY STORAGE {'='*12} | {'='*12} HYDROGEN STORAGE {'='*12} | {'='*14} HEAT STORAGE {'='*14}")
         print(f"{'':^4} | {'Charge':^10} {'Discharge':^10} {'Net':^10} {'SOC':^10} | {'Charge':^10} {'Discharge':^10} {'Net':^10} | {'Charge':^10} {'Discharge':^10} {'Net':^10}")
         print("-"*130)
         
@@ -1485,12 +1631,12 @@ class LocalEnergyMarket:
         total_heat_from_comm = sum(f['heat_nfl_from_community'] for f in flow_analysis.values())
         
         print(f"\nElectricity:")
-        print(f"  Total renewable generated:     {total_renewable:10.2f} kWh")
-        print(f"  Total imported from grid:      {total_elec_import:10.2f} kWh")
-        print(f"  Total exported to grid:        {total_elec_export:10.2f} kWh")
-        print(f"  Total used for hydrogen:       {total_elec_to_hydro:10.2f} kWh")
-        print(f"  Total used for heat:           {total_elec_to_heat:10.2f} kWh")
-        print(f"  Net grid position:             {total_elec_import - total_elec_export:+10.2f} kWh (+ = import, - = export)")
+        print(f"  Total renewable generated:     {total_renewable:10.2f} MWh")
+        print(f"  Total imported from grid:      {total_elec_import:10.2f} MWh")
+        print(f"  Total exported to grid:        {total_elec_export:10.2f} MWh")
+        print(f"  Total used for hydrogen:       {total_elec_to_hydro:10.2f} MWh")
+        print(f"  Total used for heat:           {total_elec_to_heat:10.2f} MWh")
+        print(f"  Net grid position:             {total_elec_import - total_elec_export:+10.2f} MWh (+ = import, - = export)")
         if total_elec_nfl_demand > 0:
             print(f"  Community self-sufficiency:    {total_elec_from_comm/total_elec_nfl_demand*100:10.1f}%")
         
