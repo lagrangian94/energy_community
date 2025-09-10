@@ -41,6 +41,152 @@ def load_korean_electricity_prices():
         selected_day_prices.append(price)
     
     return hourly_avg_prices, selected_day_prices
+def create_tou_import_prices(smp_prices_eur, time_periods):
+    """
+    한국의 TOU 요금제를 기반으로 import 가격 생성
+    
+    한국전력 산업용(을) 고압A 선택II 요금제 기준:
+    - 경부하: 23:00~09:00 (기본요금 대비 약 60-70%)
+    - 중간부하: 09:00~10:00, 12:00~13:00, 17:00~23:00 (기본요금)
+    - 최대부하: 10:00~12:00, 13:00~17:00 (기본요금 대비 약 140-180%)
+    
+    SMP는 실시간 변동가격이지만, TOU는 고정된 시간대별 요금
+    일반적으로 TOU는 SMP 평균가격에 안정성 프리미엄(10-20%)을 더한 수준
+    """
+    
+    # SMP 평균가격 계산
+    avg_smp = np.mean(smp_prices_eur)
+    
+    # TOU 기본요금 = SMP 평균 + 15% 안정성 프리미엄
+    tou_base = avg_smp * 1.15
+    
+    tou_import_prices = []
+    
+    for t in time_periods:
+        # 한국 TOU 시간대 구분 (0-23시 기준)
+        if t >= 23 or t < 9:  # 경부하 시간대 (23:00~09:00)
+            tou_multiplier = 0.65  # 기본요금의 65%
+            
+        elif (10 <= t < 12) or (13 <= t < 17):  # 최대부하 시간대
+            # 여름철(7-8월) 기준으로 더 높은 요금 적용
+            tou_multiplier = 1.60  # 기본요금의 160%
+            
+        else:  # 중간부하 시간대 (9-10, 12-13, 17-23)
+            tou_multiplier = 1.00  # 기본요금
+        
+        # TOU 가격 계산
+        tou_price = tou_base * tou_multiplier
+        
+        # 최소/최대 가격 제한 (SMP의 50%~200% 범위)
+        min_price = min(smp_prices_eur) * 0.5
+        max_price = max(smp_prices_eur) * 2.0
+        tou_price = np.clip(tou_price, min_price, max_price)
+        
+        tou_import_prices.append(tou_price)
+    
+    return tou_import_prices
+def generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices_eur):
+    """
+    한국 전력시장 구조 반영:
+    - Export: SMP (계통한계가격) - 발전사업자가 받는 가격
+    - Import: TOU 요금제 - 수요자가 지불하는 가격
+    """
+    
+    # 1. Export price = SMP (이미 있는 데이터 사용)
+    for t in time_periods:
+        # CSV에서 시간 인덱스 조정
+        csv_hour = t + 1 if t < 23 else 0
+        base_price = korean_prices_eur[csv_hour]
+        if 0<=t<=5: # 심야: 더 저렴하게
+            price_multiplier = 0.7
+        elif 10<=t<=15: # 태양광 시간: 매우 저렴
+            price_multiplier = 0.5
+        elif 17<=t<=20: # 저녁 피크: 더 비싸게
+            price_multiplier = 1.5
+        else:
+            price_multiplier = 1.0
+        adjusted_price = base_price * price_multiplier
+        # Export는 SMP 그대로 사용 (발전사업자 정산가격)
+        parameters[f'pi_E_gri_export_{t}'] = adjusted_price
+    
+    # 2. Import price = TOU 요금제 생성
+    tou_import_prices = create_tou_import_prices(korean_prices_eur, time_periods)
+    
+    for t in time_periods:
+        parameters[f'pi_E_gri_import_{t}'] = tou_import_prices[t]
+    
+    # 3. 가격 비교 출력
+    print("\n" + "="*80)
+    print("한국 전력시장 가격 체계 (SMP vs TOU)")
+    print("="*80)
+    print(f"{'시간':^6} | {'SMP (Export)':^15} | {'TOU (Import)':^15} | {'차이':^10} | {'TOU 구간':^15}")
+    print(f"{'':^6} | {'(EUR/MWh)':^15} | {'(EUR/MWh)':^15} | {'(%)':^10} | {'':^15}")
+    print("-"*80)
+    
+    for t in time_periods:
+        export_price = parameters[f'pi_E_gri_export_{t}']
+        import_price = parameters[f'pi_E_gri_import_{t}']
+        diff_pct = ((import_price - export_price) / export_price * 100) if export_price > 0 else 0
+        
+        # TOU 시간대 구분
+        if t >= 23 or t < 9:
+            tou_period = "경부하(Off-peak)"
+        elif (10 <= t < 12) or (13 <= t < 17):
+            tou_period = "최대부하(Peak)"
+        else:
+            tou_period = "중간부하(Mid)"
+        
+        print(f"{t:^6} | {export_price:^15.2f} | {import_price:^15.2f} | {diff_pct:^10.1f} | {tou_period:^15}")
+    
+    # 통계 요약
+    print("-"*80)
+    avg_smp = np.mean([parameters[f'pi_E_gri_export_{t}'] for t in time_periods])
+    avg_tou = np.mean([parameters[f'pi_E_gri_import_{t}'] for t in time_periods])
+    
+    print(f"\n[요약 통계]")
+    print(f"SMP (Export) 평균: {avg_smp:.2f} EUR/MWh")
+    print(f"TOU (Import) 평균: {avg_tou:.2f} EUR/MWh")
+    print(f"평균 스프레드: {avg_tou - avg_smp:.2f} EUR/MWh ({(avg_tou/avg_smp - 1)*100:.1f}%)")
+    
+    # 시간대별 평균
+    off_peak_hours = list(range(23, 24)) + list(range(0, 9))
+    peak_hours = list(range(10, 12)) + list(range(13, 17))
+    mid_hours = [h for h in time_periods if h not in off_peak_hours and h not in peak_hours]
+    
+    off_peak_avg = np.mean([parameters[f'pi_E_gri_import_{t}'] for t in off_peak_hours])
+    peak_avg = np.mean([parameters[f'pi_E_gri_import_{t}'] for t in peak_hours])
+    mid_avg = np.mean([parameters[f'pi_E_gri_import_{t}'] for t in mid_hours])
+    
+    print(f"\n[TOU 시간대별 평균]")
+    print(f"경부하 (23-09시): {off_peak_avg:.2f} EUR/MWh")
+    print(f"중간부하: {mid_avg:.2f} EUR/MWh")
+    print(f"최대부하 (10-12, 13-17시): {peak_avg:.2f} EUR/MWh")
+    print(f"Peak/Off-peak 비율: {peak_avg/off_peak_avg:.2f}x")
+
+    # 2. HEAT - 기존 코사인 패턴 유지
+    for t in time_periods:
+        # 기존 방식 그대로: 아침/저녁 높은 수요
+        heat_demand_factor = 1.0 + 0.3 * np.cos(2 * np.pi * (t - 7) / 24)
+        parameters[f'pi_H_gri_export_{t}'] = 0.25 * heat_demand_factor
+        
+        # Import는 Export에 TOU 승수 적용
+        # 열 TOU: 피크(6-9, 17-23시) 1.2x, 심야(23-6시) 0.8x, 주간 1.0x
+        if 6 <= t < 9 or 17 <= t < 23:
+            tou_multiplier = 1.2
+        elif 23 <= t or t < 6:
+            tou_multiplier = 0.8
+        else:
+            tou_multiplier = 1.0
+        
+        # 기본 20% 마진 + TOU 조정
+        parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * 1.2 * tou_multiplier
+    
+    # 3. HYDROGEN - 기존 유지
+    for t in time_periods:
+        h2_price = h2_prices_eur[t]
+        parameters[f'pi_G_gri_export_{t}'] = h2_price
+        parameters[f'pi_G_gri_import_{t}'] = h2_price * 1.2
+    return parameters
 # 수소 가격 설정 - 논문 참고 (동적 가격)
 def calculate_hydrogen_prices(elec_prices_eur):
     """
@@ -78,6 +224,48 @@ def calculate_hydrogen_prices(elec_prices_eur):
         h2_prices.append(h2_price)
     
     return h2_prices
+def create_heat_tou_import_prices(base_heat_prices, time_periods):
+    """
+    한국 지역난방 TOU 요금제 반영
+    
+    지역난방 시간대별 요금 특징:
+    - 난방 수요는 주로 아침/저녁에 집중
+    - 전기와 달리 열저장 특성으로 인해 변동폭이 작음
+    - 계절요금제와 시간대별 요금제 병행
+    
+    시간대 구분:
+    - 심야: 23:00~06:00 (기본요금의 70%)
+    - 주간: 09:00~17:00 (기본요금의 90%)  
+    - 피크: 06:00~09:00, 17:00~23:00 (기본요금의 120%)
+    """
+    
+    # 기본 열요금 = 평균가격 + 10% 안정성 프리미엄
+    avg_heat_price = np.mean(base_heat_prices)
+    heat_tou_base = avg_heat_price * 1.10
+    
+    heat_tou_prices = []
+    
+    for t in time_periods:
+        # 열수요 시간대별 구분
+        if 23 <= t or t < 6:  # 심야 시간대
+            tou_multiplier = 0.70  # 난방수요 낮음
+            
+        elif 6 <= t < 9 or 17 <= t < 23:  # 피크 시간대 (아침/저녁)
+            tou_multiplier = 1.20  # 난방수요 최대
+            
+        else:  # 주간 시간대 (9-17시)
+            tou_multiplier = 0.90  # 난방수요 중간
+        
+        heat_tou_price = heat_tou_base * tou_multiplier
+        
+        # 가격 범위 제한 (기본가격의 60%~150%)
+        min_price = min(base_heat_prices) * 0.6
+        max_price = max(base_heat_prices) * 1.5
+        heat_tou_price = np.clip(heat_tou_price, min_price, max_price)
+        
+        heat_tou_prices.append(heat_tou_price)
+    
+    return heat_tou_prices
 def solve_and_extract_results(model):
     """
     모델을 풀고 결과를 반환합니다.
@@ -377,12 +565,15 @@ class LocalEnergyMarket:
                 
                 # hydro storage
                 if u in self.players_with_hydro_storage:
+                    # 수소는 kg 단위
+                    hydro_power = 10 #kg/h
+                    hydro_capacity = 50 #kg
                     self.b_dis_G[u,t] = self.model.addVar(vtype="C", name=f"b_dis_G_{u}_{t}", 
-                                                        lb=0, ub=storage_power, obj=c_sto*(1/nu_dis))
+                                                        lb=0, ub=hydro_power, obj=c_sto*(1/nu_dis))
                     self.b_ch_G[u,t] = self.model.addVar(vtype="C", name=f"b_ch_G_{u}_{t}", 
-                                                       lb=0, ub=storage_power, obj=c_sto*nu_ch)
+                                                       lb=0, ub=hydro_power, obj=c_sto*nu_ch)
                     self.s_G[u,t] = self.model.addVar(vtype="C", name=f"s_G_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity)
+                                                    lb=0, ub=hydro_capacity)
                 
                 # Heat storage
                 if u in self.players_with_heat_storage:
@@ -486,7 +677,6 @@ class LocalEnergyMarket:
                 if not (type(lhs) == int):
                     cons = self.model.addCons(lhs == rhs, name=f"elec_balance_{u}_{t}")
                     self.elec_balance_cons[f"elec_balance_{u}_{t}"] = cons
-        
         # Constraint (6): Electricity storage SOC transition with special 23→0 transition
         for u in self.players_with_elec_storage:
             nu_ch = self.params.get('nu_ch', 0.9)
@@ -521,7 +711,6 @@ class LocalEnergyMarket:
                 community_balance = quicksum(self.i_E_com.get((u,t),0) - self.e_E_com.get((u,t),0) for u in self.players)
                 cons = self.model.addCons(community_balance == 0, name=f"community_elec_balance_{t}")
                 self.community_elec_balance_cons[f"community_elec_balance_{t}"] = cons
-            
                 # # Constraint (10): Peak power constraint
                 # for t in self.time_periods:
                 #     grid_import = quicksum(self.i_E_gri.get((u,t),0) - self.e_E_gri.get((u,t),0) for u in self.players)
@@ -569,7 +758,7 @@ class LocalEnergyMarket:
                     
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_H:
-                    initial_soc = self.params.get(f'initial_soc', 50)
+                    initial_soc = self.params.get(f'initial_soc', 25)
                     cons = self.model.addCons(self.s_H[u,6] == initial_soc, name=f"initial_soc_H_{u}")
                     self.storage_cons[f"initial_soc_H_{u}"] = cons
                 
@@ -761,7 +950,7 @@ class LocalEnergyMarket:
             if u in self.players_with_hydro_storage:
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)            
-                initial_soc = 0.0  # 수소 저장소 초기값은 0
+                initial_soc = 25  # 수소 저장소 초기값은 25
                 
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_G:
@@ -777,13 +966,13 @@ class LocalEnergyMarket:
                     )
                     self.storage_cons[f"soc_transition_G_{u}_{t}"] = cons
                 
-                # 특별한 53→6시 transition (심야 충전 → 아침 방전)
-                if (u,6) in self.s_G and (u,53) in self.s_G:
+                # 특별한 23→0시 transition (심야 충전 → 아침 방전)
+                if (u,0) in self.s_G and (u,23) in self.s_G:
                     cons = self.model.addCons(
-                        self.s_G[u,6] == self.s_G[u,53] + nu_ch * self.b_ch_G[u,6] - (1/nu_dis) * self.b_dis_G[u,6],
-                        name=f"soc_transition_G_{u}_53_to_6"
+                        self.s_G[u,0] == self.s_G[u,23] + nu_ch * self.b_ch_G[u,0] - (1/nu_dis) * self.b_dis_G[u,0],
+                        name=f"soc_transition_G_{u}_23_to_0"
                     )
-                    self.storage_cons[f"soc_transition_G_{u}_53_to_6"] = cons
+                    self.storage_cons[f"soc_transition_G_{u}_23_to_0"] = cons
         
 
         if not self.dwr:
@@ -979,7 +1168,7 @@ class LocalEnergyMarket:
         print("  - heat_prices.png") 
         print("  - hydrogen_prices.png")
         print("  - combined_energy_prices.png")
-        return status, results, revenue_analysis
+        return status, results, revenue_analysis, prices
     
     def _analyze_revenue_by_resource(self, results):
         """
@@ -1657,6 +1846,259 @@ class LocalEnergyMarket:
             print(f"\n⚠️  Community hydrogen trade detected: {hydro_community_trade:.2f} kg")
         else:
             print(f"\n❌ No community hydrogen trading detected (all hydrogen goes through grid)")
+    def plot_storage_operation(self, results, save_plots=True):
+        """
+        저장소 SOC 및 충방전 패턴 시각화
+        
+        Args:
+            results: 최적화 결과 딕셔너리
+            save_plots: True면 파일로 저장
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+        
+        # matplotlib 백엔드 설정
+        plt.switch_backend('Agg')
+        
+        # 시간대별 데이터 수집
+        time_hours = list(range(6, 24)) + list(range(0, 6))  # 6시부터 시작
+        
+        # 전기 저장소 데이터
+        elec_soc = []
+        elec_charge = []
+        elec_discharge = []
+        
+        # 수소 저장소 데이터
+        hydro_soc = []
+        hydro_charge = []
+        hydro_discharge = []
+        
+        # 열 저장소 데이터
+        heat_soc = []
+        heat_charge = []
+        heat_discharge = []
+        
+        # 데이터 추출
+        for t in time_hours:
+            # 전기
+            e_soc = sum(results.get('s_E', {}).get((u, t), 0) 
+                    for u in self.players_with_elec_storage)
+            e_ch = sum(results.get('b_ch_E', {}).get((u, t), 0) 
+                    for u in self.players_with_elec_storage)
+            e_dis = sum(results.get('b_dis_E', {}).get((u, t), 0) 
+                    for u in self.players_with_elec_storage)
+            
+            elec_soc.append(e_soc)
+            elec_charge.append(e_ch)
+            elec_discharge.append(e_dis)
+            
+            # 수소
+            h_soc = sum(results.get('s_G', {}).get((u, t), 0) 
+                    for u in self.players_with_hydro_storage)
+            h_ch = sum(results.get('b_ch_G', {}).get((u, t), 0) 
+                    for u in self.players_with_hydro_storage)
+            h_dis = sum(results.get('b_dis_G', {}).get((u, t), 0) 
+                    for u in self.players_with_hydro_storage)
+            
+            hydro_soc.append(h_soc)
+            hydro_charge.append(h_ch)
+            hydro_discharge.append(h_dis)
+            
+            # 열
+            heat_soc_val = sum(results.get('s_H', {}).get((u, t), 0) 
+                            for u in self.players_with_heat_storage)
+            heat_ch = sum(results.get('b_ch_H', {}).get((u, t), 0) 
+                        for u in self.players_with_heat_storage)
+            heat_dis = sum(results.get('b_dis_H', {}).get((u, t), 0) 
+                        for u in self.players_with_heat_storage)
+            
+            heat_soc.append(heat_soc_val)
+            heat_charge.append(heat_ch)
+            heat_discharge.append(heat_dis)
+        
+        # X축 라벨 (시간)
+        x_labels = [f"{h:02d}" for h in time_hours]
+        x_pos = np.arange(len(time_hours))
+        
+        # 1. 전기 저장소 플롯
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+        
+        # SOC 플롯
+        ax1.plot(x_pos, elec_soc, 'b-', linewidth=2, marker='o', markersize=4, label='SOC')
+        ax1.axhline(y=2.0, color='r', linestyle='--', alpha=0.5, label='Max Capacity (2.0 MWh)')
+        ax1.fill_between(x_pos, 0, elec_soc, alpha=0.3, color='blue')
+        ax1.set_ylabel('SOC (MWh)', fontsize=12)
+        ax1.set_title('Electricity Storage Operation', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper right')
+        ax1.set_ylim([0, 2.2])
+        # 여기 추가!
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(x_labels)
+        # 충방전 플롯
+        width = 0.35
+        ax2.bar(x_pos - width/2, elec_charge, width, label='Charge', color='green', alpha=0.7)
+        ax2.bar(x_pos + width/2, [-d for d in elec_discharge], width, label='Discharge', color='red', alpha=0.7)
+        ax2.axhline(y=0, color='black', linewidth=0.5)
+        ax2.set_ylabel('Power (MW)', fontsize=12)
+        ax2.set_xlabel('Hour', fontsize=12)
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(x_labels)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc='upper right')
+        
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig('electricity_storage_operation.png', dpi=300, bbox_inches='tight')
+            print("✓ Electricity storage operation plot saved as 'electricity_storage_operation.png'")
+        plt.close()
+        
+        # 2. 수소 저장소 플롯
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+        
+        # SOC 플롯
+        ax1.plot(x_pos, hydro_soc, 'g-', linewidth=2, marker='o', markersize=4, label='SOC')
+        ax1.axhline(y=100, color='r', linestyle='--', alpha=0.5, label='Max Capacity (100 kg)')
+        ax1.fill_between(x_pos, 0, hydro_soc, alpha=0.3, color='green')
+        ax1.set_ylabel('SOC (kg)', fontsize=12)
+        ax1.set_title('Hydrogen Storage Operation', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper right')
+        ax1.set_ylim([0, 110])
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(x_labels)
+        
+        # 충방전 플롯
+        width = 0.35
+        ax2.bar(x_pos - width/2, hydro_charge, width, label='Charge', color='green', alpha=0.7)
+        ax2.bar(x_pos + width/2, [-d for d in hydro_discharge], width, label='Discharge', color='red', alpha=0.7)
+        ax2.axhline(y=0, color='black', linewidth=0.5)
+        ax2.set_ylabel('Flow Rate (kg/h)', fontsize=12)
+        ax2.set_xlabel('Hour', fontsize=12)
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(x_labels)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc='upper right')
+        
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig('hydrogen_storage_operation.png', dpi=300, bbox_inches='tight')
+            print("✓ Hydrogen storage operation plot saved as 'hydrogen_storage_operation.png'")
+        plt.close()
+        
+        # 3. 열 저장소 플롯
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+        
+        # SOC 플롯
+        ax1.plot(x_pos, heat_soc, 'r-', linewidth=2, marker='o', markersize=4, label='SOC')
+        ax1.axhline(y=2.0, color='darkred', linestyle='--', alpha=0.5, label='Max Capacity (2.0 MWh)')
+        ax1.fill_between(x_pos, 0, heat_soc, alpha=0.3, color='red')
+        ax1.set_ylabel('SOC (MWh)', fontsize=12)
+        ax1.set_title('Heat Storage Operation', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper right')
+        ax1.set_ylim([0, 2.2])
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(x_labels)
+        # 충방전 플롯
+        width = 0.35
+        ax2.bar(x_pos - width/2, heat_charge, width, label='Charge', color='green', alpha=0.7)
+        ax2.bar(x_pos + width/2, [-d for d in heat_discharge], width, label='Discharge', color='red', alpha=0.7)
+        ax2.axhline(y=0, color='black', linewidth=0.5)
+        ax2.set_ylabel('Power (MW)', fontsize=12)
+        ax2.set_xlabel('Hour', fontsize=12)
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(x_labels)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc='upper right')
+        
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig('heat_storage_operation.png', dpi=300, bbox_inches='tight')
+            print("✓ Heat storage operation plot saved as 'heat_storage_operation.png'")
+        plt.close()
+        
+        # 4. Combined Storage Operation (모든 저장소를 한 번에)
+        fig, axes = plt.subplots(3, 2, figsize=(15, 12))
+        
+        # 전기 저장소
+        axes[0, 0].plot(x_pos, elec_soc, 'b-', linewidth=2, marker='o', markersize=4)
+        axes[0, 0].axhline(y=2.0, color='r', linestyle='--', alpha=0.5)
+        axes[0, 0].fill_between(x_pos, 0, elec_soc, alpha=0.3, color='blue')
+        axes[0, 0].set_ylabel('SOC (MWh)', fontsize=10)
+        axes[0, 0].set_title('Electricity Storage SOC', fontsize=12, fontweight='bold')
+        axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].set_ylim([0, 2.2])
+        axes[0, 0].set_xticks(x_pos)
+        axes[0, 0].set_xticklabels(x_labels)
+        width = 0.35
+        axes[0, 1].bar(x_pos - width/2, elec_charge, width, label='Charge', color='green', alpha=0.7)
+        axes[0, 1].bar(x_pos + width/2, [-d for d in elec_discharge], width, label='Discharge', color='red', alpha=0.7)
+        axes[0, 1].axhline(y=0, color='black', linewidth=0.5)
+        axes[0, 1].set_ylabel('Power (MW)', fontsize=10)
+        axes[0, 1].set_title('Electricity Charge/Discharge', fontsize=12, fontweight='bold')
+        axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].legend(loc='upper right', fontsize=8)
+        axes[0, 1].set_xticks(x_pos)
+        axes[0, 1].set_xticklabels(x_labels)
+        # 수소 저장소
+        axes[1, 0].plot(x_pos, hydro_soc, 'g-', linewidth=2, marker='o', markersize=4)
+        axes[1, 0].axhline(y=100, color='r', linestyle='--', alpha=0.5)
+        axes[1, 0].fill_between(x_pos, 0, hydro_soc, alpha=0.3, color='green')
+        axes[1, 0].set_ylabel('SOC (kg)', fontsize=10)
+        axes[1, 0].set_title('Hydrogen Storage SOC', fontsize=12, fontweight='bold')
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].set_ylim([0, 110])
+        axes[1, 0].set_xticks(x_pos)
+        axes[1, 0].set_xticklabels(x_labels)
+        axes[1, 1].bar(x_pos - width/2, hydro_charge, width, label='Charge', color='green', alpha=0.7)
+        axes[1, 1].bar(x_pos + width/2, [-d for d in hydro_discharge], width, label='Discharge', color='red', alpha=0.7)
+        axes[1, 1].axhline(y=0, color='black', linewidth=0.5)
+        axes[1, 1].set_ylabel('Flow Rate (kg/h)', fontsize=10)
+        axes[1, 1].set_title('Hydrogen Charge/Discharge', fontsize=12, fontweight='bold')
+        axes[1, 1].grid(True, alpha=0.3)
+        axes[1, 1].legend(loc='upper right', fontsize=8)
+        axes[1, 1].set_xticks(x_pos)
+        axes[1, 1].set_xticklabels(x_labels)
+        # 열 저장소
+        axes[2, 0].plot(x_pos, heat_soc, 'r-', linewidth=2, marker='o', markersize=4)
+        axes[2, 0].axhline(y=2.0, color='darkred', linestyle='--', alpha=0.5)
+        axes[2, 0].fill_between(x_pos, 0, heat_soc, alpha=0.3, color='red')
+        axes[2, 0].set_ylabel('SOC (MWh)', fontsize=10)
+        axes[2, 0].set_title('Heat Storage SOC', fontsize=12, fontweight='bold')
+        axes[2, 0].grid(True, alpha=0.3)
+        axes[2, 0].set_ylim([0, 2.2])
+        axes[2, 0].set_xlabel('Hour', fontsize=10)
+        axes[2, 0].set_xticks(x_pos)
+        axes[2, 0].set_xticklabels(x_labels)
+        axes[2, 0].set_xticks(x_pos[::2])  # 2시간 간격
+        axes[2, 0].set_xticklabels(x_labels[::2])
+        
+        axes[2, 1].bar(x_pos - width/2, heat_charge, width, label='Charge', color='green', alpha=0.7)
+        axes[2, 1].bar(x_pos + width/2, [-d for d in heat_discharge], width, label='Discharge', color='red', alpha=0.7)
+        axes[2, 1].axhline(y=0, color='black', linewidth=0.5)
+        axes[2, 1].set_ylabel('Power (MW)', fontsize=10)
+        axes[2, 1].set_title('Heat Charge/Discharge', fontsize=12, fontweight='bold')
+        axes[2, 1].grid(True, alpha=0.3)
+        axes[2, 1].legend(loc='upper right', fontsize=8)
+        axes[2, 1].set_xlabel('Hour', fontsize=10)
+        axes[2, 1].set_xticks(x_pos[::2])
+        axes[2, 1].set_xticklabels(x_labels[::2])
+        
+        plt.suptitle('Combined Storage Operation Overview', fontsize=16, fontweight='bold', y=1.02)
+        plt.tight_layout()
+        
+        if save_plots:
+            plt.savefig('combined_storage_operation.png', dpi=300, bbox_inches='tight')
+            print("✓ Combined storage operation plot saved as 'combined_storage_operation.png'")
+        plt.close()
+        
+        print("\nAll storage operation plots have been saved successfully!")
+        print("Files created:")
+        print("  - electricity_storage_operation.png")
+        print("  - hydrogen_storage_operation.png")
+        print("  - heat_storage_operation.png")
+        print("  - combined_storage_operation.png")
     def _analyze_electrolyzer_operations(self, results):
         """
         Analyze electrolyzer operations including commitment states and production
@@ -2428,7 +2870,315 @@ class LocalEnergyMarket:
                     }
         
         return results
-    
+    def print_economic_summary_table(self, revenue_analysis):
+        """
+        목적함수 분석을 요약 테이블로 출력 (Beamer 슬라이드 형식)
+        
+        Args:
+            revenue_analysis: _analyze_revenue_by_resource의 결과
+        """
+        print("\n" + "="*60)
+        print("목적함수 분석")
+        print("="*60)
+        
+        # 헤더
+        print(f"{'':^20} {'항목':^20} {'수익(EUR)':^10} {'비용(EUR)':^10}")
+        print("-"*60)
+        
+        # 전력 섹션
+        print(f"{'전력':^20}")
+        if revenue_analysis['electricity']['grid_export_revenue'] > 0:
+            print(f"{'':^20} {'그리드 수출':^20} {revenue_analysis['electricity']['grid_export_revenue']:>10.2f} {'-':^10}")
+        if revenue_analysis['electricity']['grid_import_cost'] > 0:
+            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['electricity']['grid_import_cost']:>10.2f}")
+        if revenue_analysis['electricity']['production_cost'] > 0:
+            print(f"{'':^20} {'생산 비용':^20} {'-':^10} {revenue_analysis['electricity']['production_cost']:>10.2f}")
+        if revenue_analysis['electricity']['storage_cost'] > 0:
+            print(f"{'':^20} {'저장 비용':^20} {'-':^10} {revenue_analysis['electricity']['storage_cost']:>10.2f}")
+        
+        elec_net = revenue_analysis['electricity']['net']
+        net_sign = '+' if elec_net >= 0 else ''
+        print(f"{'':^20} {'소계':^20} {net_sign}{elec_net:>10.2f}")
+        print("-"*60)
+        
+        # 수소 섹션
+        print(f"{'수소':^20}")
+        if revenue_analysis['hydrogen']['grid_export_revenue'] > 0:
+            print(f"{'':^20} {'그리드 수출':^20} {revenue_analysis['hydrogen']['grid_export_revenue']:>10.2f} {'-':^10}")
+        if revenue_analysis['hydrogen']['grid_import_cost'] > 0:
+            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['hydrogen']['grid_import_cost']:>10.2f}")
+        if revenue_analysis['hydrogen']['production_cost'] > 0:
+            print(f"{'':^20} {'생산 비용':^20} {'-':^10} {revenue_analysis['hydrogen']['production_cost']:>10.2f}")
+        if revenue_analysis['hydrogen']['startup_cost'] > 0:
+            print(f"{'':^20} {'생산/시작 비용':^20} {'-':^10} {revenue_analysis['hydrogen']['startup_cost'] + revenue_analysis['hydrogen']['production_cost']:>10.2f}")
+        
+        hydro_net = revenue_analysis['hydrogen']['net']
+        net_sign = '+' if hydro_net >= 0 else '-'
+        print(f"{'':^20} {'소계':^20} {net_sign}{abs(hydro_net):>10.2f}")
+        print("-"*60)
+        
+        # 열 섹션
+        print(f"{'열':^20}")
+        if revenue_analysis['heat']['grid_import_cost'] > 0:
+            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['heat']['grid_import_cost']:>10.2f}")
+        
+        heat_net = revenue_analysis['heat']['net']
+        net_sign = '+' if heat_net >= 0 else '-'
+        print(f"{'':^20} {'소계':^20} {net_sign}{abs(heat_net):>10.2f}")
+        
+        print("="*60)
+        
+        # 총계
+        total_profit = revenue_analysis['net_profit']
+        profit_sign = '+' if total_profit >= 0 else '-'
+        print(f"{'총 순이익':^20} {profit_sign}{abs(total_profit):>10.2f} EUR/일")
+        print("="*60)
+
+    def generate_beamer_economic_table(self, revenue_analysis, player_profits, community_total, filename='energy_community_results.tex'):
+        """
+        전체 결과를 하나의 Beamer 프레젠테이션으로 생성
+        """
+        latex_code = r"""\documentclass{beamer}
+            \usepackage{kotex}
+            \usepackage{booktabs}
+            \usepackage{xcolor}
+            \usepackage{multirow}
+
+            \usetheme{Madrid}
+            \usecolortheme{whale}
+
+            \title{Local Energy Community Optimization Results}
+            \date{\today}
+
+            \begin{document}
+
+            \begin{frame}
+            \titlepage
+            \end{frame}
+
+            """
+        
+        # 1. 목적함수 분석 슬라이드
+        latex_code += r"""
+            \begin{frame}{목적함수 분석}
+            \begin{table}[h]
+            \centering
+            \begin{tabular}{lrr}
+            \toprule
+            항목 & 수익(EUR) & 비용(EUR) \\
+            \midrule
+            \textbf{전력} & & \\
+            \quad 그리드 수출 & """ + f"{revenue_analysis['electricity']['grid_export_revenue']:.2f}" + r""" & - \\
+            \quad 그리드 수입 & - & """ + f"{revenue_analysis['electricity']['grid_import_cost']:.2f}" + r""" \\
+            \quad 생산 비용 & - & """ + f"{revenue_analysis['electricity']['production_cost']:.2f}" + r""" \\
+            \quad 저장 비용 & - & """ + f"{revenue_analysis['electricity']['storage_cost']:.2f}" + r""" \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('+' if revenue_analysis['electricity']['net'] >= 0 else '') + f"{revenue_analysis['electricity']['net']:.2f}" + r"""} \\
+            \midrule
+            \textbf{수소} & & \\
+            \quad 그리드 수출 & """ + f"{revenue_analysis['hydrogen']['grid_export_revenue']:.2f}" + r""" & - \\
+            \quad 그리드 수입 & - & """ + f"{revenue_analysis['hydrogen']['grid_import_cost']:.2f}" + r""" \\
+            \quad 생산/시작 비용 & - & """ + f"{revenue_analysis['hydrogen']['production_cost'] + revenue_analysis['hydrogen']['startup_cost']:.2f}" + r""" \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('-' if revenue_analysis['hydrogen']['net'] < 0 else '+') + f"{abs(revenue_analysis['hydrogen']['net']):.2f}" + r"""} \\
+            \midrule
+            \textbf{열} & & \\
+            \quad 그리드 수입 & - & """ + f"{revenue_analysis['heat']['grid_import_cost']:.2f}" + r""" \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('-' if revenue_analysis['heat']['net'] < 0 else '+') + f"{abs(revenue_analysis['heat']['net']):.2f}" + r"""} \\
+            \bottomrule
+            \multicolumn{3}{r}{\textbf{총 순이익: """ + ('+' if revenue_analysis['net_profit'] >= 0 else '') + f"{revenue_analysis['net_profit']:.2f}" + r""" EUR/일}} \\
+            \end{tabular}
+            \end{table}
+            \end{frame}
+
+            """
+        
+        # 2. 플레이어별 수익 슬라이드
+        latex_code += r"""
+            \begin{frame}{플레이어별 수익 분석}
+            \scriptsize
+            \begin{table}[h]
+            \centering
+            \begin{tabular}{l|c|rr|rr|r|r}
+            \toprule
+            Player & Role & \multicolumn{2}{c|}{Grid} & \multicolumn{2}{c|}{Community} & Prod & Net \\
+            & & Rev & Cost & Rev & Cost & Cost & Profit \\
+            \midrule
+            """
+        
+        player_roles = {
+            'u1': 'Solar+Stor',
+            'u2': 'Electrolyz',
+            'u3': 'HeatPump',
+            'u4': 'ElecDemand',
+            'u5': 'H2Demand',
+            'u6': 'HeatDemand'
+        }
+        
+        for u in sorted(player_profits.keys()):
+            p = player_profits[u]
+            role = player_roles.get(u, 'Unknown')
+            
+            latex_code += f"{u} & {role} & "
+            latex_code += f"{p['grid_revenue']:.2f} & {p['grid_cost']:.2f} & "
+            latex_code += f"{p['community_revenue']:.2f} & {p['community_cost']:.2f} & "
+            latex_code += f"{p['production_cost']:.2f} & "
+            
+            if p['net_profit'] > 0:
+                latex_code += r"\textcolor{blue}{+" + f"{p['net_profit']:.2f}" + r"}"
+            else:
+                latex_code += r"\textcolor{red}{" + f"{p['net_profit']:.2f}" + r"}"
+            latex_code += r" \\" + "\n"
+        
+        total_net = sum(p['net_profit'] for p in player_profits.values())
+        
+        latex_code += r"""\midrule
+            \textbf{Total} & & & & & & & \textbf{""" + f"{total_net:.2f}" + r"""} \\
+            \bottomrule
+            \end{tabular}
+            \end{table}
+            \end{frame}
+
+            \end{document}
+            """
+        
+        # 파일로 저장
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(latex_code)
+        
+        print(f"\n✓ Complete Beamer presentation saved as '{filename}'")
+        
+        return latex_code
+    def generate_beamer_synergy_table(self, results_comparison, players, filename='synergy_analysis.tex'):
+        """
+        시너지 분석 결과를 Beamer 테이블 LaTeX 코드로 생성
+        
+        Args:
+            results_comparison: compare_individual_vs_community_profits의 결과
+            players: 플레이어 리스트
+            filename: 저장할 파일명
+        """
+        # 플레이어 역할 정의
+        player_roles = {
+            'u1': 'Solar + Storage',
+            'u2': 'Electrolyzer + H2',
+            'u3': 'Heat Pump',
+            'u4': 'Elec Consumer',
+            'u5': 'H2 Consumer',
+            'u6': 'Heat Consumer'
+        }
+        
+        latex_code = r"""\begin{frame}{Community Synergy Analysis}
+    \begin{table}[h]
+    \centering
+    \small
+    \begin{tabular}{l|c|r|r|r|r}
+    \toprule
+    Player & Role & Individual & In Community & Gain & Gain \% \\
+        &      & (EUR/day) & (EUR/day) & (EUR/day) & \\
+    \midrule
+    """
+        
+        total_individual = 0
+        total_community = 0
+        
+        # 각 플레이어 데이터
+        for player in players:
+            role = player_roles.get(player, 'Unknown')[:15]
+            ind_profit = results_comparison['individual'].get(player, {}).get('profit', 0)
+            comm_profit = results_comparison['community']['player_profits'][player]['net_profit']
+            gain = comm_profit - ind_profit
+            
+            total_individual += ind_profit
+            total_community += comm_profit
+            
+            # Gain percentage 계산
+            if ind_profit == 0:
+                if gain > 0:
+                    gain_pct_str = r"\textcolor{green}{N/A (+)}"
+                elif gain < 0:
+                    gain_pct_str = r"\textcolor{red}{N/A (-)}"
+                else:
+                    gain_pct_str = "0.0"
+            else:
+                gain_pct = (gain / abs(ind_profit)) * 100
+                if gain_pct > 0:
+                    gain_pct_str = r"\textcolor{green}{+" + f"{gain_pct:.1f}" + r"\%}"
+                elif gain_pct < 0:
+                    gain_pct_str = r"\textcolor{red}{" + f"{gain_pct:.1f}" + r"\%}"
+                else:
+                    gain_pct_str = "0.0"
+            
+            # 수익 색상 처리
+            if ind_profit > 0:
+                ind_str = f"{ind_profit:.2f}"
+            elif ind_profit < 0:
+                ind_str = r"\textcolor{red}{" + f"{ind_profit:.2f}" + "}"
+            else:
+                ind_str = "0.00"
+                
+            if comm_profit > 0:
+                comm_str = f"{comm_profit:.2f}"
+            elif comm_profit < 0:
+                comm_str = r"\textcolor{red}{" + f"{comm_profit:.2f}" + "}"
+            else:
+                comm_str = "0.00"
+                
+            if gain > 0:
+                gain_str = r"\textcolor{green}{+" + f"{gain:.2f}" + "}"
+            elif gain < 0:
+                gain_str = r"\textcolor{red}{" + f"{gain:.2f}" + "}"
+            else:
+                gain_str = "0.00"
+            
+            latex_code += f"{player} & {role} & {ind_str} & {comm_str} & {gain_str} & {gain_pct_str} \\\\\n"
+        
+        # 합계
+        total_gain = total_community - total_individual
+        if total_individual != 0:
+            total_gain_pct = (total_gain / abs(total_individual)) * 100
+            if total_gain_pct > 0:
+                total_gain_pct_str = r"\textcolor{green}{+" + f"{total_gain_pct:.1f}" + r"\%}"
+            else:
+                total_gain_pct_str = r"\textcolor{red}{" + f"{total_gain_pct:.1f}" + r"\%}"
+        else:
+            total_gain_pct_str = "N/A"
+        
+        if total_gain > 0:
+            total_gain_str = r"\textcolor{green}{+" + f"{total_gain:.2f}" + "}"
+        else:
+            total_gain_str = r"\textcolor{red}{" + f"{total_gain:.2f}" + "}"
+        
+        latex_code += r"""\midrule
+    \textbf{Total} & & \textbf{""" + f"{total_individual:.2f}" + r"""} & \textbf{""" + f"{total_community:.2f}" + r"""} & """ 
+        latex_code += total_gain_str + " & " + total_gain_pct_str
+        
+        latex_code += r""" \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \vspace{0.5em}
+    \begin{itemize}
+    \item Community synergy effect: """ + f"{total_gain:.2f}" + r""" EUR/day (""" + f"{(total_gain/abs(total_individual)*100):.1f}" + r"""\% improvement)
+    \item Producers (u1-u3): """ + f"{sum(results_comparison['community']['player_profits'][p]['net_profit'] for p in ['u1','u2','u3']):.2f}" + r""" EUR/day
+    \item Consumers (u4-u6): """ + f"{sum(results_comparison['community']['player_profits'][p]['net_profit'] for p in ['u4','u5','u6']):.2f}" + r""" EUR/day
+    \end{itemize}
+    \end{frame}"""
+        
+        # 파일로 저장
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(latex_code)
+        
+        print(f"\n✓ Beamer LaTeX synergy analysis table saved as '{filename}'")
+        
+        # 콘솔 출력용 간단 버전
+        print("\n" + "="*80)
+        print("BEAMER SYNERGY TABLE GENERATED")
+        print("="*80)
+        print(f"Total Individual Profit: {total_individual:.2f} EUR/day")
+        print(f"Total Community Profit: {total_community:.2f} EUR/day")
+        print(f"Synergy Gain: {total_gain:.2f} EUR/day ({(total_gain/abs(total_individual)*100):.1f}%)")
+        
+        return latex_code
     def get_results(self):
         """Get optimization results from original MILP"""
         if self.model.getStatus() != "optimal":
@@ -2502,7 +3252,443 @@ class LocalEnergyMarket:
                     }
         
         return results
+    def plot_synergy_comparison(self, results_comparison, players):
+        """시너지 효과 시각화 (음수 처리 포함)"""
+        import matplotlib.pyplot as plt
+        import numpy as np
+        
+        plt.switch_backend('Agg')
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        
+        # 1. 개별 vs 커뮤니티 수익 비교 막대그래프
+        individual_profits = [results_comparison['individual'].get(p, {}).get('profit', 0) for p in players]
+        community_profit = results_comparison['community']['total_profit']
+        community_shares = [community_profit / len(players)] * len(players)
+        
+        x = np.arange(len(players))
+        width = 0.35
+        
+        bars1 = ax1.bar(x - width/2, individual_profits, width, label='Individual', color='red', alpha=0.7)
+        bars2 = ax1.bar(x + width/2, community_shares, width, label='Community Share', color='green', alpha=0.7)
+        
+        ax1.set_xlabel('Players')
+        ax1.set_ylabel('Profit (EUR/day)')
+        ax1.set_title('Individual vs Community Operation Profit')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(players)
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # 값 표시
+        for bar in bars1:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.0f}', ha='center', va='bottom' if height >= 0 else 'top', fontsize=8)
+        for bar in bars2:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.0f}', ha='center', va='bottom' if height >= 0 else 'top', fontsize=8)
+        
+        # 2. 총 수익 비교 (막대 차트로 변경 - 음수 처리)
+        total_individual = results_comparison['synergy']['total_individual_profit']
+        community_total = results_comparison['synergy']['community_profit']
+        synergy_gain = results_comparison['synergy']['absolute_gain']
+        
+        categories = ['Individual\nSum', 'Community\nTotal', 'Synergy\nEffect']
+        values = [total_individual, community_total, synergy_gain]
+        colors_bar = ['lightcoral', 'lightgreen', 'gold' if synergy_gain >= 0 else 'lightgray']
+        
+        bars = ax2.bar(categories, values, color=colors_bar, alpha=0.7)
+        ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+        ax2.set_ylabel('Profit (EUR/day)')
+        ax2.set_title('Community Synergy Effect')
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # 막대 위에 값과 퍼센트 표시
+        for i, (bar, val) in enumerate(zip(bars, values)):
+            height = bar.get_height()
+            if i == 2:  # Synergy Effect
+                pct = results_comparison['synergy']['relative_gain']
+                label = f'{val:.0f}\n({pct:+.1f}%)'
+            else:
+                label = f'{val:.0f}'
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    label, ha='center', va='bottom' if height >= 0 else 'top')
+        
+        plt.tight_layout()
+        plt.savefig('synergy_comparison.png', dpi=300, bbox_inches='tight')
+        print("\n✓ Synergy comparison plot saved as 'synergy_comparison.png'")
+        plt.close()
 
+    def analyze_negative_synergy(self, results_comparison, players):
+        """음의 시너지 원인 분석"""
+        print("\n" + "="*80)
+        print("NEGATIVE SYNERGY ANALYSIS")
+        print("="*80)
+        
+        if results_comparison['synergy']['absolute_gain'] < 0:
+            print("\n⚠️  WARNING: Community operation shows NEGATIVE synergy!")
+            print("Possible reasons:")
+            print("1. Community trading constraints reduce individual optimization flexibility")
+            print("2. Forced internal trading at unfavorable prices")
+            print("3. Peak power constraints affecting all players")
+            print("4. Misaligned supply-demand timing within community")
+            
+            # 각 플레이어별 손실 분석
+            print(f"\n{'Player':^10} | {'Individual':^15} | {'Community/6':^15} | {'Loss':^15}")
+            print("-"*60)
+            
+            total_loss = 0
+            for player in players:
+                ind_profit = results_comparison['individual'].get(player, {}).get('profit', 0)
+                comm_share = results_comparison['community']['profit'] / len(players)
+                loss = comm_share - ind_profit
+                total_loss += loss
+                
+                if loss < 0:
+                    print(f"{player:^10} | {ind_profit:^15.2f} | {comm_share:^15.2f} | {loss:^15.2f} ⬇️")
+                else:
+                    print(f"{player:^10} | {ind_profit:^15.2f} | {comm_share:^15.2f} | {loss:^15.2f} ⬆️")
+            
+            print("\nRecommendations:")
+            print("• Review community trading price mechanisms")
+            print("• Consider flexible cooperation (partial community)")
+            print("• Implement fair profit-sharing mechanisms")
+            print("• Optimize storage and production coordination")
+    def compare_individual_vs_community_profits(self, players, time_periods, base_parameters, player_profits):
+        """
+        각 플레이어의 개별 운영 수익과 커뮤니티 운영 수익을 비교
+        
+        Returns:
+            dict: 비교 결과 및 시너지 효과 분석
+        """
+        results_comparison = {
+        'community': {
+            'total_profit': 0, 
+            'player_profits': {}, 
+            'prices': {},
+            'status': None
+        },
+        'individual': {},
+        'synergy': {}
+        }
+        
+        # 1. 커뮤니티 전체 최적화 (기존 코드)
+        print("\n" + "="*80)
+        print("STEP 1: COMMUNITY OPTIMIZATION (All Players)")
+        print("="*80)
+        
+        lem_community = LocalEnergyMarket(players, time_periods, base_parameters, isLP=False, dwr=False)
+        # status, results, revenue = lem_community.solve_complete_model()
+        lem_community.model.optimize()
+        status = lem_community.model.getStatus()
+        if status == "optimal":
+            status, results = solve_and_extract_results(lem_community.model)
+            revenue = lem_community._analyze_revenue_by_resource(results)
+            results_comparison['community']['total_profit'] = revenue['net_profit']
+            results_comparison['community']['player_profits'] = player_profits
+            results_comparison['community']['status'] = status
+            print(f"Community total profit: {revenue['net_profit']:.2f} EUR/day")
+        
+        # 2. 각 플레이어 개별 최적화
+        print("\n" + "="*80)
+        print("STEP 2: INDIVIDUAL PLAYER OPTIMIZATION")
+        print("="*80)
+        
+        for player in players:
+            print(f"\nOptimizing for player {player} alone...")
+            
+            # 파라미터 복사 및 수정
+            individual_params = base_parameters.copy()
+            
+            # 현재 플레이어만 활성화하는 트릭
+            # 각 카테고리에서 현재 플레이어만 남기기
+            for key in individual_params.keys():
+                if key.startswith('players_with_'):
+                    if player in individual_params[key]:
+                        individual_params[key] = [player]
+                    else:
+                        individual_params[key] = []
+            
+            individual_params['dwr'] = False 
+            
+            # 개별 최적화 실행
+            lem_individual = LocalEnergyMarket(
+                [player],  # 플레이어 리스트를 현재 플레이어만
+                time_periods, 
+                individual_params, 
+                isLP=False, 
+                dwr=individual_params['dwr']
+            )
+            
+            # 조용히 최적화 (출력 최소화)
+            if player not in ['u4', 'u5', 'u6']:
+                lem_individual.model.hideOutput()
+
+            status_ind = lem_individual.solve()
+            if status_ind == "optimal":
+                # 결과 추출
+                status_ind, results_ind = solve_and_extract_results(lem_individual.model)
+                revenue_ind = lem_individual._analyze_revenue_by_resource(results_ind)
+                results_comparison['individual'][player] = {
+                    'profit': revenue_ind['net_profit'],
+                    'status': status_ind,
+                    'breakdown': {
+                        'electricity': revenue_ind['electricity']['net'],
+                        'hydrogen': revenue_ind['hydrogen']['net'],
+                        'heat': revenue_ind['heat']['net']
+                    }
+                }
+                
+                print(f"  Player {player} individual profit: {revenue_ind['net_profit']:.2f} EUR/day")
+            else:
+                results_comparison['individual'][player] = {
+                    'profit': 0,
+                    'status': status_ind,
+                    'breakdown': None
+                }
+                print(f"  Player {player} optimization failed: {status_ind}")
+                    
+        
+        # 3. 시너지 효과 분석
+        print("\n" + "="*80)
+        print("SYNERGY ANALYSIS")
+        print("="*80)
+        
+        print(f"\n{'Player':^10} | {'Individual':^15} | {'In Community':^15} | {'Gain':^15} | {'Gain %':^12}")
+        print("-"*80)
+        
+        total_individual = 0
+        total_community_player = 0
+        
+        for player in players:
+            ind_profit = results_comparison['individual'].get(player, {}).get('profit', 0)
+            comm_profit = results_comparison['community']['player_profits'][player]['net_profit']
+            gain = comm_profit - ind_profit
+            
+            # gain_pct 계산 수정
+            if ind_profit == 0:
+                if gain > 0:
+                    gain_pct_str = "N/A (+)"  # 개별 0에서 양수로
+                elif gain < 0:
+                    gain_pct_str = "N/A (-)"  # 개별 0에서 음수로
+                else:
+                    gain_pct_str = "0.0"
+            else:
+                gain_pct = (gain / abs(ind_profit)) * 100
+                gain_pct_str = f"{gain_pct:.1f}"
+            
+            total_individual += ind_profit
+            total_community_player += comm_profit
+            
+            # 색상 표시
+            if gain > 0:
+                gain_marker = "↑"
+            elif gain < 0:
+                gain_marker = "↓"
+            else:
+                gain_marker = ""
+            
+            print(f"{player:^10} | {ind_profit:^15.2f} | {comm_profit:^15.2f} | "
+                f"{gain:^15.2f} {gain_marker} | {gain_pct_str:^12}")
+        
+        print("-"*80)
+        
+        # 전체 시너지 계산
+        total_gain = total_community_player - total_individual
+        if total_individual == 0:
+            total_gain_pct_str = "N/A"
+        else:
+            total_gain_pct = (total_gain / abs(total_individual)) * 100
+            total_gain_pct_str = f"{total_gain_pct:.1f}%"
+        
+        print(f"{'Total':^10} | {total_individual:^15.2f} | {total_community_player:^15.2f} | "
+            f"{total_gain:^15.2f} | {total_gain_pct_str:^12}")
+        
+        # 추가 분석: Consumer의 특별한 상황
+        print("\n" + "="*80)
+        print("CONSUMER ANALYSIS (u4, u5, u6)")
+        print("="*80)
+        
+        consumers = ['u4', 'u5', 'u6']
+        for player in consumers:
+            ind_profit = results_comparison['individual'].get(player, {}).get('profit', 0)
+            comm_profit = results_comparison['community']['player_profits'][player]['net_profit']
+            
+            if ind_profit == 0 and comm_profit < 0:
+                print(f"{player}: Individual operation = 0 (no assets to operate)")
+                print(f"      Community participation = {comm_profit:.2f} (pays for energy)")
+                print(f"      → This is expected: consumers pay for energy in community")
+            elif ind_profit == 0 and comm_profit == 0:
+                print(f"{player}: No change (0 → 0)")
+        
+        print("\nNote: Consumers (u4-u6) have no generation/storage assets,")
+        print("      so their individual profit is 0 (cannot operate alone).")
+        print("      In community, they pay for energy, resulting in negative profit.")
+        results_comparison['synergy']['absolute_gain'] = total_community_player - total_individual
+        return results_comparison
+    def calculate_player_profits_with_community_prices(self, results, prices):
+        """
+        커뮤니티 가격(shadow price)으로 각 플레이어의 수익 계산
+        
+        Returns:
+            dict: 각 플레이어의 상세 수익 내역
+        """        
+        # 각 플레이어별 수익 계산
+        player_profits = {}
+        
+        for u in self.players:
+            profit_breakdown = {
+                'grid_revenue': 0.0,
+                'grid_cost': 0.0,
+                'community_revenue': 0.0,
+                'community_cost': 0.0,
+                'production_cost': 0.0,
+                'storage_cost': 0.0,
+                'startup_cost': 0.0,
+                'net_profit': 0.0
+            }
+            
+            for t in self.time_periods:
+                # 1. 그리드 거래 수익/비용
+                # 전기
+                if 'e_E_gri' in results and (u,t) in results['e_E_gri']:
+                    export = results['e_E_gri'][u,t]
+                    if export > 0:
+                        profit_breakdown['grid_revenue'] += export * self.params.get(f'pi_E_gri_export_{t}', 0)
+                
+                if 'i_E_gri' in results and (u,t) in results['i_E_gri']:
+                    import_val = results['i_E_gri'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_E_gri_import_{t}', 0)
+                
+                # 수소
+                if 'e_G_gri' in results and (u,t) in results['e_G_gri']:
+                    export = results['e_G_gri'][u,t]
+                    if export > 0:
+                        profit_breakdown['grid_revenue'] += export * self.params.get(f'pi_G_gri_export_{t}', 0)
+                
+                if 'i_G_gri' in results and (u,t) in results['i_G_gri']:
+                    import_val = results['i_G_gri'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_G_gri_import_{t}', 0)
+                
+                # 열
+                if 'e_H_gri' in results and (u,t) in results['e_H_gri']:
+                    export = results['e_H_gri'][u,t]
+                    if export > 0:
+                        profit_breakdown['grid_revenue'] += export * self.params.get(f'pi_H_gri_export_{t}', 0)
+                
+                if 'i_H_gri' in results and (u,t) in results['i_H_gri']:
+                    import_val = results['i_H_gri'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_H_gri_import_{t}', 0)
+                
+                # 2. 커뮤니티 내부 거래 (shadow price 기반)
+                # 전기
+                if 'e_E_com' in results and (u,t) in results['e_E_com']:
+                    export = results['e_E_com'][u,t]
+                    if export > 0:
+                        profit_breakdown['community_revenue'] += export * prices['electricity'].get(t, 0)
+                
+                if 'i_E_com' in results and (u,t) in results['i_E_com']:
+                    import_val = results['i_E_com'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['community_cost'] += import_val * prices['electricity'].get(t, 0)
+                
+                # 수소
+                if 'e_G_com' in results and (u,t) in results['e_G_com']:
+                    export = results['e_G_com'][u,t]
+                    if export > 0:
+                        profit_breakdown['community_revenue'] += export * prices['hydro'].get(t, 0)
+                
+                if 'i_G_com' in results and (u,t) in results['i_G_com']:
+                    import_val = results['i_G_com'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['community_cost'] += import_val * prices['hydro'].get(t, 0)
+                
+                # 열
+                if 'e_H_com' in results and (u,t) in results['e_H_com']:
+                    export = results['e_H_com'][u,t]
+                    if export > 0:
+                        profit_breakdown['community_revenue'] += export * prices['heat'].get(t, 0)
+                
+                if 'i_H_com' in results and (u,t) in results['i_H_com']:
+                    import_val = results['i_H_com'][u,t]
+                    if import_val > 0:
+                        profit_breakdown['community_cost'] += import_val * prices['heat'].get(t, 0)
+                
+                # 3. 생산 비용
+                if 'p' in results:
+                    if (u,'res',t) in results['p']:
+                        profit_breakdown['production_cost'] += results['p'][u,'res',t] * self.params.get(f'c_res_{u}', 0)
+                    if (u,'els',t) in results['p']:
+                        profit_breakdown['production_cost'] += results['p'][u,'els',t] * self.params.get(f'c_els_{u}', 0)
+                    if (u,'hp',t) in results['p']:
+                        profit_breakdown['production_cost'] += results['p'][u,'hp',t] * self.params.get(f'c_hp_{u}', 0)
+                
+                # 4. 저장 비용
+                c_sto = self.params.get('c_sto', 0.01)
+                nu_ch = self.params.get('nu_ch', 0.9)
+                nu_dis = self.params.get('nu_dis', 0.9)
+                
+                if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
+                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_sto * nu_ch
+                if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
+                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_sto * (1/nu_dis)
+                # 수소 저장 비용 추가
+                if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
+                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_sto * nu_ch
+                if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
+                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_sto * (1/nu_dis)
+                
+                # 열 저장 비용 추가
+                if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
+                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_sto * nu_ch
+                if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
+                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_sto * (1/nu_dis)
+                # 5. 시작 비용
+                if 'z_su' in results and (u,t) in results['z_su']:
+                    profit_breakdown['startup_cost'] += results['z_su'][u,t] * self.params.get(f'c_su_{u}', 50)
+            
+            # 순이익 계산
+            profit_breakdown['net_profit'] = (
+                profit_breakdown['grid_revenue'] + 
+                profit_breakdown['community_revenue'] - 
+                profit_breakdown['grid_cost'] - 
+                profit_breakdown['community_cost'] - 
+                profit_breakdown['production_cost'] - 
+                profit_breakdown['storage_cost'] - 
+                profit_breakdown['startup_cost']
+            )
+            
+            player_profits[u] = profit_breakdown
+        
+        # 결과 출력
+        print("\n" + "="*80)
+        print("PLAYER PROFITS WITH COMMUNITY PRICING")
+        print("="*80)
+        
+        print(f"{'Player':^8} | {'Grid Rev':^10} | {'Grid Cost':^10} | {'Comm Rev':^10} | {'Comm Cost':^10} | {'Prod Cost':^10} | {'Net Profit':^12}")
+        print("-"*80)
+        
+        for u in self.players:
+            p = player_profits[u]
+            print(f"{u:^8} | {p['grid_revenue']:^10.2f} | {p['grid_cost']:^10.2f} | "
+                f"{p['community_revenue']:^10.2f} | {p['community_cost']:^10.2f} | "
+                f"{p['production_cost']:^10.2f} | {p['net_profit']:^12.2f}")
+        
+        print("-"*80)
+        total_profit = sum(p['net_profit'] for p in player_profits.values())
+        print(f"{'Total':^8} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {total_profit:^12.2f}")
+        # 검증: 커뮤니티 내부 거래 균형
+        total_comm_revenue = sum(p['community_revenue'] for p in player_profits.values())
+        total_comm_cost = sum(p['community_cost'] for p in player_profits.values())
+        
+        if abs(total_comm_revenue - total_comm_cost) > 1e-6:
+            print(f"⚠️ Community trade imbalance: {total_comm_revenue - total_comm_cost:.4f}")
+        return player_profits, prices
 
 # Example usage with Restricted Pricing
 if __name__ == "__main__":
@@ -2614,32 +3800,8 @@ if __name__ == "__main__":
     # Add grid prices - Grid import is 0.1% more expensive than export to encourage community trading
     # 전력 가격 설정
     if korean_prices_eur:
-        # 실제 한국 데이터 사용
-        for t in time_periods:
-            # 시간 인덱스 조정 (CSV는 1시부터, 코드는 0시부터)
-            csv_hour = t + 1 if t < 23 else 0
-            base_price = korean_prices_eur[csv_hour]
-            # 시간대별 가격 조정 계수 (변동성 증가)
-            if 0 <= t <= 5:  # 심야: 더 저렴하게
-                price_multiplier = 0.7
-            elif 10 <= t <= 15:  # 태양광 시간: 매우 저렴
-                price_multiplier = 0.5
-            elif 17 <= t <= 20:  # 저녁 피크: 더 비싸게
-                price_multiplier = 1.5
-            else:
-                price_multiplier = 1.0
-            
-            adjusted_price = base_price * price_multiplier
-            
-            # 수출 가격에 인센티브 제공
-            parameters[f'pi_E_gri_export_{t}'] = adjusted_price * 1.05  # 수출 프리미엄
-            parameters[f'pi_E_gri_import_{t}'] = adjusted_price * 1.10  # 수입은 더 비싸게
-            
-            # HYDROGEN PRICE
-            h2_price = h2_prices_eur[t]
-            parameters[f'pi_G_gri_export_{t}'] = h2_price
-            parameters[f'pi_G_gri_import_{t}'] = h2_price * 1.2
-            
+        parameters = generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices_eur)
+
         print("\n[HOURLY ELECTRICITY PRICES FROM KOREAN DATA]")
         print("-"*60)
         print(f"{'Hour':^6} | {'Import Price':^15} | {'Export Price':^15}")
@@ -2807,7 +3969,7 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("SOLVING COMPLETE MODEL AND ANALYZING REVENUE")
     print("="*60)
-    status_complete, results_complete, revenue_analysis = lem.solve_complete_model()
+    status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model()
     
     if status_complete == "optimal":
         # Analyze electrolyzer specific operation
@@ -2873,14 +4035,32 @@ if __name__ == "__main__":
         print(f"SUMMARY: H2 Total: {total_h2_produced:.1f} kg | Elec Total: {total_elec_consumed:.1f} kWh")
         print(f"Hours: ON={hours_on}, STANDBY={hours_standby}, OFF={hours_off}")
         print(f"Average H2 efficiency: {total_h2_produced/total_elec_consumed if total_elec_consumed > 0 else 0:.3f} kg/kWh")
-    
+        lem.plot_storage_operation(results_complete)
+        player_profits, prices = lem.calculate_player_profits_with_community_prices(results_complete, community_prices)
+        # LaTeX 파일로 저장
+        latex_table = lem.generate_beamer_economic_table(revenue_analysis, player_profits, revenue_analysis['net_profit'])
     else:
         print(f"Optimization failed: {status_complete}")
     
     print("\n" + "="*60)
     print("SOLVING WITH RESTRICTED PRICING")
     print("="*60)
-    
+    # 개별 vs 커뮤니티 비교 분석
+    comparison_results = lem.compare_individual_vs_community_profits(
+        players, 
+        time_periods, 
+        parameters,
+        player_profits
+    )
+    # 음의 시너지 분석
+    if comparison_results['synergy']['absolute_gain'] < 0:
+        lem.analyze_negative_synergy(comparison_results, players)
+    lem.generate_beamer_synergy_table(comparison_results, players)
+
+    # 추가 분석: 어떤 플레이어가 가장 큰 이익을 보는지
+    print("\n" + "="*80)
+    print("PLAYER BENEFIT ANALYSIS")
+    print("="*80)
     # Solve using Restricted Pricing
     # status, results, prices = lem.solve_with_restricted_pricing()
     
