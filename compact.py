@@ -207,7 +207,7 @@ def calculate_hydrogen_prices(elec_prices_eur):
         https://doi.org/10.1016/j.compchemeng.2023.108450
         근데, 논문에선 elec price range가 25-60 정도임. 우리 smp는 euro/MWh로 계산시 60-90 사이. 그래서 수소가격도 2배 해줌 일단.
         """
-        base_h2_price = 2.1 *2
+        base_h2_price = 2.1 *1.5
         
         # 전력 가격에 반비례하는 조정 계수
         # 전력이 싸면 수소 가격 낮춤 (수소 생산 유도)
@@ -216,10 +216,10 @@ def calculate_hydrogen_prices(elec_prices_eur):
             adjustment = 1.0 - 0.3 * (elec_price - avg_elec) / avg_elec
         else:
             adjustment = 1.0
-        
-        # 최종 수소 가격 (€1.5 ~ €3.5/kg 범위)
+        adjustment = 1.0
+        # 최종 수소 가격 (€1.5 ~ €4.5/kg 범위)
         h2_price = base_h2_price * adjustment
-        h2_price = np.clip(h2_price, 1.5, 3.5)
+        h2_price = np.clip(h2_price, 1.5, 5.0)
         
         h2_prices.append(h2_price)
     
@@ -400,7 +400,6 @@ class LocalEnergyMarket:
         self.electrolyzer_cons = {}
         self.heatpump_cons = {}
         self.renewable_cons = {}
-        self.peak_power_cons = {}
         
         # Initialize variables
         self._create_variables(isLP=self.isLP)
@@ -577,12 +576,14 @@ class LocalEnergyMarket:
                 
                 # Heat storage
                 if u in self.players_with_heat_storage:
+                    heat_storage_power = self.params.get("storage_power_heat", -1)
+                    heat_storage_capacity = self.params.get('storage_capacity_heat', -1)  # 400 kWh
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
-                                                        lb=0, ub=storage_power, obj=c_sto*(1/nu_dis))
+                                                        lb=0, ub=heat_storage_power, obj=c_sto*(1/nu_dis))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
-                                                       lb=0, ub=storage_power, obj=c_sto*nu_ch)
+                                                       lb=0, ub=heat_storage_power, obj=c_sto*nu_ch)
                     self.s_H[u,t] = self.model.addVar(vtype="C", name=f"s_H_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity)
+                                                    lb=0, ub=heat_storage_capacity)
     
     def _create_constraints(self):
         """Create constraints based on slides 9-15"""
@@ -654,7 +655,6 @@ class LocalEnergyMarket:
         self.model.data["cons"]["electrolyzer"] = self.electrolyzer_cons
         self.model.data["cons"]["heatpump"] = self.heatpump_cons
         self.model.data["cons"]["renewable"] = self.renewable_cons
-        # self.model.data["cons"]["peak_power"] = self.peak_power_cons
     
     def _add_electricity_constraints(self):
         """Add electricity-related constraints from slides 9-10"""
@@ -758,7 +758,7 @@ class LocalEnergyMarket:
                     
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_H:
-                    initial_soc = self.params.get(f'initial_soc', 25)
+                    initial_soc = self.params.get(f'initial_soc_heat', -1)
                     cons = self.model.addCons(self.s_H[u,6] == initial_soc, name=f"initial_soc_H_{u}")
                     self.storage_cons[f"initial_soc_H_{u}"] = cons
                 
@@ -905,10 +905,11 @@ class LocalEnergyMarket:
                             name=f"electrolyzer_initial_state_{u}_{t}"
                         )
                         self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
-                        cons = self.model.addCons(
-                            self.z_su[u,t] <= 0.0,
-                            name=f"electrolyzer_initial_su_{u}_{t}"
-                        )
+                        ## 아래는 왜 필요? 어차피 z_off + z_on + z_sb = 1 인데
+                        # cons = self.model.addCons(
+                        #     self.z_su[u,t] <= 0.0,
+                        #     name=f"electrolyzer_initial_su_{u}_{t}"
+                        # )
                         self.electrolyzer_cons[f"electrolyzer_initial_su_{u}_{t}"] = cons
         # # Maximum up time constraints (최대 연속 운전 시간)
         # for u in self.players_with_electrolyzers:
@@ -924,7 +925,7 @@ class LocalEnergyMarket:
             
         # Minimum down time constraints (최소 정지 시간)
             if u in self.players_with_electrolyzers:
-                min_down = self.params.get('min_down_time', 1)
+                min_down = self.params.get('min_down_time', -1)
                 # for t in range(1, len(self.time_periods)):  # t ∈ T \ {1}
                 for t in [tau for tau in self.time_periods if tau != 6]:
                 # t시점에 off로 전환되었는지 확인 (z_off_t - z_off_{t-1})
@@ -985,6 +986,12 @@ class LocalEnergyMarket:
     
     def solve(self):
         """Solve the optimization model"""
+        from pyscipopt import SCIP_PARAMSETTING
+        self.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        self.model.disablePropagation()
+        self.model.setSeparating(SCIP_PARAMSETTING.OFF)
+        self.model.setParam('lp/iterlim', 100)
         self.model.optimize()
         return self.model.getStatus()
     
@@ -1015,13 +1022,13 @@ class LocalEnergyMarket:
         if status != "optimal":
             print(f"Failed to extract results. Status: {status}")
             return status, None, None
-        
+        # Analyze electrolyzer operation
+        electrolyzer_operation = self._analyze_electrolyzer_operations(results)        
         # Analyze revenue by resource type
         revenue_analysis = self._analyze_revenue_by_resource(results)
         # Analyze energy flows
         flow_analysis = self._analyze_energy_flows(results)
-        # Analyze electrolyzer operation
-        electrolyzer_operation = self._analyze_electrolyzer_operations(results)
+
 
         prices = {}
         prices['electricity'] = {}
@@ -1204,9 +1211,6 @@ class LocalEnergyMarket:
                 'storage_cost': 0.0,
                 'net': 0.0
             },
-            'common': {
-                'peak_power_cost': 0.0
-            },
             'total_revenue': 0.0,
             'total_cost': 0.0,
             'net_profit': 0.0
@@ -1322,10 +1326,6 @@ class LocalEnergyMarket:
                 if val > 0:
                     revenue_analysis['heat']['storage_cost'] += val * c_sto * (1/nu_dis)
         
-        # ========== COMMON COSTS ==========
-        if 'chi_peak' in results:
-            peak_penalty = self.params.get('pi_peak', 0)
-            revenue_analysis['common']['peak_power_cost'] = results['chi_peak'] * peak_penalty
         
         # ========== CALCULATE NET VALUES ==========
         # Electricity net
@@ -1371,7 +1371,6 @@ class LocalEnergyMarket:
             revenue_analysis['heat']['grid_import_cost'] +
             revenue_analysis['heat']['production_cost'] +
             revenue_analysis['heat']['storage_cost'] 
-            # revenue_analysis['common']['peak_power_cost']
         )
         
         revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost']
@@ -1401,9 +1400,7 @@ class LocalEnergyMarket:
         print(f"  Storage cost:        -{revenue_analysis['heat']['storage_cost']:10.4f}")
         print(f"  Net:                  {revenue_analysis['heat']['net']:10.4f}")
         
-        print(f"\n[COMMON]")
-        # print(f"  Peak power penalty:  -{revenue_analysis['common']['peak_power_cost']:10.4f}")
-        
+
         print(f"\n[TOTAL]")
         print(f"  Total revenue:        {revenue_analysis['total_revenue']:10.4f}")
         print(f"  Total cost:          -{revenue_analysis['total_cost']:10.4f}")
@@ -2660,10 +2657,6 @@ class LocalEnergyMarket:
             cons = lp_model.addCons(community_balance == 0, name=f"community_elec_balance_{t}")
             lp_community_elec_cons[f"community_elec_balance_{t}"] = cons
         
-        # Peak power constraint
-        for t in self.time_periods:
-            grid_import = quicksum(self.lp_i_E_gri[u,t] - self.lp_e_E_gri[u,t] for u in self.players)
-            lp_model.addCons(grid_import <= self.lp_chi_peak, name=f"peak_power_{t}")
         
         # Heat constraints
         for u in self.players:
@@ -2695,7 +2688,7 @@ class LocalEnergyMarket:
         # Heat storage SOC constraints
         for u in self.players_with_heat_storage:
             if (u,0) in self.lp_s_H:
-                initial_soc = self.params.get(f'initial_soc', 50)
+                initial_soc = self.params.get(f'initial_soc_heat', -5)
                 lp_model.addCons(self.lp_s_H[u,0] == initial_soc, name=f"initial_soc_H_{u}")
             
             for t in self.time_periods:
@@ -2809,9 +2802,7 @@ class LocalEnergyMarket:
             'heat': {},
             'hydro': {},
             'storage': {},
-            'production': {},
-            'peak_power': lp_model.getVal(self.chi_peak)
-        }
+            'production': {}        }
         
         for u in self.players:
             for t in self.time_periods:
@@ -3005,12 +2996,12 @@ class LocalEnergyMarket:
             """
         
         player_roles = {
-            'u1': 'Solar+Stor',
-            'u2': 'Electrolyz',
-            'u3': 'HeatPump',
-            'u4': 'ElecDemand',
-            'u5': 'H2Demand',
-            'u6': 'HeatDemand'
+            'u1': 'Wind,Sto',
+            'u2': 'Elz,Sto',
+            'u3': 'HP,Sto',
+            'u4': 'Elec load',
+            'u5': 'H2 load',
+            'u6': 'Heat load'
         }
         
         for u in sorted(player_profits.keys()):
@@ -3058,12 +3049,12 @@ class LocalEnergyMarket:
         """
         # 플레이어 역할 정의
         player_roles = {
-            'u1': 'Solar + Storage',
-            'u2': 'Electrolyzer + H2',
-            'u3': 'Heat Pump',
-            'u4': 'Elec Consumer',
-            'u5': 'H2 Consumer',
-            'u6': 'Heat Consumer'
+            'u1': 'Wind + Sto',
+            'u2': 'Elz + Sto',
+            'u3': 'HP + Sto',
+            'u4': 'Elec load',
+            'u5': 'H2 load',
+            'u6': 'Heat load'
         }
         
         latex_code = r"""\begin{frame}{Community Synergy Analysis}
@@ -3190,9 +3181,7 @@ class LocalEnergyMarket:
             'heat': {},
             'hydro': {},
             'storage': {},
-            'production': {},
-            # 'peak_power': self.model.getVal(self.chi_peak)
-        }
+            'production': {}        }
         
         # Extract variable values
         for u in self.players:
@@ -3381,6 +3370,14 @@ class LocalEnergyMarket:
         
         lem_community = LocalEnergyMarket(players, time_periods, base_parameters, isLP=False, dwr=False)
         # status, results, revenue = lem_community.solve_complete_model()
+        # Presolve와 heuristics 끄기
+        from pyscipopt import SCIP_PARAMSETTING
+        lem_community.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        lem_community.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        lem_community.model.disablePropagation()
+
+        # 추가 설정: separator도 끄기
+        lem_community.model.setSeparating(SCIP_PARAMSETTING.OFF)
         lem_community.model.optimize()
         status = lem_community.model.getStatus()
         if status == "optimal":
@@ -3398,7 +3395,6 @@ class LocalEnergyMarket:
         
         for player in players:
             print(f"\nOptimizing for player {player} alone...")
-            
             # 파라미터 복사 및 수정
             individual_params = base_parameters.copy()
             
@@ -3421,7 +3417,6 @@ class LocalEnergyMarket:
                 isLP=False, 
                 dwr=individual_params['dwr']
             )
-            
             # 조용히 최적화 (출력 최소화)
             if player not in ['u4', 'u5', 'u6']:
                 lem_individual.model.hideOutput()
@@ -3736,6 +3731,9 @@ if __name__ == "__main__":
         'storage_power': 0.5,        # 30 kW power rating (0.03 MW)
         'storage_capacity': 2.0,    # 2000 kWh capacity (2 MWh)
         'initial_soc': 0.5*1,         # 50% of 1 MWh
+        'initial_soc_heat': 0.2,      # Heat storage initial SOC (50% of 0.4 MWh)
+        'storage_power_heat': 0.10,     # Heat storage: 100 kW (heat pump의 1.25배)
+        'storage_capacity_heat': 0.40,  # Heat storage: 400 kWh (4-5시간 저장)
         'nu_ch': 0.95,
         'nu_dis': 0.95,
         'pi_peak': 50,  # Peak penalty reduced
@@ -3754,7 +3752,7 @@ if __name__ == "__main__":
         'phi0_2_u2': 0.87814262,
         'c_els_u2': 0.05,          # Small production cost
         'c_su_u2': 50,             # Startup cost reduced
-        'max_up_time': 6,
+        'max_up_time': 3,
         'min_down_time': 2,
         
         # Grid connection limits
@@ -3793,8 +3791,8 @@ if __name__ == "__main__":
     for u in players:
         parameters[f'c_res_{u}'] = 0.05
         parameters[f'c_hp_{u}'] = 0.1
-        parameters[f'c_els_{u}'] = 0.08
-        parameters[f'c_su_{u}'] = 50
+        # parameters[f'c_els_{u}'] = 0.08
+        # parameters[f'c_su_{u}'] = 0#50
         parameters[f'c_sto_{u}'] = 0.01
     
     # Add grid prices - Grid import is 0.1% more expensive than export to encourage community trading
@@ -3853,8 +3851,18 @@ if __name__ == "__main__":
     for t in time_periods:        
         # Heat prices - higher in morning and evening
         heat_demand_factor = 1.0 + 0.3 * np.cos(2 * np.pi * (t - 7) / 24)
-        parameters[f'pi_H_gri_export_{t}'] = 0.25 * heat_demand_factor
-        parameters[f'pi_H_gri_import_{t}'] = 0.30 * heat_demand_factor
+        parameters[f'pi_H_gri_export_{t}'] = (0.4 * parameters[f'pi_E_gri_import_{t}']) * heat_demand_factor #0.25 * heat_demand_factor
+        # Import: Export의 120-130% (열 소비자 입장 - 전기의 TOU 구조와 유사)
+        # 피크 시간대는 더 비싸게
+        if 6 <= t < 9 or 17 <= t < 23:  # 난방 피크
+            tou_multiplier = 1.30
+        elif 23 <= t or t < 6:  # 심야
+            tou_multiplier = 1.15
+        else:  # 주간
+            tou_multiplier = 1.20
+
+        parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * tou_multiplier
+        # parameters[f'pi_H_gri_import_{t}'] = 0.30 * heat_demand_factor
 
     # ELEC/HYDRO/HEAT NON FLEXIBLE DEMAND PATTERN
     for u in players:
@@ -3906,7 +3914,9 @@ if __name__ == "__main__":
                 parameters[f'd_E_nfl_{u}_{t}'] = elec_demand
             # HEAT DEMAND
             if u == 'u6':
-                heat_demand = 6 + 3 * np.cos(2 * np.pi * (t - 3) / 24)
+                # heat_demand = 6 + 3 * np.cos(2 * np.pi * (t - 3) / 24)  # 기존 (너무 큼)
+                heat_demand_kw = 60 + 30 * np.cos(2 * np.pi * (t - 3) / 24)  # 60 kW 평균
+                heat_demand = heat_demand_kw * 0.001  # MW로 변환
                 parameters[f'd_H_nfl_{u}_{t}'] = heat_demand
             else:
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
@@ -3961,10 +3971,6 @@ if __name__ == "__main__":
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     # lem.model.addCons(lem.z_on[("u2", 0)] == 1)
-    from pyscipopt import SCIP_PARAMSETTING
-    lem.model.setPresolve(SCIP_PARAMSETTING.OFF)
-    lem.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-    lem.model.disablePropagation()
     # First solve complete model and analyze revenue
     print("\n" + "="*60)
     print("SOLVING COMPLETE MODEL AND ANALYZING REVENUE")

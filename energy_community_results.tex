@@ -25,23 +25,23 @@
             항목 & 수익(EUR) & 비용(EUR) \\
             \midrule
             \textbf{전력} & & \\
-            \quad 그리드 수출 & 537.42 & - \\
-            \quad 그리드 수입 & - & 142.41 \\
+            \quad 그리드 수출 & 527.10 & - \\
+            \quad 그리드 수입 & - & 148.24 \\
             \quad 생산 비용 & - & 0.62 \\
             \quad 저장 비용 & - & 0.04 \\
-            \quad \textbf{소계} & \multicolumn{2}{r}{+394.36} \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{+378.21} \\
             \midrule
             \textbf{수소} & & \\
-            \quad 그리드 수출 & 130.50 & - \\
-            \quad 그리드 수입 & - & 99.81 \\
-            \quad 생산/시작 비용 & - & 59.84 \\
-            \quad \textbf{소계} & \multicolumn{2}{r}{-29.80} \\
+            \quad 그리드 수출 & 97.14 & - \\
+            \quad 그리드 수입 & - & 89.83 \\
+            \quad 생산/시작 비용 & - & 55.86 \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{-49.31} \\
             \midrule
             \textbf{열} & & \\
-            \quad 그리드 수입 & - & 44.82 \\
-            \quad \textbf{소계} & \multicolumn{2}{r}{-44.82} \\
+            \quad 그리드 수입 & - & 13.18 \\
+            \quad \textbf{소계} & \multicolumn{2}{r}{+27.74} \\
             \bottomrule
-            \multicolumn{3}{r}{\textbf{총 순이익: +319.74 EUR/일}} \\
+            \multicolumn{3}{r}{\textbf{총 순이익: +356.63 EUR/일}} \\
             \end{tabular}
             \end{table}
             \end{frame}
@@ -56,14 +56,14 @@
             Player & Role & \multicolumn{2}{c|}{Grid} & \multicolumn{2}{c|}{Community} & Prod & Net \\
             & & Rev & Cost & Rev & Cost & Cost & Profit \\
             \midrule
-            u1 & Solar+Stor & 537.42 & 0.00 & 285.73 & 0.00 & 0.62 & \textcolor{blue}{+822.49} \\
-u2 & Electrolyz & 130.50 & 55.03 & 311.92 & 257.82 & 9.84 & \textcolor{blue}{+69.08} \\
-u3 & HeatPump & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & \textcolor{red}{0.00} \\
-u4 & ElecDemand & 0.00 & 87.38 & 0.00 & 27.91 & 0.00 & \textcolor{red}{-115.28} \\
-u5 & H2Demand & 0.00 & 99.81 & 0.00 & 311.92 & 0.00 & \textcolor{red}{-411.73} \\
-u6 & HeatDemand & 0.00 & 44.82 & 0.00 & 0.00 & 0.00 & \textcolor{red}{-44.82} \\
+            u1 & Wind,Sto & 527.10 & 0.00 & 302.79 & 0.00 & 0.62 & \textcolor{blue}{+829.24} \\
+u2 & Elz,Sto & 97.14 & 34.92 & 279.88 & 262.76 & 5.86 & \textcolor{blue}{+22.71} \\
+u3 & HP,Sto & 41.10 & 25.94 & 41.14 & 11.70 & 0.17 & \textcolor{blue}{+44.41} \\
+u4 & Elec load & 0.00 & 87.38 & 0.00 & 28.33 & 0.00 & \textcolor{red}{-115.71} \\
+u5 & H2 load & 0.00 & 89.83 & 0.00 & 279.88 & 0.00 & \textcolor{red}{-369.71} \\
+u6 & Heat load & 0.00 & 13.18 & 0.00 & 41.14 & 0.00 & \textcolor{red}{-54.31} \\
 \midrule
-            \textbf{Total} & & & & & & & \textbf{319.74} \\
+            \textbf{Total} & & & & & & & \textbf{356.63} \\
             \bottomrule
             \end{tabular}
             \end{table}
