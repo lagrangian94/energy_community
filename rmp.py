@@ -99,18 +99,7 @@ class EnergyMarketPricer(Pricer):
                 else:
                     dual_sol['hydrogen'][t] = 0.0
                 
-                if f'peak_power_{t}' in self.constraints:
-                    cons = self.model.getTransformedCons(self.constraints[f'peak_power_{t}'])
-                    try:
-                        if farkas:
-                            dual_sol['peak'][t] = self.model.getDualfarkasLinear(cons)
-                        else:
-                            dual_sol['peak'][t] = self.model.getDualsolLinear(cons)
-                    except:
-                        # dual_sol['peak'][t] = 0.0
-                        raise Exception("Error getting dual multipliers")
-                else:
-                    dual_sol['peak'][t] = 0.0
+
             
             # Debug output for dual values
             if not farkas and self.iteration <= 3:  # Only show first few iterations
@@ -631,12 +620,6 @@ class EnergyMarketPricer(Pricer):
                 if abs(coeff) > 1e-9:
                     self.model.addConsCoeff(cons, new_var, coeff)
             
-            # Peak power constraint: Σ_p (peak_contribution_p * λ_p) ≤ χ_peak
-            if f'peak_power_{t}' in self.constraints:
-                cons = self.model.getTransformedCons(self.constraints[f'peak_power_{t}'])
-                coeff = pattern['electricity'][t]['net_gri']
-                if abs(coeff) > 1e-9:
-                    self.model.addConsCoeff(cons, new_var, coeff)
         
         # Convexity constraint: each player can only use one pattern (if enforcing convexity)
         if hasattr(self, 'convexity_constraints') and player in self.convexity_constraints:
@@ -674,16 +657,7 @@ class EnergyMarketColumnGeneration:
         
         # Master problem only has:
         # 1. Community balance constraints
-        # 2. Peak power constraint
-        # 3. Convexity constraints (optional)
-        
-        # Peak power variable
-        self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0)
-        
-        # Add peak power penalty to objective
-        pi_peak = self.params.get('pi_peak', 0)
-        self.model.setObjective(pi_peak * self.chi_peak, "minimize")
-        
+        # 2. Convexity constraints (optional)
         # Community balance constraints
         for t in self.time_periods:
             # Electricity balance: Σ_p (net_elec_contribution_p * λ_p) = 0
@@ -698,9 +672,6 @@ class EnergyMarketColumnGeneration:
             cons = self.model.addCons(quicksum([]) == 0.0, modifiable=True, name=f"hydrogen_balance_{t}")
             self.constraints[f'hydrogen_balance_{t}'] = cons
             
-            # Peak power: Σ_p (peak_contribution_p * λ_p) ≤ χ_peak
-            cons = self.model.addCons(quicksum([]) <= self.chi_peak, modifiable=True, name=f"peak_power_{t}")
-            self.constraints[f'peak_power_{t}'] = cons
         
         # Optional: Add convexity constraints for each player
         # Σ_p∈P_u λ_p = 1 for each player u (if enforcing convex combinations)
@@ -723,7 +694,9 @@ class EnergyMarketColumnGeneration:
         # Configure SCIP settings for column generation
         self.model.setPresolve(SCIP_PARAMSETTING.OFF)
         self.model.setSeparating(SCIP_PARAMSETTING.OFF)
-        self.model.setParam("display/freq", 1)
+        self.model.disablePropagation()
+        self.model.setSeparating(SCIP_PARAMSETTING.OFF)
+        # self.model.setParam("display/freq", 1)
         
         print("Starting Column Generation for Energy Market...")
         self.model.optimize()
@@ -737,7 +710,6 @@ class EnergyMarketColumnGeneration:
         
         results = {
             'objective_value': self.model.getObjVal(),
-            'peak_power': self.model.getVal(self.chi_peak),
             'selected_patterns': {},
             'community_prices': {}
         }
@@ -755,8 +727,6 @@ class EnergyMarketColumnGeneration:
                 self.model.getTransformedCons(self.constraints[f'heat_balance_{t}']))
             results['community_prices'][f'hydrogen_{t}'] = self.model.getDualsolLinear(
                 self.model.getTransformedCons(self.constraints[f'hydrogen_balance_{t}']))
-            results['community_prices'][f'peak_{t}'] = self.model.getDualsolLinear(
-                self.model.getTransformedCons(self.constraints[f'peak_power_{t}']))
         
         return results
 
@@ -814,7 +784,6 @@ if __name__ == "__main__":
         results = cg_model.get_results()
         print(f"\n=== COLUMN GENERATION RESULTS ===")
         print(f"Optimal objective value: {results['objective_value']:.2f}")
-        print(f"Peak power: {results['peak_power']:.2f}")
         print(f"Number of selected patterns: {len(results['selected_patterns'])}")
         print(f"Community prices: {results['community_prices']}")
     else:
