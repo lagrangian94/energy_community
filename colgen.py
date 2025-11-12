@@ -43,7 +43,8 @@ class PlayerSubproblem:
         
     def solve_pricing(self, dual_elec: Dict[int, float], 
                       dual_heat: Dict[int, float], 
-                      dual_hydro: Dict[int, float]) -> Tuple[float, Dict]:
+                      dual_hydro: Dict[int, float],
+                      dual_convexity: float) -> Tuple[float, Dict]:
         """
         Solve pricing problem with modified objective based on dual prices
         
@@ -51,7 +52,8 @@ class PlayerSubproblem:
             dual_elec: Dual prices for electricity community balance constraints
             dual_heat: Dual prices for heat community balance constraints
             dual_hydro: Dual prices for hydrogen community balance constraints
-            
+            dual_convexity: Dual price for convexity constraint (sum lambda = 1)
+
         Returns:
             tuple: (reduced_cost, solution_dict)
         """
@@ -134,9 +136,9 @@ class PlayerSubproblem:
         # Solve
         self.model.optimize()
         status = self.model.getStatus()
-        
+
         if status == "optimal":
-            reduced_cost = self.model.getObjVal()
+            reduced_cost = self.model.getObjVal() - dual_convexity
             # Extract solution
             _, results = solve_and_extract_results(self.model)
             
@@ -150,8 +152,7 @@ class LEMPricer(Pricer):
     Pricer for Local Energy Market column generation
     """
     def __init__(self, master_model, subproblems: Dict[str, PlayerSubproblem], 
-                 time_periods: List[int], players: List[str],
-                 master_vars: Dict, convexity_cons: Dict):
+                 time_periods: List[int], players: List[str]):
         """
         Initialize pricer
         
@@ -160,16 +161,11 @@ class LEMPricer(Pricer):
             subproblems: Dictionary of player subproblems
             time_periods: List of time periods
             players: List of player IDs
-            master_vars: Dictionary to store master variables (columns)
-            convexity_cons: Dictionary of convexity constraints
         """
         super().__init__()
-        self.master_model = master_model
         self.subproblems = subproblems
         self.time_periods = time_periods
         self.players = players
-        self.master_vars = master_vars
-        self.convexity_cons = convexity_cons
         self.iteration = 0
         self.farkas_iteration = 0
         
@@ -198,49 +194,127 @@ class LEMPricer(Pricer):
         # Get current LP objective (only for regular pricing)
         if not farkas:
             try:
-                lp_obj = self.master_model.getLPObjVal()
+                lp_obj = self.model.getLPObjVal()
             except:
                 lp_obj = 0.0
-        
         # Get dual values or Farkas multipliers from master problem
         dual_elec = {}
         dual_heat = {}
         dual_hydro = {}
-        
+        dual_convexity = {}
+
         # Get community balance constraint duals/Farkas multipliers
         for t in self.time_periods:
-            elec_cons = self.master_model.data['community_elec_balance'][t]
-            heat_cons = self.master_model.data['community_heat_balance'][t]
-            hydro_cons = self.master_model.data['community_hydro_balance'][t]
+            elec_cons = self.model.data['cons']['community_elec_balance'][t]
+            heat_cons = self.model.data['cons']['community_heat_balance'][t]
+            hydro_cons = self.model.data['cons']['community_hydro_balance'][t]
             
             # Get transformed constraints
-            try:
-                t_elec_cons = self.master_model.getTransformedCons(elec_cons)
-                t_heat_cons = self.master_model.getTransformedCons(heat_cons)
-                t_hydro_cons = self.master_model.getTransformedCons(hydro_cons)
-                
-                if farkas:
-                    # Get Farkas multipliers for infeasible problem
-                    dual_elec[t] = self.master_model.getDualfarkasLinear(t_elec_cons) if t_elec_cons is not None else 0.0
-                    dual_heat[t] = self.master_model.getDualfarkasLinear(t_heat_cons) if t_heat_cons is not None else 0.0
-                    dual_hydro[t] = self.master_model.getDualfarkasLinear(t_hydro_cons) if t_hydro_cons is not None else 0.0
-                else:
-                    # Get regular dual multipliers
-                    dual_elec[t] = self.master_model.getDualsolLinear(t_elec_cons) if t_elec_cons is not None else 0.0
-                    dual_heat[t] = self.master_model.getDualsolLinear(t_heat_cons) if t_heat_cons is not None else 0.0
-                    dual_hydro[t] = self.master_model.getDualsolLinear(t_hydro_cons) if t_hydro_cons is not None else 0.0
-            except:
-                dual_elec[t] = 0.0
-                dual_heat[t] = 0.0
-                dual_hydro[t] = 0.0
-        
+            t_elec_cons = self.model.getTransformedCons(elec_cons)
+            t_heat_cons = self.model.getTransformedCons(heat_cons)
+            t_hydro_cons = self.model.getTransformedCons(hydro_cons)
+            
+            if farkas:
+                # Get Farkas multipliers for infeasible problem
+                dual_elec[t] = self.model.getDualfarkasLinear(t_elec_cons)
+                dual_heat[t] = self.model.getDualfarkasLinear(t_heat_cons)
+                dual_hydro[t] = self.model.getDualfarkasLinear(t_hydro_cons)
+            else:
+                # Get regular dual multipliers
+                dual_elec[t] = self.model.getDualsolLinear(t_elec_cons)
+                dual_heat[t] = self.model.getDualsolLinear(t_heat_cons)
+                dual_hydro[t] = self.model.getDualsolLinear(t_hydro_cons)
+        # Get convexity constraint duals/Farkas multipliers for each player
+        for player in self.players:
+            conv_cons = self.model.data['cons']['convexity'][player]
+            t_conv_cons = self.model.getTransformedCons(conv_cons)
+            if farkas:
+                dual_convexity[player] = self.model.getDualfarkasLinear(t_conv_cons)
+            else:
+                dual_convexity[player] = self.model.getDualsolLinear(t_conv_cons)
         # Solve pricing problem for each player
+        # DEBUG: Print dual prices for first few iterations
+        if not farkas and self.iteration <= 3:
+            print(f"\n  [Iter {self.iteration}] Dual Prices Sample:")
+            sample_times = [0, 6, 12, 18] if len(self.time_periods) >= 24 else self.time_periods[:4]
+            print(f"    Time  Elec      Heat      Hydro")
+            for t in sample_times:
+                print(f"    {t:4d}  {dual_elec[t]:8.4f}  {dual_heat[t]:8.4f}  {dual_hydro[t]:8.4f}")
+            print(f"    Convexity duals: {dual_convexity}")
+            
+            # Additional debug: check constraint status
+            if self.iteration <= 3:
+                for player in ['u1']:  # Just check one player
+                    conv_cons = self.model.data['cons']['convexity'][player]
+                    t_conv_cons = self.model.getTransformedCons(conv_cons)
+                    
+                    print(f"\n    === Convexity Constraint Debug for {player} ===")
+                    print(f"    Original constraint: {conv_cons}")
+                    print(f"    Transformed constraint: {t_conv_cons}")
+                    
+                    if t_conv_cons is not None:
+                        try:
+                            lhs = self.model.getLhs(t_conv_cons)
+                            rhs = self.model.getRhs(t_conv_cons)
+                            activity = self.model.getActivity(t_conv_cons)
+                            slack = rhs - activity if rhs < float('inf') else activity - lhs
+                            # is_active = self.model.isActive(t_conv_cons)
+                            
+                            print(f"    LHS={lhs}, RHS={rhs}, Activity={activity:.6f}, Slack={slack:.6f}")
+                            
+                            # Get all variables in constraint
+                            vals = self.model.getValsLinear(t_conv_cons)
+                            print(f"    Variables in constraint: {len(vals)}")
+                            for var_name, coeff in list(vals.items())[:5]:  # Show first 5
+                                print(f"      {var_name}: coeff={coeff}")
+                            # Print each variable and its VALUE in LP solution
+                            print(f"    Variable values in LP solution:")
+                            for k in range(self.iteration):
+                                var = self.model.data["vars"]["u1", k]["var"]
+                                val = self.model.getVal(var)
+                                print(f"      {var.name}: value={val:.6f}")
+                            # Try to get dual
+                            try:
+                                dual_method1 = self.model.getDualsolLinear(t_conv_cons)
+                                print(f"    Dual (getDualsolLinear): {dual_method1}")
+                            except Exception as e:
+                                print(f"    Dual (getDualsolLinear): Failed - {e}")
+                                
+                        except Exception as e:
+                            print(f"    Could not get constraint info: {e}")
+                
+                # Also check one community balance constraint
+                for t in [0]:
+                    elec_cons = self.model.data['cons']['community_elec_balance'][t]
+                    t_elec_cons = self.model.getTransformedCons(elec_cons)
+                    if t_elec_cons is not None:
+                        try:
+                            lhs = self.model.getLhs(t_elec_cons)
+                            rhs = self.model.getRhs(t_elec_cons)
+                            activity = self.model.getActivity(t_elec_cons)
+                            slack = rhs - activity if rhs < float('inf') else activity - lhs
+                            print(f"\n    Elec balance[{t}]: LHS={lhs}, RHS={rhs}, Activity={activity:.6f}, Slack={slack:.6f}")
+                            
+                            # Try to get dual in different ways
+                            try:
+                                dual_method1 = self.model.getDualsolLinear(t_elec_cons)
+                                print(f"    Dual (getDualsolLinear): {dual_method1}")
+                            except:
+                                print(f"    Dual (getDualsolLinear): Failed")
+                                
+                        except Exception as e:
+                            print(f"    Could not get constraint info: {e}")
+        else:
+            print('stop here')
         columns_added = 0
         min_reduced_cost = float('inf')
-        
+        print(f"iteration {self.iteration}, dual_elec: {dual_elec}")
+        print(f"iteration {self.iteration}, dual_heat: {dual_heat}")
+        print(f"iteration {self.iteration}, dual_hydro: {dual_hydro}")
+        print(f"iteration {self.iteration}, dual_convexity: {dual_convexity}")
         for player in self.players:
             reduced_cost, solution = self.subproblems[player].solve_pricing(
-                dual_elec, dual_heat, dual_hydro
+                dual_elec, dual_heat, dual_hydro, dual_convexity[player]
             )
             
             min_reduced_cost = min(min_reduced_cost, reduced_cost)
@@ -278,28 +352,27 @@ class LEMPricer(Pricer):
             solution: Solution dictionary from subproblem
         """
         # Create new variable in master problem
-        col_idx = len([k for k in self.master_vars.keys() if k[0] == player])
+        col_idx = len([k for k in self.model.data['vars'].keys() if k[0] == player])
         var_name = f"lambda_{player}_{col_idx}"
         
         # Variable is continuous in [0, 1] (for RMP)
-        new_var = self.master_model.addVar(
+        new_var = self.model.addVar(
             name=var_name,
             vtype="C",
             lb=0.0,
-            ub=1.0,
             obj=self._calculate_column_cost(player, solution),
             pricedVar = True
         )
         
         # Store variable and solution
-        self.master_vars[player, col_idx] = {
+        self.model.data['vars'][player, col_idx] = {
             'var': new_var,
             'solution': solution
         }
         
         # Add variable to convexity constraint
-        self.master_model.addConsCoeff(
-            self.convexity_cons[player],
+        self.model.addConsCoeff(
+            self.model.getTransformedCons(self.model.data['cons']['convexity'][player]),
             new_var,
             1.0
         )
@@ -311,37 +384,34 @@ class LEMPricer(Pricer):
             i_E_com_val = solution.get('i_E_com', {}).get((player, t), 0)
             coeff_elec = i_E_com_val - e_E_com_val
             
-            if abs(coeff_elec) > 1e-8:
-                self.master_model.addConsCoeff(
-                    self.master_model.data['community_elec_balance'][t],
-                    new_var,
-                    coeff_elec
-                )
+
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['community_elec_balance'][t]),
+                new_var,
+                coeff_elec
+            )
             
             # Heat
             e_H_com_val = solution.get('e_H_com', {}).get((player, t), 0)
             i_H_com_val = solution.get('i_H_com', {}).get((player, t), 0)
             coeff_heat = i_H_com_val - e_H_com_val
             
-            if abs(coeff_heat) > 1e-8:
-                self.master_model.addConsCoeff(
-                    self.master_model.data['community_heat_balance'][t],
-                    new_var,
-                    coeff_heat
-                )
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['community_heat_balance'][t]),
+                new_var,
+                coeff_heat
+            )
             
             # Hydrogen
             e_G_com_val = solution.get('e_G_com', {}).get((player, t), 0)
             i_G_com_val = solution.get('i_G_com', {}).get((player, t), 0)
             coeff_hydro = i_G_com_val - e_G_com_val
             
-            if abs(coeff_hydro) > 1e-8:
-                self.master_model.addConsCoeff(
-                    self.master_model.data['community_hydro_balance'][t],
-                    new_var,
-                    coeff_hydro
-                )
-    
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['community_hydro_balance'][t]),
+                new_var,
+                coeff_hydro
+            )
     def _calculate_column_cost(self, player: str, solution: Dict) -> float:
         """
         Calculate the cost coefficient for a column (extreme point)
@@ -402,61 +472,71 @@ class MasterProblem:
         self.players = players
         self.time_periods = time_periods
         self.model = Model("RMP_LocalEnergyMarket")
-        
+        self.model.data = {}
         # Storage for variables and constraints
-        self.master_vars = {}  # {(player, col_idx): {'var': var, 'solution': dict}}
-        self.convexity_cons = {}  # {player: constraint}
+        self.model.data['vars'] = {}  # {(player, col_idx): {'var': var, 'solution': dict}}
         
         # Data dictionary for storing constraints (similar to LocalEnergyMarket)
-        self.model.data = {
+        self.model.data['cons'] = {
             'community_elec_balance': {},
             'community_heat_balance': {},
-            'community_hydro_balance': {}
+            'community_hydro_balance': {},
+            'convexity': {}
         }
-        
-        self._create_master_constraints()
     
     def _create_master_constraints(self):
         """
         Create master problem constraints:
         1. Community balance constraints (linking constraints)
         2. Convexity constraints (one per player)
-        
-        Note: No slack variables with Big M - we use Farkas pricing to restore feasibility
-        """
+                """
         # Convexity constraints: sum of lambdas = 1 for each player
         for u in self.players:
+            initial_var = self.model.data["vars"][u, 0]["var"]
             cons = self.model.addCons(
-                quicksum([]) == 1,  # Start with empty sum, will add variables later
+                quicksum([initial_var]) - 1 == 0, 
                 name=f"convexity_{u}"
             )
-            self.convexity_cons[u] = cons
+            self.model.data['cons']['convexity'][u] = cons
         
         # Community balance constraints (no slack variables)
         # Farkas pricing will ensure feasibility
         for t in self.time_periods:
+            elec_expr, heat_expr, hydro_expr = 0,0,0
+            for u in self.players:
+                var = self.model.data["vars"][u, 0]["var"]
+                solution = self.model.data["vars"][u, 0]["solution"]
+                e_E_com_val = solution.get('e_E_com', {}).get((u, t), 0)
+                i_E_com_val = solution.get('i_E_com', {}).get((u, t), 0)
+                elec_expr += var * (i_E_com_val - e_E_com_val)
+                e_H_com_val = solution.get('e_H_com', {}).get((u, t), 0)
+                i_H_com_val = solution.get('i_H_com', {}).get((u, t), 0)
+                heat_expr += var * (i_H_com_val - e_H_com_val)
+                e_G_com_val = solution.get('e_G_com', {}).get((u, t), 0)
+                i_G_com_val = solution.get('i_G_com', {}).get((u, t), 0)
+                hydro_expr += var * (i_G_com_val - e_G_com_val)
             # Electricity balance: sum(i_E_com - e_E_com) = 0
             cons = self.model.addCons(
-                quicksum([]) == 0,
+                elec_expr == 0,
                 name=f"community_elec_balance_{t}"
             )
-            self.model.data['community_elec_balance'][t] = cons
+            self.model.data['cons']['community_elec_balance'][t] = cons
             
             # Heat balance: sum(i_H_com - e_H_com) = 0
             cons = self.model.addCons(
-                quicksum([]) == 0,
+                heat_expr == 0,
                 name=f"community_heat_balance_{t}"
             )
-            self.model.data['community_heat_balance'][t] = cons
+            self.model.data['cons']['community_heat_balance'][t] = cons
             
             # Hydrogen balance: sum(i_G_com - e_G_com) = 0
             cons = self.model.addCons(
-                quicksum([]) == 0,
+                hydro_expr == 0,
                 name=f"community_hydro_balance_{t}"
             )
-            self.model.data['community_hydro_balance'][t] = cons
+            self.model.data['cons']['community_hydro_balance'][t] = cons
     
-    def add_initial_columns(self, subproblems: Dict[str, PlayerSubproblem]):
+    def _add_initial_columns(self, subproblems: Dict[str, PlayerSubproblem]):
         """
         Generate initial columns by solving each subproblem independently
         
@@ -469,88 +549,38 @@ class MasterProblem:
         zero_duals_elec = {t: 0.0 for t in self.time_periods}
         zero_duals_heat = {t: 0.0 for t in self.time_periods}
         zero_duals_hydro = {t: 0.0 for t in self.time_periods}
-        
+        zero_duals_convexity = {player: 0.0 for player in self.players}
         for player in self.players:
             print(f"Generating initial column for player {player}...")
             
             # Solve subproblem with zero dual prices
             reduced_cost, solution = subproblems[player].solve_pricing(
-                zero_duals_elec, zero_duals_heat, zero_duals_hydro
+                zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player]
             )
             
-            if solution is not None:
-                # Add as first column for this player
-                self._add_initial_column(player, solution, subproblems[player])
-                print(f"  Initial column added (cost={reduced_cost:.4f})")
-            else:
-                print(f"  WARNING: Could not generate initial column for {player}")
-    
-    def _add_initial_column(self, player: str, solution: Dict, subproblem: PlayerSubproblem):
-        """
-        Add initial column to master problem
-        """
-        col_idx = 0
-        var_name = f"lambda_{player}_{col_idx}"
+            if solution is None:
+                raise Exception(f"  WARNING: Could not generate initial column for {player}")
+            col_idx = 0
+            var_name = f"lambda_{player}_{col_idx}"
         
-        # Calculate column cost (original objective value)
-        # cost = self._calculate_column_cost(player, solution, subproblem.parameters)
-        cost = 10**4
-        # Create variable
-        new_var = self.model.addVar(
-            name=var_name,
-            vtype="C",
-            lb=0.0,
-            ub=1.0,
-            obj=cost
-        )
+            # Calculate column cost (original objective value)
+            cost = self._calculate_column_cost(player, solution, subproblems[player].parameters)
+            # cost = 10**4
+            # Create variable
+            new_var = self.model.addVar(
+                name=var_name,
+                vtype="C",
+                lb=0.0,
+                obj=cost
+            )
         
-        # Store variable and solution
-        self.master_vars[player, col_idx] = {
-            'var': new_var,
-            'solution': solution
-        }
-        
-        # Add to convexity constraint
-        self.model.addConsCoeff(self.convexity_cons[player], new_var, 1.0)
-        
-        # Add to community balance constraints
-        for t in self.time_periods:
-            # Electricity
-            e_E_com = solution.get('e_E_com', {}).get((player, t), 0)
-            i_E_com = solution.get('i_E_com', {}).get((player, t), 0)
-            coeff_elec = i_E_com - e_E_com
-            
-            if abs(coeff_elec) > 1e-8:
-                self.model.addConsCoeff(
-                    self.model.data['community_elec_balance'][t],
-                    new_var,
-                    coeff_elec
-                )
-            
-            # Heat
-            e_H_com = solution.get('e_H_com', {}).get((player, t), 0)
-            i_H_com = solution.get('i_H_com', {}).get((player, t), 0)
-            coeff_heat = i_H_com - e_H_com
-            
-            if abs(coeff_heat) > 1e-8:
-                self.model.addConsCoeff(
-                    self.model.data['community_heat_balance'][t],
-                    new_var,
-                    coeff_heat
-                )
-            
-            # Hydrogen
-            e_G_com = solution.get('e_G_com', {}).get((player, t), 0)
-            i_G_com = solution.get('i_G_com', {}).get((player, t), 0)
-            coeff_hydro = i_G_com - e_G_com
-            
-            if abs(coeff_hydro) > 1e-8:
-                self.model.addConsCoeff(
-                    self.model.data['community_hydro_balance'][t],
-                    new_var,
-                    coeff_hydro
-                )
-    
+            # Store variable and solution
+            self.model.data['vars'][player, col_idx] = {
+                'var': new_var,
+                'solution': solution
+            }
+            print(f" {player}: Initial column added (cost={cost:.4f})")
+
     def _calculate_column_cost(self, player: str, solution: Dict, params: Dict) -> float:
         """Calculate cost for a column"""
         cost = 0.0
@@ -601,7 +631,7 @@ class MasterProblem:
         """
         solution = {}
         
-        for (player, col_idx), col_data in self.master_vars.items():
+        for (player, col_idx), col_data in self.model.data['vars'].items():
             lambda_val = self.model.getVal(col_data['var'])
             
             if lambda_val > 1e-6:  # Only consider active columns
@@ -716,33 +746,24 @@ class ColumnGenerationSolver:
         # This satisfies convexity constraints (sum lambda = 1) 
         # Community balance will be achieved through pricing
         print("\n=== Generating Zero Pattern Initial Columns ===")
-        for player in self.players:
-            # Create zero solution (all variables = 0)
-            zero_solution = self._create_zero_solution(player)
-            self.master._add_initial_column(player, zero_solution, self.subproblems[player])
-            print(f"  {player}: Zero pattern column added")
-        print("=== Initial columns generated ===\n")
-        
+        self.master._add_initial_columns(self.subproblems)       
         # Create pricer
         pricer = LEMPricer(
             master_model=self.master.model,
             subproblems=self.subproblems,
             time_periods=self.time_periods,
-            players=self.players,
-            master_vars=self.master.master_vars,
-            convexity_cons=self.master.convexity_cons
-        )
-        
+            players=self.players        )
         # Include pricer in master problem
         self.master.model.includePricer(
             pricer,
             "LEMPricer",
             "Pricer for Local Energy Market column generation"
         )
-        
+        self.master._create_master_constraints()
+
         # Solve with column generation
         print("\nSolving master problem with pricing...")
-        status = self.master.solve()
+        status = self.master.model.optimize()
         
         if status == "optimal":
             obj_val = self.master.get_objective_value()
