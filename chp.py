@@ -128,14 +128,12 @@ class ColumnGenerationSolver:
                     t_elec_cons = self.master.model.getTransformedCons(elec_cons)
                     t_heat_cons = self.master.model.getTransformedCons(heat_cons)
                     t_hydro_cons = self.master.model.getTransformedCons(hydro_cons)
-                    
-                    chp_elec[t] = self.master.model.getDualsolLinear(t_elec_cons) if t_elec_cons is not None else 0.0
-                    chp_heat[t] = self.master.model.getDualsolLinear(t_heat_cons) if t_heat_cons is not None else 0.0
-                    chp_hydro[t] = self.master.model.getDualsolLinear(t_hydro_cons) if t_hydro_cons is not None else 0.0
+                    import numpy as np
+                    chp_elec[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_elec_cons)), 2)
+                    chp_heat[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_heat_cons)), 2)
+                    chp_hydro[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_hydro_cons)), 2)
                 except:
-                    chp_elec[t] = 0.0
-                    chp_heat[t] = 0.0
-                    chp_hydro[t] = 0.0
+                    raise Exception("Error getting dual multipliers")
             
             # Print sample of convex hull prices
             print("\nSample Convex Hull Prices (EUR/MWh or EUR/kg):")
@@ -156,8 +154,311 @@ class ColumnGenerationSolver:
         else:
             print(f"\nColumn generation failed with status: {status}")
             return status, None, None
+    def analyze_synergy_with_convex_hull_prices(self, solution: Dict, obj_val: float, community_prices: Dict):
+        """
+        Analyze individual vs community profits using convex hull prices
+        
+        Args:
+            solution: Solution from column generation including convex hull prices
+            obj_val: Objective value from column generation
+        """
+        from compact import LocalEnergyMarket, solve_and_extract_results
+        
+        print("\n" + "="*80)
+        print("SYNERGY ANALYSIS WITH CONVEX HULL PRICING")
+        print("="*80)
+        
+        # Extract convex hull prices
+        chp = community_prices
+        
+        # Step 1: Calculate community player profits using convex hull prices
+        print("\nSTEP 1: Computing player profits in community (using convex hull prices)")
+        print("-"*80)
+        
+        # For this, we need to solve the community problem again to get detailed results
+        lem_community = LocalEnergyMarket(
+            self.players, 
+            self.time_periods, 
+            self.parameters, 
+            isLP=False, 
+            dwr=False
+        )
+        
+        # Solve with SCIP settings for consistency
+        from pyscipopt import SCIP_PARAMSETTING
+        lem_community.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        lem_community.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        lem_community.model.disablePropagation()
+        lem_community.model.setSeparating(SCIP_PARAMSETTING.OFF)
+        # lem_community.model.hideOutput()
+        lem_community.model.optimize()
+        
+        status_comm = lem_community.model.getStatus()
+        if status_comm != "optimal":
+            print(f"âš ï¸ Community optimization failed: {status_comm}")
+            return
+        
+        _, results_comm = solve_and_extract_results(lem_community.model)
+        
+        # Calculate player profits with convex hull prices
+        player_profits_chp = self._calculate_player_profits_with_chp(
+            results_comm, chp, lem_community
+        )
+        
+        # Step 2: Optimize each player individually
+        print("\nSTEP 2: Computing individual player profits")
+        print("-"*80)
+        
+        individual_profits = {}
+        for player in self.players:
+            print(f"Optimizing {player} individually...", end=" ")
+            
+            # Create individual parameters
+            individual_params = self.parameters.copy()
+            for key in individual_params.keys():
+                if key.startswith('players_with_'):
+                    if player in individual_params[key]:
+                        individual_params[key] = [player]
+                    else:
+                        individual_params[key] = []
+            individual_params['dwr'] = False
+            
+            # Solve individual problem
+            lem_individual = LocalEnergyMarket(
+                [player],
+                self.time_periods,
+                individual_params,
+                isLP=False,
+                dwr=False
+            )
+            lem_individual.model.hideOutput()
+            status_ind = lem_individual.solve()
+            
+            if status_ind == "optimal":
+                _, results_ind = solve_and_extract_results(lem_individual.model)
+                revenue_ind = lem_individual._analyze_revenue_by_resource(results_ind)
+                individual_profits[player] = revenue_ind['net_profit']
+                print(f"Profit: {revenue_ind['net_profit']:.2f} EUR")
+            else:
+                individual_profits[player] = 0
+                print(f"Failed ({status_ind})")
+        
+        # Step 3: Synergy analysis
+        print("\n" + "="*80)
+        print("SYNERGY ANALYSIS: INDIVIDUAL VS COMMUNITY")
+        print("="*80)
+        
+        print(f"\n{'Player':^10} | {'Individual':^15} | {'Community':^15} | {'Gain':^15} | {'Gain %':^12}")
+        print("-"*80)
+        
+        total_individual = 0
+        total_community = 0
+        
+        for player in self.players:
+            ind_profit = individual_profits.get(player, 0)
+            comm_profit = player_profits_chp[player]['net_profit']
+            gain = comm_profit - ind_profit
+            
+            # Calculate gain percentage
+            if ind_profit == 0:
+                if gain > 0:
+                    gain_pct_str = "N/A (+)"
+                elif gain < 0:
+                    gain_pct_str = "N/A (-)"
+                else:
+                    gain_pct_str = "0.0"
+            else:
+                gain_pct = (gain / abs(ind_profit)) * 100
+                gain_pct_str = f"{gain_pct:.1f}"
+            
+            total_individual += ind_profit
+            total_community += comm_profit
+            
+            # Gain marker
+            if gain > 0:
+                gain_marker = "UP"
+            elif gain < 0:
+                gain_marker = "DN"
+            else:
+                gain_marker = ""
+            
+            print(f"{player:^10} | {ind_profit:^15.2f} | {comm_profit:^15.2f} | "
+                  f"{gain:^15.2f} {gain_marker} | {gain_pct_str:^12}")
+        
+        print("-"*80)
+        
+        # Total synergy
+        total_gain = total_community - total_individual
+        if total_individual == 0:
+            total_gain_pct_str = "N/A"
+        else:
+            total_gain_pct = (total_gain / abs(total_individual)) * 100
+            total_gain_pct_str = f"{total_gain_pct:.1f}%"
+        
+        print(f"{'Total':^10} | {total_individual:^15.2f} | {total_community:^15.2f} | "
+              f"{total_gain:^15.2f} | {total_gain_pct_str:^12}")
+        
+        print("\n" + "="*80)
+        print("INTERPRETATION")
+        print("="*80)
+        print("Individual: Player's profit when operating alone")
+        print("Community: Player's profit in community (using convex hull prices)")
+        print("Gain: Additional profit from community participation")
+        print("\nNote: Convex hull prices ensure efficient market clearing and")
+        print("      reflect true opportunity costs in the community market.")
+        
+        return {
+            'individual_profits': individual_profits,
+            'community_profits': player_profits_chp,
+            'total_gain': total_gain,
+            'convex_hull_prices': chp
+        }
+    def _calculate_player_profits_with_chp(self, results: Dict, chp: Dict, lem: 'LocalEnergyMarket') -> Dict:
+        """
+        Calculate player profits using convex hull prices
+        
+        Args:
+            results: Optimization results from community model
+            chp: Convex hull prices (electricity, heat, hydrogen)
+            lem: LocalEnergyMarket instance for parameters
+            
+        Returns:
+            dict: Player profits with detailed breakdown
+        """
+        player_profits = {}
+        
+        for u in self.players:
+            profit = {
+                'grid_revenue': 0.0,
+                'grid_cost': 0.0,
+                'community_revenue': 0.0,
+                'community_cost': 0.0,
+                'production_cost': 0.0,
+                'storage_cost': 0.0,
+                'startup_cost': 0.0,
+                'net_profit': 0.0
+            }
+            
+            for t in self.time_periods:
+                # 1. Grid trading
+                if 'e_E_gri' in results and (u,t) in results['e_E_gri']:
+                    export = results['e_E_gri'][u,t]
+                    if export > 0:
+                        grid_price = self.parameters.get(f'pi_E_gri_export_{t}', 0)
+                        profit['grid_revenue'] += export * grid_price
+                
+                if 'i_E_gri' in results and (u,t) in results['i_E_gri']:
+                    import_val = results['i_E_gri'][u,t]
+                    if import_val > 0:
+                        grid_price = self.parameters.get(f'pi_E_gri_import_{t}', 0)
+                        profit['grid_cost'] += import_val * grid_price
+                # Hydrogen (새로 추가!)
+                if 'e_G_gri' in results and (u,t) in results['e_G_gri']:
+                    export = results['e_G_gri'][u,t]
+                    if export > 0:
+                        grid_price = self.parameters.get(f'pi_G_gri_export_{t}', 0)
+                        profit['grid_revenue'] += export * grid_price
 
+                if 'i_G_gri' in results and (u,t) in results['i_G_gri']:
+                    import_val = results['i_G_gri'][u,t]
+                    if import_val > 0:
+                        grid_price = self.parameters.get(f'pi_G_gri_import_{t}', 0)
+                        profit['grid_cost'] += import_val * grid_price
 
+                # Heat (새로 추가!)
+                if 'e_H_gri' in results and (u,t) in results['e_H_gri']:
+                    export = results['e_H_gri'][u,t]
+                    if export > 0:
+                        grid_price = self.parameters.get(f'pi_H_gri_export_{t}', 0)
+                        profit['grid_revenue'] += export * grid_price
+
+                if 'i_H_gri' in results and (u,t) in results['i_H_gri']:
+                    import_val = results['i_H_gri'][u,t]
+                    if import_val > 0:
+                        grid_price = self.parameters.get(f'pi_H_gri_import_{t}', 0)
+                        profit['grid_cost'] += import_val * grid_price
+
+                # 2. Community trading (using convex hull prices)
+                # Electricity
+                if 'e_E_com' in results and (u,t) in results['e_E_com']:
+                    export = results['e_E_com'][u,t]
+                    if export > 0:
+                        profit['community_revenue'] += export * chp['electricity'][t]
+                
+                if 'i_E_com' in results and (u,t) in results['i_E_com']:
+                    import_val = results['i_E_com'][u,t]
+                    if import_val > 0:
+                        profit['community_cost'] += import_val * chp['electricity'][t]
+                
+                # Heat
+                if 'e_H_com' in results and (u,t) in results['e_H_com']:
+                    export = results['e_H_com'][u,t]
+                    if export > 0:
+                        profit['community_revenue'] += export * chp['heat'][t]
+                
+                if 'i_H_com' in results and (u,t) in results['i_H_com']:
+                    import_val = results['i_H_com'][u,t]
+                    if import_val > 0:
+                        profit['community_cost'] += import_val * chp['heat'][t]
+                
+                # Hydrogen
+                if 'e_G_com' in results and (u,t) in results['e_G_com']:
+                    export = results['e_G_com'][u,t]
+                    if export > 0:
+                        profit['community_revenue'] += export * chp['hydrogen'][t]
+                
+                if 'i_G_com' in results and (u,t) in results['i_G_com']:
+                    import_val = results['i_G_com'][u,t]
+                    if import_val > 0:
+                        profit['community_cost'] += import_val * chp['hydrogen'][t]
+                
+                # 3. Production costs
+                if 'p' in results:
+                    if (u,'res',t) in results['p']:
+                        profit['production_cost'] += results['p'][u,'res',t] * self.parameters.get(f'c_res_{u}', 0)
+                    if (u,'els',t) in results['p']:
+                        profit['production_cost'] += results['p'][u,'els',t] * self.parameters.get(f'c_els_{u}', 0)
+                    if (u,'hp',t) in results['p']:
+                        profit['production_cost'] += results['p'][u,'hp',t] * self.parameters.get(f'c_hp_{u}', 0)
+                
+                # 4. Storage costs
+                c_sto = self.parameters.get('c_sto', 0.01)
+                nu_ch = self.parameters.get('nu_ch', 0.9)
+                nu_dis = self.parameters.get('nu_dis', 0.9)
+                
+                if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
+                    profit['storage_cost'] += results['b_ch_E'][u,t] * c_sto * nu_ch
+                if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
+                    profit['storage_cost'] += results['b_dis_E'][u,t] * c_sto * (1/nu_dis)
+                
+                if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
+                    profit['storage_cost'] += results['b_ch_G'][u,t] * c_sto * nu_ch
+                if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
+                    profit['storage_cost'] += results['b_dis_G'][u,t] * c_sto * (1/nu_dis)
+                
+                if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
+                    profit['storage_cost'] += results['b_ch_H'][u,t] * c_sto * nu_ch
+                if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
+                    profit['storage_cost'] += results['b_dis_H'][u,t] * c_sto * (1/nu_dis)
+                
+                # 5. Startup costs
+                if 'z_su' in results and (u,t) in results['z_su']:
+                    profit['startup_cost'] += results['z_su'][u,t] * self.parameters.get(f'c_su_{u}', 50)
+            
+            # Calculate net profit
+            profit['net_profit'] = (
+                profit['grid_revenue'] + 
+                profit['community_revenue'] - 
+                profit['grid_cost'] - 
+                profit['community_cost'] - 
+                profit['production_cost'] - 
+                profit['storage_cost'] - 
+                profit['startup_cost']
+            )
+            
+            player_profits[u] = profit
+        
+        return player_profits
 def main():
     """
     Main test function for column generation
@@ -200,22 +501,21 @@ def main():
                 print("CONVEX HULL PRICES (Community Balance Shadow Prices)")
                 print("="*80)
                 chp = solution['convex_hull_prices']
-                
                 print("\nElectricity Prices (EUR/MWh):")
-                for t in [0, 6, 12, 18, 23]:
-                    if t in chp['electricity']:
-                        print(f"  t={t:2d}: {chp['electricity'][t]:8.4f}")
-                
+                for t in time_periods:
+                    print(f"  t={t:2d}: {chp['electricity'][t]:8.4f}")
                 print("\nHeat Prices (EUR/MWh):")
-                for t in [0, 6, 12, 18, 23]:
-                    if t in chp['heat']:
-                        print(f"  t={t:2d}: {chp['heat'][t]:8.4f}")
-                
+                for t in time_periods:
+                    print(f"  t={t:2d}: {chp['heat'][t]:8.4f}")
                 print("\nHydrogen Prices (EUR/kg):")
-                for t in [0, 6, 12, 18, 23]:
-                    if t in chp['hydrogen']:
-                        print(f"  t={t:2d}: {chp['hydrogen'][t]:8.4f}")
-            
+                for t in time_periods:
+                    print(f"  t={t:2d}: {chp['hydrogen'][t]:8.4f}")
+
+                # Perform synergy analysis
+                print("\n" + "="*80)
+                print("PERFORMING SYNERGY ANALYSIS")
+                print("="*80)
+                synergy_results = cg_solver.analyze_synergy_with_convex_hull_prices(solution, obj_val, chp)
             print("\n" + "="*80)
             print("COMPLETED SUCCESSFULLY")
             print("="*80)

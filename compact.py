@@ -2442,9 +2442,18 @@ class LocalEnergyMarket:
         print("\n" + "="*80)
         print("RESTRICTED PRICING COMPLETED SUCCESSFULLY!")
         print("="*80)
-        print(f"\nElectricity prices (first 5 hours): {dict(list(prices['electricity'].items())[:5])}")
-        print(f"Heat prices (first 5 hours): {dict(list(prices['heat'].items())[:5])}")
-        print(f"Hydro prices (first 5 hours): {dict(list(prices['hydro'].items())[:5])}")
+        print(f"Electricity price")
+        for t in self.time_periods:
+            print(f"  {t:2d}: {prices['electricity'][t]}")
+        print(f"Heat price")
+        for t in self.time_periods:
+            print(f"  {t:2d}: {prices['heat'][t]}")
+        print(f"Hydro price")
+        for t in self.time_periods:
+            print(f"  {t:2d}: {prices['hydro'][t]}")
+        print("\n" + "="*80)
+        print("RESTRICTED PRICING COMPLETED SUCCESSFULLY!")
+
         
         return lp_status, lp_results, prices
     
@@ -3533,7 +3542,7 @@ class LocalEnergyMarket:
     def calculate_player_profits_with_community_prices(self, results, prices):
         """
         커뮤니티 가격(shadow price)으로 각 플레이어의 수익 계산
-        
+        player profits: MIP을 풀어 구한 central dispatch에 community price를 적용한 플레이어의 수익
         Returns:
             dict: 각 플레이어의 상세 수익 내역
         """        
