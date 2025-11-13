@@ -157,12 +157,14 @@ class LEMPricer(Pricer):
         print(f"iteration {self.iteration}, dual_heat: {dual_heat}")
         print(f"iteration {self.iteration}, dual_hydro: {dual_hydro}")
         print(f"iteration {self.iteration}, dual_convexity: {dual_convexity}")
-        
+        if self.iteration > 5000:
+            print('stop')
+        debug_sol = {}
         for player in self.players:
             reduced_cost, solution = self.subproblems[player].solve_pricing(
-                dual_elec, dual_heat, dual_hydro, dual_convexity[player]
+                dual_elec, dual_heat, dual_hydro, dual_convexity[player], farkas=farkas
             )
-            
+            debug_sol[player] = solution
             min_reduced_cost = min(min_reduced_cost, reduced_cost)
             
             # Add column if reduced cost is negative

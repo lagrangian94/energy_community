@@ -345,7 +345,8 @@ class LocalEnergyMarket:
                  time_periods: List[int],
                  parameters: Dict,
                  isLP: bool = False,
-                 dwr: bool = False):
+                 dwr: bool = False,
+                 binary_values: Optional[Dict] = None):
         """
         Initialize the Local Energy Market optimization model
         
@@ -360,6 +361,7 @@ class LocalEnergyMarket:
         self.model = Model("LocalEnergyMarket")
         self.isLP = isLP
         self.dwr = dwr
+        self.binary_values = binary_values
         # Initialize model.data dictionary to store variables and constraints
         self.model.data = {"vars": {}, "cons": {}}
         
@@ -494,7 +496,7 @@ class LocalEnergyMarket:
                     
                     # Electrolyzer commitment variables
                     c_su = self.params.get(f'c_su_{u}', 0)
-                    vartype = "C" if isLP else "B"
+                    vartype = "C" if (isLP or self.binary_values is not None) else "B"
                     self.z_su[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_{u}_{t}", obj=c_su)
                     self.z_on[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_{u}_{t}")
                     self.z_off[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_{u}_{t}")
@@ -717,7 +719,37 @@ class LocalEnergyMarket:
                 #     grid_import = quicksum(self.i_E_gri.get((u,t),0) - self.e_E_gri.get((u,t),0) for u in self.players)
                 #     cons = self.model.addCons(grid_import <= self.chi_peak, name=f"peak_power_{t}")
                 #     self.peak_power_cons[f"peak_power_{t}"] = cons
-    
+        # If binary_values are provided, add constraints to fix binary variables
+        if self.binary_values is not None:
+            for u in self.players_with_electrolyzers:
+                for t in self.time_periods:
+                    if ('z_su', u, t) in self.binary_values:
+                        cons = self.model.addCons(
+                            self.z_su[u,t] == self.binary_values[('z_su', u, t)],
+                            name=f"fix_z_su_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"fix_z_su_{u}_{t}"] = cons
+                    
+                    if ('z_on', u, t) in self.binary_values:
+                        cons = self.model.addCons(
+                            self.z_on[u,t] == self.binary_values[('z_on', u, t)],
+                            name=f"fix_z_on_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"fix_z_on_{u}_{t}"] = cons
+                    
+                    if ('z_off', u, t) in self.binary_values:
+                        cons = self.model.addCons(
+                            self.z_off[u,t] == self.binary_values[('z_off', u, t)],
+                            name=f"fix_z_off_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"fix_z_off_{u}_{t}"] = cons
+                    
+                    if ('z_sb', u, t) in self.binary_values:
+                        cons = self.model.addCons(
+                            self.z_sb[u,t] == self.binary_values[('z_sb', u, t)],
+                            name=f"fix_z_sb_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"fix_z_sb_{u}_{t}"] = cons
     def _add_heat_constraints(self):
         """Add heat-related constraints from slide 12"""
         
@@ -992,7 +1024,7 @@ class LocalEnergyMarket:
         self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
         self.model.disablePropagation()
         self.model.setSeparating(SCIP_PARAMSETTING.OFF)
-        self.model.setParam('lp/iterlim', 100)
+        # self.model.setParam('lp/iterlim', 100)
         self.model.optimize()
         return self.model.getStatus()
     
@@ -1030,24 +1062,28 @@ class LocalEnergyMarket:
         # Analyze energy flows
         flow_analysis = self._analyze_energy_flows(results)
 
-
-        prices = {}
-        prices['electricity'] = {}
-        prices['heat'] = {}
-        prices['hydro'] = {}
+        lp_status, lp_results, prices = self.solve_with_restricted_pricing()
+        if lp_status != "optimal":
+            print(f"LP optimization failed with status: {lp_status}")
+            return lp_status, None, None
         
-        for t in self.time_periods:
-            # Get dual multipliers for community balance constraints
-            # Note: Must use getTransformedCons() to get transformed constraints for dual solution
-            t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
-            pi = self.model.getDualsolLinear(t_cons)
-            prices['electricity'][t] = np.round(np.abs(pi), 2)
-            t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
-            pi = self.model.getDualsolLinear(t_cons)
-            prices['heat'][t] = np.round(np.abs(pi), 2)
-            t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
-            pi = self.model.getDualsolLinear(t_cons)
-            prices['hydro'][t] = np.round(np.abs(pi), 2)
+        # prices = {}
+        # prices['electricity'] = {}
+        # prices['heat'] = {}
+        # prices['hydro'] = {}
+        
+        # for t in self.time_periods:
+        #     # Get dual multipliers for community balance constraints
+        #     # Note: Must use getTransformedCons() to get transformed constraints for dual solution
+        #     t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
+        #     pi = self.model.getDualsolLinear(t_cons)
+        #     prices['electricity'][t] = np.round(np.abs(pi), 2)
+        #     t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
+        #     pi = self.model.getDualsolLinear(t_cons)
+        #     prices['heat'][t] = np.round(np.abs(pi), 2)
+        #     t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
+        #     pi = self.model.getDualsolLinear(t_cons)
+        #     prices['hydro'][t] = np.round(np.abs(pi), 2)
         energy = ['electricity', 'heat', 'hydro']
         for e in energy:
             print(f"{e} price:")
@@ -1838,12 +1874,7 @@ class LocalEnergyMarket:
         if total_heat_nfl_demand > 0:
             print(f"  Community self-sufficiency:    {total_heat_from_comm/total_heat_nfl_demand*100:10.1f}%")
         
-        # Check for community internal hydrogen trading
-        hydro_community_trade = self._check_community_hydrogen_trade(flow_analysis)
-        if hydro_community_trade > 0:
-            print(f"\n⚠️  Community hydrogen trade detected: {hydro_community_trade:.2f} kg")
-        else:
-            print(f"\n❌ No community hydrogen trading detected (all hydrogen goes through grid)")
+
     def plot_storage_operation(self, results, save_plots=True):
         """
         저장소 SOC 및 충방전 패턴 시각화
@@ -2319,8 +2350,8 @@ class LocalEnergyMarket:
     def solve_with_restricted_pricing(self):
         """
         Solve with Restricted Pricing mechanism:
-        1. First solve MILP to get optimal binary variables
-        2. Fix binary variables and solve LP to get shadow prices
+        1. First get optimal binary variables from solved MIP model
+        2. Create new LP model with fixed binary variables to get shadow prices
         
         Returns:
             tuple: (status, results, prices)
@@ -2328,97 +2359,64 @@ class LocalEnergyMarket:
                 - results: optimization results dictionary
                 - prices: dictionary with electricity, heat, hydro prices per time period
         """
+
         
-        print("Step 1: Solving MILP to get optimal commitment decisions...")
+        # Step 2: Extract optimal binary variable values
+        print("\n" + "="*80)
+        print("STEP 2: Extracting binary variable values...")
+        print("="*80)
         
-        # Step 1: Solve original MILP
-        # status = self.solve()
-        
-        # if status != "optimal":
-        #     print(f"MILP optimization failed with status: {status}")
-        #     return status, None, None
-        
-        # print("MILP solved successfully. Extracting binary variable values...")
-        # Extract optimal binary variable values
-        from pyscipopt import SCIP_PARAMSETTING
-        self.model.setPresolve(SCIP_PARAMSETTING.OFF)
-        self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-        self.model.disablePropagation()
-        self.model.optimize()
         binary_values = {}
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
                 if (u,t) in self.z_su:
-                    binary_values['z_su', u, t] = self.model.getVal(self.z_su[u,t])
+                    binary_values[('z_su', u, t)] = self.model.getVal(self.z_su[u,t])
                 if (u,t) in self.z_on:
-                    binary_values['z_on', u, t] = self.model.getVal(self.z_on[u,t])
+                    binary_values[('z_on', u, t)] = self.model.getVal(self.z_on[u,t])
                 if (u,t) in self.z_off:
-                    binary_values['z_off', u, t] = self.model.getVal(self.z_off[u,t])
+                    binary_values[('z_off', u, t)] = self.model.getVal(self.z_off[u,t])
                 if (u,t) in self.z_sb:
-                    binary_values['z_sb', u, t] = self.model.getVal(self.z_sb[u,t])
-        # Step 2: Create new LP model with fixed binary variables
-        for u in self.players_with_electrolyzers:
-            for t in self.time_periods:
-                var = self.model.data["vars"]["z_su"][(u,t)]
-                # self.model.fixVar(var, binary_values["z_su", u, t])
-                var = self.model.data["vars"]["z_on"][(u,t)]
-                # self.model.fixVar(var, binary_values["z_on", u, t])
-                var = self.model.data["vars"]["z_off"][(u,t)]
-                # self.model.fixVar(var, binary_values["z_off", u, t])
-                # self.model.chgVarUb(var, binary_values["z_off", u, t])
-                var = self.model.data["vars"]["z_sb"][(u,t)]
-                # self.model.fixVar(var, binary_values["z_sb", u, t])
-                # self.model.chgVarUb(var, binary_values["z_sb", u, t])
+                    binary_values[('z_sb', u, t)] = self.model.getVal(self.z_sb[u,t])
         
-        self.model.optimize()
-        # # if status != "optimal":
-        #     print(f"LP optimization failed with status: {status}")
-        #     return status, None, None
+        print(f"✓ Extracted {len(binary_values)} binary variable values")
         
-        print("LP solved successfully. Extracting shadow prices...")
+        # Step 3: Create new LP model with fixed binary variables
+        print("\n" + "="*80)
+        print("STEP 3: Creating LP model with fixed binary variables...")
+        print("="*80)
         
-        # Step 3: Extract shadow prices (dual multipliers) from community balance constraints
-        prices = {
-            'electricity': {},
-            'heat': {},
-            'hydro': {}
-        }
-        
-        for t in self.time_periods:
-            # Get dual multipliers for community balance constraints
-            # Note: Must use getTransformedCons() to get transformed constraints for dual solution
-            t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
-            prices['electricity'][t] = self.model.getDualsolLinear(t_cons)
-            t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
-            prices['heat'][t] = self.model.getDualsolLinear(t_cons)
-            t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
-            prices['hydro'][t] = self.model.getDualsolLinear(t_cons)
-            
-
-
-
-        
-        
-        print("Step 2: Creating LP relaxation with fixed binary variables...")
-        self.model.freeTransform()
-        self.model.relax()
-
-
-        print("Step 3: Solving LP relaxation...")
-        
-        # Solve LP
+        lp_model = LocalEnergyMarket(
+            players=self.players,
+            time_periods=self.time_periods,
+            parameters=self.params,
+            isLP=False,  # Don't use LP relaxation - we want continuous z_ variables but with fixed values
+            dwr=self.dwr,
+            binary_values=binary_values
+        )
         from pyscipopt import SCIP_PARAMSETTING
-        self.model.setPresolve(SCIP_PARAMSETTING.OFF)
-        self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-        self.model.disablePropagation()
-        self.model.optimize()
-        # if status != "optimal":
-        #     print(f"LP optimization failed with status: {status}")
-        #     return status, None, None
+        lp_model.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        lp_model.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        lp_model.model.disablePropagation()
+        lp_model.model.setSeparating(SCIP_PARAMSETTING.OFF)
+        print("✓ LP model created with fixed binary variables")
         
-        print("LP solved successfully. Extracting shadow prices...")
+        # Step 4: Solve LP model
+        print("\n" + "="*80)
+        print("STEP 4: Solving LP model to get shadow prices...")
+        print("="*80)
         
-        # Step 3: Extract shadow prices (dual multipliers) from community balance constraints
+        lp_model.model.optimize()
+        lp_status, lp_results = solve_and_extract_results(lp_model.model)
+        
+        if lp_status != "optimal":
+            print(f"LP optimization failed with status: {lp_status}")
+            return lp_status, None, None
+        print("✓ LP solved successfully")
+        # Step 5: Extract shadow prices (dual multipliers) from community balance constraints
+        print("\n" + "="*80)
+        print("STEP 5: Extracting shadow prices from community balance constraints...")
+        print("="*80)
+        
         prices = {
             'electricity': {},
             'heat': {},
@@ -2427,23 +2425,28 @@ class LocalEnergyMarket:
         
         for t in self.time_periods:
             # Get dual multipliers for community balance constraints
-            # Note: Must use getTransformedCons() to get transformed constraints for dual solution
-            t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
-            prices['electricity'][t] = self.model.getDualsolLinear(t_cons)
-            t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
-            prices['heat'][t] = self.model.getDualsolLinear(t_cons)
-            t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
-            prices['hydro'][t] = self.model.getDualsolLinear(t_cons)
-    
-        # Get LP results
-        lp_results = self._extract_lp_results(self.model)
+            elec_cons = lp_model.community_elec_balance_cons[f"community_elec_balance_{t}"]
+            heat_cons = lp_model.community_heat_balance_cons[f"community_heat_balance_{t}"]
+            hydro_cons = lp_model.community_hydro_balance_cons[f"community_hydro_balance_{t}"]
+            
+            pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(elec_cons))
+            prices['electricity'][t] = np.round(np.abs(pi), 2)
+            pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(heat_cons))
+            prices['heat'][t] = np.round(np.abs(pi), 2)
+            pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(hydro_cons))
+            prices['hydro'][t] = np.round(np.abs(pi), 2)
         
-        print("Restricted Pricing completed successfully!")
-        print(f"Electricity prices: {prices['electricity']}")
-        print(f"Heat prices: {prices['heat']}")
-        print(f"hydro prices: {prices['hydro']}")
+        print("✓ Shadow prices extracted")
         
-        return "optimal", lp_results, prices
+        
+        print("\n" + "="*80)
+        print("RESTRICTED PRICING COMPLETED SUCCESSFULLY!")
+        print("="*80)
+        print(f"\nElectricity prices (first 5 hours): {dict(list(prices['electricity'].items())[:5])}")
+        print(f"Heat prices (first 5 hours): {dict(list(prices['heat'].items())[:5])}")
+        print(f"Hydro prices (first 5 hours): {dict(list(prices['hydro'].items())[:5])}")
+        
+        return lp_status, lp_results, prices
     
     def _recreate_continuous_variables_for_lp(self, lp_model):
         """Recreate all continuous variables for LP relaxation"""
@@ -2577,13 +2580,16 @@ class LocalEnergyMarket:
         # Grid interaction costs
         for u in self.players:
             for t in self.time_periods:
-                pi_E_gri = self.params.get(f'pi_E_gri_{t}', 0)
-                pi_H_gri = self.params.get(f'pi_H_gri_{t}', 0)
-                pi_G_gri = self.params.get(f'pi_G_gri_{t}', 0)
+                # pi_E_gri = self.params.get(f'pi_E_gri_{t}', 0)
+                # pi_H_gri = self.params.get(f'pi_H_gri_{t}', 0)
+                # pi_G_gri = self.params.get(f'pi_G_gri_{t}', 0)
+                pi_E_gri_import, pi_E_gri_export = self.params.get(f'pi_E_gri_import_{t}', 0), self.params.get(f'pi_E_gri_export_{t}', 0)
+                pi_H_gri_import, pi_H_gri_export = self.params.get(f'pi_H_gri_import_{t}', 0), self.params.get(f'pi_H_gri_export_{t}', 0)
+                pi_G_gri_import, pi_G_gri_export = self.params.get(f'pi_G_gri_import_{t}', 0), self.params.get(f'pi_G_gri_export_{t}', 0)
                 
-                obj_terms.append(pi_E_gri * (self.lp_i_E_gri[u,t] - self.lp_e_E_gri[u,t]))
-                obj_terms.append(pi_H_gri * (self.lp_i_H_gri[u,t] - self.lp_e_H_gri[u,t]))
-                obj_terms.append(pi_G_gri * (self.lp_i_G_gri[u,t] - self.lp_e_G_gri[u,t]))
+                obj_terms.append(pi_E_gri_import * self.lp_i_E_gri[u,t] - pi_E_gri_export * self.lp_e_E_gri[u,t])
+                obj_terms.append(pi_H_gri_import * self.lp_i_H_gri[u,t] - pi_H_gri_export * self.lp_e_H_gri[u,t])
+                obj_terms.append(pi_G_gri_import * self.lp_i_G_gri[u,t] - pi_G_gri_export * self.lp_e_G_gri[u,t])
         
         # Storage usage costs
         for u in self.players:

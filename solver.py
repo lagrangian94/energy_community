@@ -45,7 +45,8 @@ class PlayerSubproblem:
     def solve_pricing(self, dual_elec: Dict[int, float], 
                       dual_heat: Dict[int, float], 
                       dual_hydro: Dict[int, float],
-                      dual_convexity: float) -> Tuple[float, Dict]:
+                      dual_convexity: float,
+                      farkas: bool=False) -> Tuple[float, Dict]:
         """
         Solve pricing problem with modified objective based on dual prices
         
@@ -67,45 +68,46 @@ class PlayerSubproblem:
         
         # Original grid costs
         for t in self.time_periods:
-            # Electricity grid costs
-            if (u, t) in self.lem.i_E_gri:
-                pi_import = self.parameters.get(f'pi_E_gri_import_{t}', 0)
-                new_obj += pi_import * self.lem.i_E_gri[u, t]
-            if (u, t) in self.lem.e_E_gri:
-                pi_export = self.parameters.get(f'pi_E_gri_export_{t}', 0)
-                new_obj -= pi_export * self.lem.e_E_gri[u, t]
-            
-            # Heat grid costs
-            if (u, t) in self.lem.i_H_gri:
-                pi_import = self.parameters.get(f'pi_H_gri_import_{t}', 0)
-                new_obj += pi_import * self.lem.i_H_gri[u, t]
-            if (u, t) in self.lem.e_H_gri:
-                pi_export = self.parameters.get(f'pi_H_gri_export_{t}', 0)
-                new_obj -= pi_export * self.lem.e_H_gri[u, t]
-            
-            # Hydrogen grid costs
-            if (u, t) in self.lem.i_G_gri:
-                pi_import = self.parameters.get(f'pi_G_gri_import_{t}', 0)
-                new_obj += pi_import * self.lem.i_G_gri[u, t]
-            if (u, t) in self.lem.e_G_gri:
-                pi_export = self.parameters.get(f'pi_G_gri_export_{t}', 0)
-                new_obj -= pi_export * self.lem.e_G_gri[u, t]
-            
-            # Production costs
-            if (u, 'res', t) in self.lem.p:
-                c_res = self.parameters.get(f'c_res_{u}', 0)
-                new_obj += c_res * self.lem.p[u, 'res', t]
-            if (u, 'hp', t) in self.lem.p:
-                c_hp = self.parameters.get(f'c_hp_{u}', 0)
-                new_obj += c_hp * self.lem.p[u, 'hp', t]
-            if (u, 'els', t) in self.lem.p:
-                c_els = self.parameters.get(f'c_els_{u}', 0)
-                new_obj += c_els * self.lem.p[u, 'els', t]
-            
-            # Startup costs
-            if (u, t) in self.lem.z_su:
-                c_su = self.parameters.get(f'c_su_{u}', 0)
-                new_obj += c_su * self.lem.z_su[u, t]
+            if not farkas:
+                # Electricity grid costs
+                if (u, t) in self.lem.i_E_gri:
+                    pi_import = self.parameters.get(f'pi_E_gri_import_{t}', 0)
+                    new_obj += pi_import * self.lem.i_E_gri[u, t]
+                if (u, t) in self.lem.e_E_gri:
+                    pi_export = self.parameters.get(f'pi_E_gri_export_{t}', 0)
+                    new_obj -= pi_export * self.lem.e_E_gri[u, t]
+                
+                # Heat grid costs
+                if (u, t) in self.lem.i_H_gri:
+                    pi_import = self.parameters.get(f'pi_H_gri_import_{t}', 0)
+                    new_obj += pi_import * self.lem.i_H_gri[u, t]
+                if (u, t) in self.lem.e_H_gri:
+                    pi_export = self.parameters.get(f'pi_H_gri_export_{t}', 0)
+                    new_obj -= pi_export * self.lem.e_H_gri[u, t]
+                
+                # Hydrogen grid costs
+                if (u, t) in self.lem.i_G_gri:
+                    pi_import = self.parameters.get(f'pi_G_gri_import_{t}', 0)
+                    new_obj += pi_import * self.lem.i_G_gri[u, t]
+                if (u, t) in self.lem.e_G_gri:
+                    pi_export = self.parameters.get(f'pi_G_gri_export_{t}', 0)
+                    new_obj -= pi_export * self.lem.e_G_gri[u, t]
+                
+                # Production costs
+                if (u, 'res', t) in self.lem.p:
+                    c_res = self.parameters.get(f'c_res_{u}', 0)
+                    new_obj += c_res * self.lem.p[u, 'res', t]
+                if (u, 'hp', t) in self.lem.p:
+                    c_hp = self.parameters.get(f'c_hp_{u}', 0)
+                    new_obj += c_hp * self.lem.p[u, 'hp', t]
+                if (u, 'els', t) in self.lem.p:
+                    c_els = self.parameters.get(f'c_els_{u}', 0)
+                    new_obj += c_els * self.lem.p[u, 'els', t]
+                
+                # Startup costs
+                if (u, t) in self.lem.z_su:
+                    c_su = self.parameters.get(f'c_su_{u}', 0)
+                    new_obj += c_su * self.lem.z_su[u, t]
             
             # Community trading with dual prices
             # For reduced cost: original_cost - dual_price * coefficient
@@ -131,7 +133,8 @@ class PlayerSubproblem:
         
         # Set modified objective
         self.model.setObjective(new_obj, "minimize")
-        
+        if u=='u2' and farkas:
+            print(1)
         # Solve
         self.model.optimize()
         status = self.model.getStatus()

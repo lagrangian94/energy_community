@@ -139,7 +139,7 @@ class ColumnGenerationSolver:
             
             # Print sample of convex hull prices
             print("\nSample Convex Hull Prices (EUR/MWh or EUR/kg):")
-            sample_times = [0, 6, 12, 18, 23] if len(self.time_periods) >= 24 else self.time_periods[:5]
+            sample_times = self.time_periods
             print(f"{'Time':>6} {'Electricity':>12} {'Heat':>12} {'Hydrogen':>12}")
             print("-" * 48)
             for t in sample_times:
