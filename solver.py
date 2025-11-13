@@ -1,0 +1,342 @@
+"""
+Solver components for column generation: Subproblem and Master Problem
+"""
+from pyscipopt import Model, quicksum
+import sys
+sys.path.append('/mnt/project')
+
+from compact import LocalEnergyMarket, solve_and_extract_results
+from typing import Dict, List, Tuple
+
+
+class PlayerSubproblem:
+    """
+    Individual player's subproblem for column generation
+    Reuses LocalEnergyMarket class with single player
+    """
+    def __init__(self, player: str, time_periods: List[int], parameters: Dict, isLP: bool = True):
+        """
+        Create subproblem for a single player
+        
+        Args:
+            player: Single player ID
+            time_periods: List of time periods
+            parameters: Model parameters
+            isLP: Whether to use LP relaxation (True for column generation)
+        """
+        self.player = player
+        self.time_periods = time_periods
+        self.parameters = parameters
+        
+        # Create LocalEnergyMarket with single player and dwr=True
+        # dwr=True removes community balance constraints
+        self.lem = LocalEnergyMarket(
+            players=[player],
+            time_periods=time_periods,
+            parameters=parameters,
+            isLP=isLP,
+            dwr=True  # This removes community balance constraints
+        )
+        
+        self.model = self.lem.model
+        # Disable output for subproblems
+        self.model.hideOutput()
+        
+    def solve_pricing(self, dual_elec: Dict[int, float], 
+                      dual_heat: Dict[int, float], 
+                      dual_hydro: Dict[int, float],
+                      dual_convexity: float) -> Tuple[float, Dict]:
+        """
+        Solve pricing problem with modified objective based on dual prices
+        
+        Args:
+            dual_elec: Dual prices for electricity community balance constraints
+            dual_heat: Dual prices for heat community balance constraints
+            dual_hydro: Dual prices for hydrogen community balance constraints
+            dual_convexity: Dual price for convexity constraint (sum lambda = 1)
+
+        Returns:
+            tuple: (reduced_cost, solution_dict)
+        """
+        # Free transform to allow objective modification
+        self.model.freeTransform()
+        
+        # Build modified objective with dual prices
+        new_obj = 0
+        u = self.player
+        
+        # Original grid costs
+        for t in self.time_periods:
+            # Electricity grid costs
+            if (u, t) in self.lem.i_E_gri:
+                pi_import = self.parameters.get(f'pi_E_gri_import_{t}', 0)
+                new_obj += pi_import * self.lem.i_E_gri[u, t]
+            if (u, t) in self.lem.e_E_gri:
+                pi_export = self.parameters.get(f'pi_E_gri_export_{t}', 0)
+                new_obj -= pi_export * self.lem.e_E_gri[u, t]
+            
+            # Heat grid costs
+            if (u, t) in self.lem.i_H_gri:
+                pi_import = self.parameters.get(f'pi_H_gri_import_{t}', 0)
+                new_obj += pi_import * self.lem.i_H_gri[u, t]
+            if (u, t) in self.lem.e_H_gri:
+                pi_export = self.parameters.get(f'pi_H_gri_export_{t}', 0)
+                new_obj -= pi_export * self.lem.e_H_gri[u, t]
+            
+            # Hydrogen grid costs
+            if (u, t) in self.lem.i_G_gri:
+                pi_import = self.parameters.get(f'pi_G_gri_import_{t}', 0)
+                new_obj += pi_import * self.lem.i_G_gri[u, t]
+            if (u, t) in self.lem.e_G_gri:
+                pi_export = self.parameters.get(f'pi_G_gri_export_{t}', 0)
+                new_obj -= pi_export * self.lem.e_G_gri[u, t]
+            
+            # Production costs
+            if (u, 'res', t) in self.lem.p:
+                c_res = self.parameters.get(f'c_res_{u}', 0)
+                new_obj += c_res * self.lem.p[u, 'res', t]
+            if (u, 'hp', t) in self.lem.p:
+                c_hp = self.parameters.get(f'c_hp_{u}', 0)
+                new_obj += c_hp * self.lem.p[u, 'hp', t]
+            if (u, 'els', t) in self.lem.p:
+                c_els = self.parameters.get(f'c_els_{u}', 0)
+                new_obj += c_els * self.lem.p[u, 'els', t]
+            
+            # Startup costs
+            if (u, t) in self.lem.z_su:
+                c_su = self.parameters.get(f'c_su_{u}', 0)
+                new_obj += c_su * self.lem.z_su[u, t]
+            
+            # Community trading with dual prices
+            # For reduced cost: original_cost - dual_price * coefficient
+            # Electricity
+            if (u, t) in self.lem.i_E_com:
+                # Import from community: coefficient is +1 in balance
+                new_obj -= dual_elec[t] * self.lem.i_E_com[u, t]
+            if (u, t) in self.lem.e_E_com:
+                # Export to community: coefficient is -1 in balance
+                new_obj += dual_elec[t] * self.lem.e_E_com[u, t]
+            
+            # Heat
+            if (u, t) in self.lem.i_H_com:
+                new_obj -= dual_heat[t] * self.lem.i_H_com[u, t]
+            if (u, t) in self.lem.e_H_com:
+                new_obj += dual_heat[t] * self.lem.e_H_com[u, t]
+            
+            # Hydrogen
+            if (u, t) in self.lem.i_G_com:
+                new_obj -= dual_hydro[t] * self.lem.i_G_com[u, t]
+            if (u, t) in self.lem.e_G_com:
+                new_obj += dual_hydro[t] * self.lem.e_G_com[u, t]
+        
+        # Set modified objective
+        self.model.setObjective(new_obj, "minimize")
+        
+        # Solve
+        self.model.optimize()
+        status = self.model.getStatus()
+
+        if status == "optimal":
+            reduced_cost = self.model.getObjVal() - dual_convexity
+            # Extract solution
+            _, results = solve_and_extract_results(self.model)
+            
+            return reduced_cost, results
+        else:
+            return float('inf'), None
+
+
+class MasterProblem:
+    """
+    Restricted Master Problem for column generation
+    Contains only community balance constraints
+    """
+    def __init__(self, players: List[str], time_periods: List[int]):
+        """
+        Initialize master problem
+        
+        Args:
+            players: List of player IDs
+            time_periods: List of time periods
+        """
+        self.players = players
+        self.time_periods = time_periods
+        self.model = Model("RMP_LocalEnergyMarket")
+        self.model.data = {}
+        # Storage for variables and constraints
+        self.model.data['vars'] = {}  # {(player, col_idx): {'var': var, 'solution': dict}}
+        
+        # Data dictionary for storing constraints (similar to LocalEnergyMarket)
+        self.model.data['cons'] = {
+            'community_elec_balance': {},
+            'community_heat_balance': {},
+            'community_hydro_balance': {},
+            'convexity': {}
+        }
+    
+    def _create_master_constraints(self):
+        """
+        Create master problem constraints:
+        1. Community balance constraints (linking constraints)
+        2. Convexity constraints (one per player)
+        """
+        # Convexity constraints: sum of lambdas = 1 for each player
+        for u in self.players:
+            initial_var = self.model.data["vars"][u, 0]["var"]
+            cons = self.model.addCons(
+                quicksum([initial_var]) - 1 == 0, 
+                name=f"convexity_{u}"
+            )
+            self.model.data['cons']['convexity'][u] = cons
+        
+        # Community balance constraints (no slack variables)
+        # Farkas pricing will ensure feasibility
+        for t in self.time_periods:
+            elec_expr, heat_expr, hydro_expr = 0, 0, 0
+            for u in self.players:
+                var = self.model.data["vars"][u, 0]["var"]
+                solution = self.model.data["vars"][u, 0]["solution"]
+                e_E_com_val = solution.get('e_E_com', {}).get((u, t), 0)
+                i_E_com_val = solution.get('i_E_com', {}).get((u, t), 0)
+                elec_expr += var * (i_E_com_val - e_E_com_val)
+                e_H_com_val = solution.get('e_H_com', {}).get((u, t), 0)
+                i_H_com_val = solution.get('i_H_com', {}).get((u, t), 0)
+                heat_expr += var * (i_H_com_val - e_H_com_val)
+                e_G_com_val = solution.get('e_G_com', {}).get((u, t), 0)
+                i_G_com_val = solution.get('i_G_com', {}).get((u, t), 0)
+                hydro_expr += var * (i_G_com_val - e_G_com_val)
+            # Electricity balance: sum(i_E_com - e_E_com) = 0
+            cons = self.model.addCons(
+                elec_expr == 0,
+                name=f"community_elec_balance_{t}"
+            )
+            self.model.data['cons']['community_elec_balance'][t] = cons
+            
+            # Heat balance: sum(i_H_com - e_H_com) = 0
+            cons = self.model.addCons(
+                heat_expr == 0,
+                name=f"community_heat_balance_{t}"
+            )
+            self.model.data['cons']['community_heat_balance'][t] = cons
+            
+            # Hydrogen balance: sum(i_G_com - e_G_com) = 0
+            cons = self.model.addCons(
+                hydro_expr == 0,
+                name=f"community_hydro_balance_{t}"
+            )
+            self.model.data['cons']['community_hydro_balance'][t] = cons
+    
+    def _add_initial_columns(self, subproblems: Dict[str, 'PlayerSubproblem']):
+        """
+        Generate initial columns by solving each subproblem independently
+        
+        Args:
+            subproblems: Dictionary of player subproblems
+        """
+        print("\n=== Generating Initial Columns ===")
+        
+        # Zero dual prices for initial solve
+        zero_duals_elec = {t: 0.0 for t in self.time_periods}
+        zero_duals_heat = {t: 0.0 for t in self.time_periods}
+        zero_duals_hydro = {t: 0.0 for t in self.time_periods}
+        zero_duals_convexity = {player: 0.0 for player in self.players}
+        
+        for player in self.players:
+            print(f"Generating initial column for player {player}...")
+            
+            # Solve subproblem with zero dual prices
+            reduced_cost, solution = subproblems[player].solve_pricing(
+                zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player]
+            )
+            
+            if solution is None:
+                raise Exception(f"  WARNING: Could not generate initial column for {player}")
+            
+            col_idx = 0
+            var_name = f"lambda_{player}_{col_idx}"
+        
+            # Calculate column cost (original objective value)
+            cost = self._calculate_column_cost(player, solution, subproblems[player].parameters)
+            
+            # Create variable
+            new_var = self.model.addVar(
+                name=var_name,
+                vtype="C",
+                lb=0.0,
+                obj=cost
+            )
+        
+            # Store variable and solution
+            self.model.data['vars'][player, col_idx] = {
+                'var': new_var,
+                'solution': solution
+            }
+            print(f"  {player}: Initial column added (cost={cost:.4f})")
+
+    def _calculate_column_cost(self, player: str, solution: Dict, params: Dict) -> float:
+        """Calculate cost for a column"""
+        cost = 0.0
+        
+        for t in self.time_periods:
+            # Grid costs
+            e_E_gri = solution.get('e_E_gri', {}).get((player, t), 0)
+            i_E_gri = solution.get('i_E_gri', {}).get((player, t), 0)
+            cost += i_E_gri * params.get(f'pi_E_gri_import_{t}', 0)
+            cost -= e_E_gri * params.get(f'pi_E_gri_export_{t}', 0)
+            
+            e_H_gri = solution.get('e_H_gri', {}).get((player, t), 0)
+            i_H_gri = solution.get('i_H_gri', {}).get((player, t), 0)
+            cost += i_H_gri * params.get(f'pi_H_gri_import_{t}', 0)
+            cost -= e_H_gri * params.get(f'pi_H_gri_export_{t}', 0)
+            
+            e_G_gri = solution.get('e_G_gri', {}).get((player, t), 0)
+            i_G_gri = solution.get('i_G_gri', {}).get((player, t), 0)
+            cost += i_G_gri * params.get(f'pi_G_gri_import_{t}', 0)
+            cost -= e_G_gri * params.get(f'pi_G_gri_export_{t}', 0)
+            
+            # Production and startup costs
+            p_res = solution.get('p', {}).get((player, 'res', t), 0)
+            p_hp = solution.get('p', {}).get((player, 'hp', t), 0)
+            p_els = solution.get('p', {}).get((player, 'els', t), 0)
+            z_su = solution.get('z_su', {}).get((player, t), 0)
+            
+            cost += p_res * params.get(f'c_res_{player}', 0)
+            cost += p_hp * params.get(f'c_hp_{player}', 0)
+            cost += p_els * params.get(f'c_els_{player}', 0)
+            cost += z_su * params.get(f'c_su_{player}', 0)
+        
+        return cost
+    
+    def solve(self):
+        """Solve the restricted master problem"""
+        self.model.optimize()
+        return self.model.getStatus()
+    
+    def get_objective_value(self):
+        """Get current objective value"""
+        return self.model.getObjVal()
+    
+    def get_solution(self) -> Dict:
+        """
+        Extract solution from master problem
+        Combines columns based on lambda values
+        """
+        solution = {}
+        
+        for (player, col_idx), col_data in self.model.data['vars'].items():
+            lambda_val = self.model.getVal(col_data['var'])
+            
+            if lambda_val > 1e-6:  # Only consider active columns
+                col_solution = col_data['solution']
+                
+                # Add weighted contribution of this column to solution
+                for var_name, var_dict in col_solution.items():
+                    if var_name not in solution:
+                        solution[var_name] = {}
+                    
+                    for key, value in var_dict.items():
+                        if key not in solution[var_name]:
+                            solution[var_name][key] = 0.0
+                        solution[var_name][key] += lambda_val * value
+        
+        return solution
