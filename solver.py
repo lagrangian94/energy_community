@@ -185,7 +185,7 @@ class MasterProblem:
             initial_var = self.model.data["vars"][u, 0]["var"]
             cons = self.model.addCons(
                 quicksum([initial_var]) - 1 == 0, 
-                name=f"convexity_{u}"
+                name=f"convexity_{u}", modifiable=True
             )
             self.model.data['cons']['convexity'][u] = cons
         
@@ -205,27 +205,44 @@ class MasterProblem:
                 e_G_com_val = solution.get('e_G_com', {}).get((u, t), 0)
                 i_G_com_val = solution.get('i_G_com', {}).get((u, t), 0)
                 hydro_expr += var * (i_G_com_val - e_G_com_val)
+            # # Add artificial variables (positive and negative slack with big-M penalty)
+            # BIG_M = 1e6  # Large penalty cost
+            # art_elec_pos = self.model.addVar(f"art_elec_pos_{t}", vtype="C", lb=0, obj=BIG_M)
+            # art_elec_neg = self.model.addVar(f"art_elec_neg_{t}", vtype="C", lb=0, obj=BIG_M)
+            # art_heat_pos = self.model.addVar(f"art_heat_pos_{t}", vtype="C", lb=0, obj=BIG_M)
+            # art_heat_neg = self.model.addVar(f"art_heat_neg_{t}", vtype="C", lb=0, obj=BIG_M)
+            # art_hydro_pos = self.model.addVar(f"art_hydro_pos_{t}", vtype="C", lb=0, obj=BIG_M)
+            # art_hydro_neg = self.model.addVar(f"art_hydro_neg_{t}", vtype="C", lb=0, obj=BIG_M)
+            art_elec_pos, art_elec_neg, art_heat_pos, art_heat_neg, art_hydro_pos, art_hydro_neg = 0, 0, 0, 0, 0, 0
+            if t == 0:
+                print(f"\n  Time t=0 balance check:")
+                print(f"    Elec imbalance: {elec_expr}")
+                print(f"    Heat imbalance: {heat_expr}") 
+                print(f"    Hydro imbalance: {hydro_expr}")
+                # print(f"    Adding artificial variables with penalty {BIG_M}")
             # Electricity balance: sum(i_E_com - e_E_com) = 0
             cons = self.model.addCons(
-                elec_expr == 0,
-                name=f"community_elec_balance_{t}"
+                elec_expr + art_elec_pos - art_elec_neg == 0,
+                name=f"community_elec_balance_{t}", modifiable=True
             )
             self.model.data['cons']['community_elec_balance'][t] = cons
             
             # Heat balance: sum(i_H_com - e_H_com) = 0
             cons = self.model.addCons(
-                heat_expr == 0,
-                name=f"community_heat_balance_{t}"
+                heat_expr + art_heat_pos - art_heat_neg == 0,
+                name=f"community_heat_balance_{t}", modifiable=True
             )
             self.model.data['cons']['community_heat_balance'][t] = cons
             
             # Hydrogen balance: sum(i_G_com - e_G_com) = 0
             cons = self.model.addCons(
-                hydro_expr == 0,
-                name=f"community_hydro_balance_{t}"
+                hydro_expr + art_hydro_pos - art_hydro_neg == 0,
+                name=f"community_hydro_balance_{t}", modifiable=True
             )
             self.model.data['cons']['community_hydro_balance'][t] = cons
-    
+        print(f"  Added {len(self.time_periods)} community balance constraints (with artificial vars)")
+        # print(f"  Artificial variable penalty: {BIG_M}")
+        print("=== Master Constraints Created ===\n")
     def _add_initial_columns(self, subproblems: Dict[str, 'PlayerSubproblem']):
         """
         Generate initial columns by solving each subproblem independently
