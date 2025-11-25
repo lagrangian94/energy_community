@@ -65,7 +65,7 @@ class PlayerSubproblem:
         # Build modified objective with dual prices
         new_obj = 0
         u = self.player
-        
+
         # Original grid costs
         for t in self.time_periods:
             if not farkas:
@@ -108,7 +108,19 @@ class PlayerSubproblem:
                 if (u, t) in self.lem.z_su:
                     c_su = self.parameters.get(f'c_su_{u}', 0)
                     new_obj += c_su * self.lem.z_su[u, t]
-            
+                # Storage costs
+                if u in self.lem.params["players_with_elec_storage"]:
+                    c_E_sto = self.parameters.get(f'c_E_sto_{u}', 0)
+                    new_obj += c_E_sto * self.lem.b_ch_E[u, t]
+                    new_obj += c_E_sto * self.lem.b_dis_E[u, t]
+                if u in self.lem.params["players_with_hydro_storage"]:
+                    c_G_sto = self.parameters.get(f'c_G_sto_{u}', 0)
+                    new_obj += c_G_sto * self.lem.b_ch_G[u, t]
+                    new_obj += c_G_sto * self.lem.b_dis_G[u, t]
+                if u in self.lem.params["players_with_heat_storage"]:
+                    c_H_sto = self.parameters.get(f'c_H_sto_{u}', 0)
+                    new_obj += c_H_sto * self.lem.b_ch_H[u, t]
+                    new_obj += c_H_sto * self.lem.b_dis_H[u, t]
             # Community trading with dual prices
             # For reduced cost: original_cost - dual_price * coefficient
             # Electricity
@@ -133,8 +145,6 @@ class PlayerSubproblem:
         
         # Set modified objective
         self.model.setObjective(new_obj, "minimize")
-        if u=='u2' and farkas:
-            print(1)
         # Solve
         self.model.optimize()
         status = self.model.getStatus()

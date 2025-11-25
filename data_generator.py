@@ -271,8 +271,10 @@ def setup_lem_parameters(players, time_periods):
         'phi0_1_u2': -0.37924094,
         'phi1_2_u2': 16.66883134,
         'phi0_2_u2': 0.87814262,
-        'c_els_u2': 0.05,
-        'c_su_u2': 50,
+        'c_res': 0.05,
+        'c_hp': 0.1,
+        'c_els': 0.05,
+        'c_su': 50,
         'max_up_time': 3,
         'min_down_time': 2,
         
@@ -287,7 +289,9 @@ def setup_lem_parameters(players, time_periods):
         'i_G_cap_u2_t': 30,
         
         # Cost parameters
-        'c_sto': 0.01,
+        'c_E_sto': 0.01,
+        'c_G_sto': 0.01,
+        'c_H_sto': 0.01,
     }
     
     parameters['players_with_fl_elec_demand'] = list(set(
@@ -303,10 +307,19 @@ def setup_lem_parameters(players, time_periods):
             parameters[f'renewable_cap_u1_{t}'] = 0
     
     # Add cost parameters
-    for u in players:
-        parameters[f'c_res_{u}'] = 0.05
-        parameters[f'c_hp_{u}'] = 0.1
-        parameters[f'c_sto_{u}'] = 0.01
+    for u in parameters['players_with_renewables']:
+        parameters[f'c_res_{u}'] = parameters['c_res']
+    for u in parameters['players_with_heatpumps']:
+        parameters[f'c_hp_{u}'] = parameters['c_hp']
+    for u in parameters['players_with_electrolyzers']:
+        parameters[f'c_els_{u}'] = parameters['c_els']
+        parameters[f'c_su_{u}'] = parameters['c_su']
+    for u in parameters['players_with_elec_storage']:
+        parameters[f'c_E_sto_{u}'] = parameters['c_E_sto']
+    for u in parameters['players_with_hydro_storage']:
+        parameters[f'c_G_sto_{u}'] = parameters['c_G_sto']
+    for u in parameters['players_with_heat_storage']:
+        parameters[f'c_H_sto_{u}'] = parameters['c_H_sto']
     
     # Add grid prices
     if korean_prices_eur and h2_prices_eur:

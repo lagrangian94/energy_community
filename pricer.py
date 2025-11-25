@@ -3,7 +3,7 @@ Pricer for Local Energy Market column generation
 """
 from pyscipopt import Pricer, SCIP_RESULT, quicksum
 from typing import Dict, List
-
+import numpy as np
 
 class LEMPricer(Pricer):
     """
@@ -86,69 +86,7 @@ class LEMPricer(Pricer):
             for t in sample_times:
                 print(f"    {t:4d}  {dual_elec[t]:8.4f}  {dual_heat[t]:8.4f}  {dual_hydro[t]:8.4f}")
             print(f"    Convexity duals: {dual_convexity}")
-            
-            # Additional debug: check constraint status
-            if self.iteration <= 3:
-                for player in ['u1']:  # Just check one player
-                    conv_cons = self.model.data['cons']['convexity'][player]
-                    t_conv_cons = self.model.getTransformedCons(conv_cons)
                     
-                    print(f"\n    === Convexity Constraint Debug for {player} ===")
-                    print(f"    Original constraint: {conv_cons}")
-                    print(f"    Transformed constraint: {t_conv_cons}")
-                    
-                    if t_conv_cons is not None:
-                        try:
-                            lhs = self.model.getLhs(t_conv_cons)
-                            rhs = self.model.getRhs(t_conv_cons)
-                            activity = self.model.getActivity(t_conv_cons)
-                            slack = rhs - activity if rhs < float('inf') else activity - lhs
-                            
-                            print(f"    LHS={lhs}, RHS={rhs}, Activity={activity:.6f}, Slack={slack:.6f}")
-                            
-                            # Get all variables in constraint
-                            vals = self.model.getValsLinear(t_conv_cons)
-                            print(f"    Variables in constraint: {len(vals)}")
-                            for var_name, coeff in list(vals.items())[:5]:  # Show first 5
-                                print(f"      {var_name}: coeff={coeff}")
-                            # Print each variable and its VALUE in LP solution
-                            print(f"    Variable values in LP solution:")
-                            for k in range(self.iteration):
-                                var = self.model.data["vars"]["u1", k]["var"]
-                                val = self.model.getVal(var)
-                                print(f"      {var.name}: value={val:.6f}")
-                            # Try to get dual
-                            try:
-                                dual_method1 = self.model.getDualsolLinear(t_conv_cons)
-                                print(f"    Dual (getDualsolLinear): {dual_method1}")
-                            except Exception as e:
-                                print(f"    Dual (getDualsolLinear): Failed - {e}")
-                                
-                        except Exception as e:
-                            print(f"    Could not get constraint info: {e}")
-                
-                # Also check one community balance constraint
-                for t in [0]:
-                    elec_cons = self.model.data['cons']['community_elec_balance'][t]
-                    t_elec_cons = self.model.getTransformedCons(elec_cons)
-                    if t_elec_cons is not None:
-                        try:
-                            lhs = self.model.getLhs(t_elec_cons)
-                            rhs = self.model.getRhs(t_elec_cons)
-                            activity = self.model.getActivity(t_elec_cons)
-                            slack = rhs - activity if rhs < float('inf') else activity - lhs
-                            print(f"\n    Elec balance[{t}]: LHS={lhs}, RHS={rhs}, Activity={activity:.6f}, Slack={slack:.6f}")
-                            
-                            # Try to get dual in different ways
-                            try:
-                                dual_method1 = self.model.getDualsolLinear(t_elec_cons)
-                                print(f"    Dual (getDualsolLinear): {dual_method1}")
-                            except:
-                                print(f"    Dual (getDualsolLinear): Failed")
-                                
-                        except Exception as e:
-                            print(f"    Could not get constraint info: {e}")
-        
         # Solve pricing problems for each player
         columns_added = 0
         min_reduced_cost = float('inf')
@@ -164,19 +102,20 @@ class LEMPricer(Pricer):
             reduced_cost, solution = self.subproblems[player].solve_pricing(
                 dual_elec, dual_heat, dual_hydro, dual_convexity[player], farkas=farkas
             )
-            debug_sol[player] = solution
-            min_reduced_cost = min(min_reduced_cost, reduced_cost)
-            
+            debug_sol[player] = solution            
             # Add column if reduced cost is negative
             if reduced_cost < -1e-6:
                 columns_added += 1
                 self._add_column(player, solution)
                 if farkas:
                     print(f"  {player}: Farkas column added (RC={reduced_cost:.4f})")
+                min_reduced_cost = min(min_reduced_cost, reduced_cost)
+                # break ## column은 한 player만 넣어도 수렴에 충분.
         
         # Print iteration summary
         if not farkas:
             print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | Min RC: {min_reduced_cost:10.4f} | Columns added: {columns_added}")
+
         else:
             print(f"  Total Farkas columns added: {columns_added}")
         
@@ -313,5 +252,20 @@ class LEMPricer(Pricer):
             # Startup costs
             z_su = solution.get('z_su', {}).get((player, t), 0)
             cost += z_su * params.get(f'c_su_{player}', 0)
+
+            # Storage costs
+            b_ch_E = solution.get('b_ch_E', {}).get((player, t), 0)
+            b_dis_E = solution.get('b_dis_E', {}).get((player, t), 0)
+            b_ch_G = solution.get('b_ch_G', {}).get((player, t), 0)
+            b_dis_G = solution.get('b_dis_G', {}).get((player, t), 0)
+            b_ch_H = solution.get('b_ch_H', {}).get((player, t), 0)
+            b_dis_H = solution.get('b_dis_H', {}).get((player, t), 0)
+
+            cost += b_ch_E * params.get(f'c_E_sto_{player}', 0)
+            cost += b_dis_E * params.get(f'c_E_sto_{player}', 0)
+            cost += b_ch_G * params.get(f'c_G_sto_{player}', 0)
+            cost += b_dis_G * params.get(f'c_G_sto_{player}', 0)
+            cost += b_ch_H * params.get(f'c_H_sto_{player}', 0)
+            cost += b_dis_H * params.get(f'c_H_sto_{player}', 0)
         
         return cost

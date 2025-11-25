@@ -4,7 +4,7 @@ Main solver implementation using Dantzig-Wolfe Decomposition
 """
 import sys
 sys.path.append('/mnt/project')
-sys.path.append('/home/claude')
+# sys.path.append('/home/claude')
 
 from pyscipopt import SCIP_PARAMSETTING
 from typing import Dict, List, Tuple
@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple
 from data_generator import setup_lem_parameters
 from solver import PlayerSubproblem, MasterProblem
 from pricer import LEMPricer
+import numpy as np
 
 
 class ColumnGenerationSolver:
@@ -128,7 +129,6 @@ class ColumnGenerationSolver:
                     t_elec_cons = self.master.model.getTransformedCons(elec_cons)
                     t_heat_cons = self.master.model.getTransformedCons(heat_cons)
                     t_hydro_cons = self.master.model.getTransformedCons(hydro_cons)
-                    import numpy as np
                     chp_elec[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_elec_cons)), 2)
                     chp_heat[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_heat_cons)), 2)
                     chp_hydro[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_hydro_cons)), 2)
@@ -422,24 +422,26 @@ class ColumnGenerationSolver:
                         profit['production_cost'] += results['p'][u,'hp',t] * self.parameters.get(f'c_hp_{u}', 0)
                 
                 # 4. Storage costs
-                c_sto = self.parameters.get('c_sto', 0.01)
+                c_E_sto = self.parameters.get('c_E_sto', 0.01)
+                c_G_sto = self.parameters.get('c_G_sto', 0.01)
+                c_H_sto = self.parameters.get('c_H_sto', 0.01)
                 nu_ch = self.parameters.get('nu_ch', 0.9)
                 nu_dis = self.parameters.get('nu_dis', 0.9)
                 
                 if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
-                    profit['storage_cost'] += results['b_ch_E'][u,t] * c_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_E'][u,t] * c_E_sto * nu_ch
                 if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
-                    profit['storage_cost'] += results['b_dis_E'][u,t] * c_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_E'][u,t] * c_E_sto * (1/nu_dis)
                 
                 if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
-                    profit['storage_cost'] += results['b_ch_G'][u,t] * c_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_G'][u,t] * c_G_sto * nu_ch
                 if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
-                    profit['storage_cost'] += results['b_dis_G'][u,t] * c_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_G'][u,t] * c_G_sto * (1/nu_dis)
                 
                 if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
-                    profit['storage_cost'] += results['b_ch_H'][u,t] * c_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_H'][u,t] * c_H_sto * nu_ch
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
-                    profit['storage_cost'] += results['b_dis_H'][u,t] * c_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
                 
                 # 5. Startup costs
                 if 'z_su' in results and (u,t) in results['z_su']:

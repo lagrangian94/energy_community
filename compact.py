@@ -280,7 +280,7 @@ def solve_and_extract_results(model):
     # 최적화 상태 확인
     status = model.getStatus()
     time = model.getSolvingTime()
-    print(f"MIP model status: {status}, time: {time}")
+    print(f"model status: {status}, time: {time}")
     if status in ["optimal", "gaplimit"]:            
         # 결과 저장할 딕셔너리 초기화
         results = {}
@@ -561,11 +561,11 @@ class LocalEnergyMarket:
                 # Storage variables by type with capacity constraints
                 storage_power = self.params.get(f'storage_power', 50)  # kW power rating
                 storage_capacity = self.params.get(f'storage_capacity', 100)  # kWh capacity
-                c_sto = self.params.get(f'c_sto', 0.01)  # Common storage cost
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)
                 # Electricity storage
                 if u in self.players_with_elec_storage:
+                    c_sto = self.params.get("c_E_sto", 0.0)
                     self.b_dis_E[u,t] = self.model.addVar(vtype="C", name=f"b_dis_E_{u}_{t}", 
                                                         lb=0, ub=storage_power, obj=c_sto*(1/nu_dis))
                     self.b_ch_E[u,t] = self.model.addVar(vtype="C", name=f"b_ch_E_{u}_{t}", 
@@ -578,6 +578,7 @@ class LocalEnergyMarket:
                     # 수소는 kg 단위
                     hydro_power = 10 #kg/h
                     hydro_capacity = 50 #kg
+                    c_sto = self.params.get("c_G_sto", 0.0)
                     self.b_dis_G[u,t] = self.model.addVar(vtype="C", name=f"b_dis_G_{u}_{t}", 
                                                         lb=0, ub=hydro_power, obj=c_sto*(1/nu_dis))
                     self.b_ch_G[u,t] = self.model.addVar(vtype="C", name=f"b_ch_G_{u}_{t}", 
@@ -587,6 +588,7 @@ class LocalEnergyMarket:
                 
                 # Heat storage
                 if u in self.players_with_heat_storage:
+                    c_sto = self.params.get("c_H_sto", 0.0)
                     heat_storage_power = self.params.get("storage_power_heat", -1)
                     heat_storage_capacity = self.params.get('storage_capacity_heat', -1)  # 400 kWh
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
@@ -1038,7 +1040,7 @@ class LocalEnergyMarket:
         self.model.optimize()
         return self.model.getStatus()
     
-    def solve_complete_model(self):
+    def solve_complete_model(self, analyze_revenue=True):
         """
         Solve the complete optimization model and analyze revenue by resource type
         
@@ -1049,7 +1051,9 @@ class LocalEnergyMarket:
                 - revenue_analysis: dictionary with revenue breakdown by resource type
         """
         print("Solving complete optimization model...")
-        
+        if self.isLP:
+            print('Relaxed LP model')
+            self.model.relax()
         # Solve the model
         status = self.solve()
         
@@ -1065,35 +1069,39 @@ class LocalEnergyMarket:
         if status != "optimal":
             print(f"Failed to extract results. Status: {status}")
             return status, None, None
-        # Analyze electrolyzer operation
-        electrolyzer_operation = self._analyze_electrolyzer_operations(results)        
-        # Analyze revenue by resource type
-        revenue_analysis = self._analyze_revenue_by_resource(results)
-        # Analyze energy flows
-        flow_analysis = self._analyze_energy_flows(results)
+        if analyze_revenue:
+            # Analyze electrolyzer operation
+            electrolyzer_operation = self._analyze_electrolyzer_operations(results)        
+            # Analyze revenue by resource type
+            revenue_analysis = self._analyze_revenue_by_resource(results)
+            # Analyze energy flows
+            flow_analysis = self._analyze_energy_flows(results)
 
-        lp_status, lp_results, prices = self.solve_with_restricted_pricing()
-        if lp_status != "optimal":
-            print(f"LP optimization failed with status: {lp_status}")
-            return lp_status, None, None
+        if not self.isLP:
+            ip_status, ip_results, prices = self.solve_with_restricted_pricing()
+            if ip_status != "optimal":
+                print(f"IP optimization failed with status: {ip_status}")
+                return ip_status, None, None, None
+        else:
+            ## solved LP model의 community balance constraints들을 순회하며 shadow price를 추출하여 prices로 저장
+            prices = {
+            'electricity': {},
+            'heat': {},
+            'hydro': {}
+            }
+            for t in self.time_periods:
+                # Get dual multipliers for community balance constraints
+                elec_cons = self.community_elec_balance_cons[f"community_elec_balance_{t}"]
+                heat_cons = self.community_heat_balance_cons[f"community_heat_balance_{t}"]
+                hydro_cons = self.community_hydro_balance_cons[f"community_hydro_balance_{t}"]
+                
+                pi = self.model.getDualsolLinear(self.model.getTransformedCons(elec_cons))
+                prices['electricity'][t] = np.round(np.abs(pi), 2)
+                pi = self.model.getDualsolLinear(self.model.getTransformedCons(heat_cons))
+                prices['heat'][t] = np.round(np.abs(pi), 2)
+                pi = self.model.getDualsolLinear(self.model.getTransformedCons(hydro_cons))
+                prices['hydro'][t] = np.round(np.abs(pi), 2)        
         
-        # prices = {}
-        # prices['electricity'] = {}
-        # prices['heat'] = {}
-        # prices['hydro'] = {}
-        
-        # for t in self.time_periods:
-        #     # Get dual multipliers for community balance constraints
-        #     # Note: Must use getTransformedCons() to get transformed constraints for dual solution
-        #     t_cons = self.model.getTransformedCons(self.community_elec_balance_cons[f"community_elec_balance_{t}"])
-        #     pi = self.model.getDualsolLinear(t_cons)
-        #     prices['electricity'][t] = np.round(np.abs(pi), 2)
-        #     t_cons = self.model.getTransformedCons(self.community_heat_balance_cons[f"community_heat_balance_{t}"])
-        #     pi = self.model.getDualsolLinear(t_cons)
-        #     prices['heat'][t] = np.round(np.abs(pi), 2)
-        #     t_cons = self.model.getTransformedCons(self.community_hydro_balance_cons[f"community_hydro_balance_{t}"])
-        #     pi = self.model.getDualsolLinear(t_cons)
-        #     prices['hydro'][t] = np.round(np.abs(pi), 2)
         energy = ['electricity', 'heat', 'hydro']
         for e in energy:
             print(f"{e} price:")
@@ -1108,121 +1116,122 @@ class LocalEnergyMarket:
         h_export_prices = [self.params[f'pi_H_gri_export_{t}'] for t in self.time_periods]
         import matplotlib.pyplot as plt
         
-        # matplotlib 백엔드를 Agg로 설정 (GUI 없이 파일 저장용)
-        plt.switch_backend('Agg')
-        
-        print("Creating and saving individual price plots...")
-        
-        # 1. Electricity Price Plot
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
-                label='Community Elec Price', marker='o', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, e_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, e_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        plt.ylabel('Electricity Price (€/kWh)', fontsize=12)
-        plt.title('Electricity Prices by Time Period', fontsize=14, fontweight='bold')
-        plt.xlabel('Time Period (Hour)', fontsize=12)
-        plt.legend(fontsize=10)
-        plt.grid(True, alpha=0.3)
-        plt.xticks(self.time_periods)
-        plt.tight_layout()
-        plt.savefig('electricity_prices.png', dpi=300, bbox_inches='tight')
-        print("✓ Electricity price plot saved as 'electricity_prices.png'")
-        plt.close()
-        
-        # 2. Heat Price Plot
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
-                label='Community Heat Price', marker='o', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, h_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, h_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        plt.ylabel('Heat Price (€/kWh)', fontsize=12)
-        plt.title('Heat Prices by Time Period', fontsize=14, fontweight='bold')
-        plt.xlabel('Time Period (Hour)', fontsize=12)
-        plt.legend(fontsize=10)
-        plt.grid(True, alpha=0.3)
-        plt.xticks(self.time_periods)
-        plt.tight_layout()
-        plt.savefig('heat_prices.png', dpi=300, bbox_inches='tight')
-        print("✓ Heat price plot saved as 'heat_prices.png'")
-        plt.close()
-        
-        # 3. Hydrogen Price Plot
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
-                label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, g_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        plt.plot(self.time_periods, g_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        plt.ylabel('Hydrogen Price (€/kg)', fontsize=12)
-        plt.title('Hydrogen Prices by Time Period', fontsize=14, fontweight='bold')
-        plt.xlabel('Time Period (Hour)', fontsize=12)
-        plt.legend(fontsize=10)
-        plt.grid(True, alpha=0.3)
-        plt.xticks(self.time_periods)
-        plt.tight_layout()
-        plt.savefig('hydrogen_prices.png', dpi=300, bbox_inches='tight')
-        print("✓ Hydrogen price plot saved as 'hydrogen_prices.png'")
-        plt.close()
-        
-        # 4. Combined Price Plot (all three energy types)
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
-        
-        # Electricity
-        ax1.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
-                label='Community Elec Price', marker='o', linewidth=2, markersize=6)
-        ax1.plot(self.time_periods, e_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        ax1.plot(self.time_periods, e_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        ax1.set_ylabel('Electricity Price (€/kWh)', fontsize=12)
-        ax1.set_title('Electricity Prices', fontsize=14, fontweight='bold')
-        ax1.legend(fontsize=10)
-        ax1.grid(True, alpha=0.3)
-        
-        # Heat
-        ax2.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
-                label='Community Heat Price', marker='o', linewidth=2, markersize=6)
-        ax2.plot(self.time_periods, h_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        ax2.plot(self.time_periods, h_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        ax2.set_ylabel('Heat Price (€/kWh)', fontsize=12)
-        ax2.set_title('Heat Prices', fontsize=14, fontweight='bold')
-        ax2.legend(fontsize=10)
-        ax2.grid(True, alpha=0.3)
-        
-        # Hydrogen
-        ax3.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
-                label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
-        ax3.plot(self.time_periods, g_import_prices, 
-                label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
-        ax3.plot(self.time_periods, g_export_prices, 
-                label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
-        ax3.set_ylabel('Hydrogen Price (€/kg)', fontsize=12)
-        ax3.set_title('Hydrogen Prices', fontsize=14, fontweight='bold')
-        ax3.set_xlabel('Time Period (Hour)', fontsize=12)
-        ax3.legend(fontsize=10)
-        ax3.grid(True, alpha=0.3)
-        ax3.set_xticks(self.time_periods)
-        
-        plt.tight_layout()
-        plt.savefig('combined_energy_prices.png', dpi=300, bbox_inches='tight')
-        print("✓ Combined energy prices plot saved as 'combined_energy_prices.png'")
-        plt.close()
-        
-        print("\nAll price plots have been saved successfully!")
-        print("Files created:")
-        print("  - electricity_prices.png")
-        print("  - heat_prices.png") 
-        print("  - hydrogen_prices.png")
-        print("  - combined_energy_prices.png")
-        return status, results, revenue_analysis, prices
+        if analyze_revenue:
+            # matplotlib 백엔드를 Agg로 설정 (GUI 없이 파일 저장용)
+            plt.switch_backend('Agg')
+            
+            print("Creating and saving individual price plots...")
+            
+            # 1. Electricity Price Plot
+            plt.figure(figsize=(10, 6))
+            plt.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
+                    label='Community Elec Price', marker='o', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, e_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, e_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            plt.ylabel('Electricity Price (€/kWh)', fontsize=12)
+            plt.title('Electricity Prices by Time Period', fontsize=14, fontweight='bold')
+            plt.xlabel('Time Period (Hour)', fontsize=12)
+            plt.legend(fontsize=10)
+            plt.grid(True, alpha=0.3)
+            plt.xticks(self.time_periods)
+            plt.tight_layout()
+            plt.savefig('electricity_prices.png', dpi=300, bbox_inches='tight')
+            print("✓ Electricity price plot saved as 'electricity_prices.png'")
+            plt.close()
+            
+            # 2. Heat Price Plot
+            plt.figure(figsize=(10, 6))
+            plt.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
+                    label='Community Heat Price', marker='o', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, h_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, h_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            plt.ylabel('Heat Price (€/kWh)', fontsize=12)
+            plt.title('Heat Prices by Time Period', fontsize=14, fontweight='bold')
+            plt.xlabel('Time Period (Hour)', fontsize=12)
+            plt.legend(fontsize=10)
+            plt.grid(True, alpha=0.3)
+            plt.xticks(self.time_periods)
+            plt.tight_layout()
+            plt.savefig('heat_prices.png', dpi=300, bbox_inches='tight')
+            print("✓ Heat price plot saved as 'heat_prices.png'")
+            plt.close()
+            
+            # 3. Hydrogen Price Plot
+            plt.figure(figsize=(10, 6))
+            plt.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
+                    label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, g_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            plt.plot(self.time_periods, g_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            plt.ylabel('Hydrogen Price (€/kg)', fontsize=12)
+            plt.title('Hydrogen Prices by Time Period', fontsize=14, fontweight='bold')
+            plt.xlabel('Time Period (Hour)', fontsize=12)
+            plt.legend(fontsize=10)
+            plt.grid(True, alpha=0.3)
+            plt.xticks(self.time_periods)
+            plt.tight_layout()
+            plt.savefig('hydrogen_prices.png', dpi=300, bbox_inches='tight')
+            print("✓ Hydrogen price plot saved as 'hydrogen_prices.png'")
+            plt.close()
+            
+            # 4. Combined Price Plot (all three energy types)
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+            
+            # Electricity
+            ax1.plot(self.time_periods, [prices['electricity'][t] for t in self.time_periods], 
+                    label='Community Elec Price', marker='o', linewidth=2, markersize=6)
+            ax1.plot(self.time_periods, e_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            ax1.plot(self.time_periods, e_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            ax1.set_ylabel('Electricity Price (€/kWh)', fontsize=12)
+            ax1.set_title('Electricity Prices', fontsize=14, fontweight='bold')
+            ax1.legend(fontsize=10)
+            ax1.grid(True, alpha=0.3)
+            
+            # Heat
+            ax2.plot(self.time_periods, [prices['heat'][t] for t in self.time_periods], 
+                    label='Community Heat Price', marker='o', linewidth=2, markersize=6)
+            ax2.plot(self.time_periods, h_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            ax2.plot(self.time_periods, h_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            ax2.set_ylabel('Heat Price (€/kWh)', fontsize=12)
+            ax2.set_title('Heat Prices', fontsize=14, fontweight='bold')
+            ax2.legend(fontsize=10)
+            ax2.grid(True, alpha=0.3)
+            
+            # Hydrogen
+            ax3.plot(self.time_periods, [prices['hydro'][t] for t in self.time_periods], 
+                    label='Community Hydro Price', marker='o', linewidth=2, markersize=6)
+            ax3.plot(self.time_periods, g_import_prices, 
+                    label='Grid Import Price', linestyle='--', marker='x', linewidth=2, markersize=6)
+            ax3.plot(self.time_periods, g_export_prices, 
+                    label='Grid Export Price', linestyle=':', marker='s', linewidth=2, markersize=6)
+            ax3.set_ylabel('Hydrogen Price (€/kg)', fontsize=12)
+            ax3.set_title('Hydrogen Prices', fontsize=14, fontweight='bold')
+            ax3.set_xlabel('Time Period (Hour)', fontsize=12)
+            ax3.legend(fontsize=10)
+            ax3.grid(True, alpha=0.3)
+            ax3.set_xticks(self.time_periods)
+            
+            plt.tight_layout()
+            plt.savefig('combined_energy_prices.png', dpi=300, bbox_inches='tight')
+            print("✓ Combined energy prices plot saved as 'combined_energy_prices.png'")
+            plt.close()
+            
+            print("\nAll price plots have been saved successfully!")
+            print("Files created:")
+            print("  - electricity_prices.png")
+            print("  - heat_prices.png") 
+            print("  - hydrogen_prices.png")
+            print("  - combined_energy_prices.png")
+        return status, results, revenue_analysis if analyze_revenue else None, prices
     
     def _analyze_revenue_by_resource(self, results):
         """
@@ -1263,7 +1272,9 @@ class LocalEnergyMarket:
             'net_profit': 0.0
         }
         
-        c_sto = self.params.get('c_sto', 0.01)
+        c_E_sto = self.params.get('c_E_sto', 0.01)
+        c_G_sto = self.params.get('c_G_sto', 0.01)
+        c_H_sto = self.params.get('c_H_sto', 0.01)
         nu_ch = self.params.get('nu_ch', 0.9)
         nu_dis = self.params.get('nu_dis', 0.9)
         
@@ -1293,12 +1304,12 @@ class LocalEnergyMarket:
         if 'b_ch_E' in results:
             for (u, t), val in results['b_ch_E'].items():
                 if val > 0:
-                    revenue_analysis['electricity']['storage_cost'] += val * c_sto * nu_ch
+                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * nu_ch
         
         if 'b_dis_E' in results:
             for (u, t), val in results['b_dis_E'].items():
                 if val > 0:
-                    revenue_analysis['electricity']['storage_cost'] += val * c_sto * (1/nu_dis)
+                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * (1/nu_dis)
         
         # ========== HYDROGEN ==========
         # Export revenue
@@ -1326,12 +1337,12 @@ class LocalEnergyMarket:
         if 'b_ch_G' in results:
             for (u, t), val in results['b_ch_G'].items():
                 if val > 0:
-                    revenue_analysis['hydrogen']['storage_cost'] += val * c_sto * nu_ch
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * nu_ch
         
         if 'b_dis_G' in results:
             for (u, t), val in results['b_dis_G'].items():
                 if val > 0:
-                    revenue_analysis['hydrogen']['storage_cost'] += val * c_sto * (1/nu_dis)
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * (1/nu_dis)
         
         # Electrolyzer startup cost
         if 'z_su' in results:
@@ -1366,12 +1377,12 @@ class LocalEnergyMarket:
         if 'b_ch_H' in results:
             for (u, t), val in results['b_ch_H'].items():
                 if val > 0:
-                    revenue_analysis['heat']['storage_cost'] += val * c_sto * nu_ch
+                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * nu_ch
         
         if 'b_dis_H' in results:
             for (u, t), val in results['b_dis_H'].items():
                 if val > 0:
-                    revenue_analysis['heat']['storage_cost'] += val * c_sto * (1/nu_dis)
+                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * (1/nu_dis)
         
         
         # ========== CALCULATE NET VALUES ==========
@@ -2466,490 +2477,6 @@ class LocalEnergyMarket:
 
         
         return lp_status, lp_results, prices
-    
-    def _recreate_continuous_variables_for_lp(self, lp_model):
-        """Recreate all continuous variables for LP relaxation"""
-        
-        # Store variable references for LP model
-        self.lp_e_E_gri = {}
-        self.lp_i_E_gri = {}
-        self.lp_e_E_com = {}
-        self.lp_i_E_com = {}
-        
-        self.lp_e_H_gri = {}
-        self.lp_i_H_gri = {}
-        self.lp_e_H_com = {}
-        self.lp_i_H_com = {}
-        
-        self.lp_e_G_gri = {}
-        self.lp_i_G_gri = {}
-        self.lp_e_G_com = {}
-        self.lp_i_G_com = {}
-        
-        self.lp_p = {}
-        self.lp_d = {}
-        
-        self.lp_b_dis_E = {}
-        self.lp_b_ch_E = {}
-        self.lp_s_E = {}
-        
-        self.lp_b_dis_G = {}
-        self.lp_b_ch_G = {}
-        self.lp_s_G = {}
-        
-        self.lp_b_dis_H = {}
-        self.lp_b_ch_H = {}
-        self.lp_s_H = {}
-        
-        self.lp_chi_peak = lp_model.addVar(vtype="C", name="chi_peak", lb=0)
-        
-        # Recreate all continuous variables with same bounds
-        for u in self.players:
-            for t in self.time_periods:
-                # Electricity variables
-                self.lp_e_E_gri[u,t] = lp_model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
-                                                     ub=self.params.get(f'e_E_cap_{u}_{t}', 1000))
-                self.lp_i_E_gri[u,t] = lp_model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap_{u}_{t}', 1000))
-                self.lp_e_E_com[u,t] = lp_model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0, ub=1000)
-                self.lp_i_E_com[u,t] = lp_model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
-                
-                # Heat variables
-                self.lp_e_H_gri[u,t] = lp_model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'e_H_cap_{u}_{t}', 500))
-                self.lp_i_H_gri[u,t] = lp_model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap_{u}_{t}', 500))
-                self.lp_e_H_com[u,t] = lp_model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0, ub=500)
-                self.lp_i_H_com[u,t] = lp_model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
-                
-                # hydro variables
-                self.lp_e_G_gri[u,t] = lp_model.addVar(vtype="C", name=f"e_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'e_G_cap_{u}_{t}', 100))
-                self.lp_i_G_gri[u,t] = lp_model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap_{u}_{t}', 100))
-                self.lp_e_G_com[u,t] = lp_model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0, ub=100)
-                self.lp_i_G_com[u,t] = lp_model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
-                
-                # Production variables
-                if u in self.players_with_renewables:
-                    renewable_cap = self.params.get(f'renewable_cap_{u}', 2)
-                    self.lp_p[u,'res',t] = lp_model.addVar(vtype="C", name=f"p_res_{u}_{t}", 
-                                                        lb=0, ub=renewable_cap)
-                if u in self.players_with_heatpumps:
-                    hp_cap = self.params.get(f'hp_cap_{u}', 100)
-                    self.lp_p[u,'hp',t] = lp_model.addVar(vtype="C", name=f"p_hp_{u}_{t}", 
-                                                       lb=0, ub=hp_cap)
-                    self.lp_d[u,'hp',t] = lp_model.addVar(vtype="C", name=f"d_hp_{u}_{t}", 
-                                                       lb=0, ub=hp_cap/3)
-                if u in self.players_with_electrolyzers:
-                    els_cap = self.params.get(f'els_cap_{u}', 150)
-                    self.lp_p[u,'els',t] = lp_model.addVar(vtype="C", name=f"p_els_{u}_{t}", 
-                                                        lb=0, ub=els_cap)
-                    self.lp_d[u,'els',t] = lp_model.addVar(vtype="C", name=f"d_els_{u}_{t}", 
-                                                        lb=0, ub=200)
-                
-                # Storage variables
-                storage_power = self.params.get(f'storage_power', 50)
-                storage_capacity = self.params.get(f'storage_capacity', 200)
-                
-                if u in self.players_with_elec_storage:
-                    self.lp_b_dis_E[u,t] = lp_model.addVar(vtype="C", name=f"b_dis_E_{u}_{t}", 
-                                                        lb=0, ub=storage_power)
-                    self.lp_b_ch_E[u,t] = lp_model.addVar(vtype="C", name=f"b_ch_E_{u}_{t}", 
-                                                       lb=0, ub=storage_power)
-                    self.lp_s_E[u,t] = lp_model.addVar(vtype="C", name=f"s_E_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity)
-                
-                if u in self.players_with_hydro_storage:
-                    self.lp_b_dis_G[u,t] = lp_model.addVar(vtype="C", name=f"b_dis_G_{u}_{t}", 
-                                                        lb=0, ub=storage_power)
-                    self.lp_b_ch_G[u,t] = lp_model.addVar(vtype="C", name=f"b_ch_G_{u}_{t}", 
-                                                       lb=0, ub=storage_power)
-                    self.lp_s_G[u,t] = lp_model.addVar(vtype="C", name=f"s_G_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity)
-                
-                if u in self.players_with_heat_storage:
-                    self.lp_b_dis_H[u,t] = lp_model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
-                                                        lb=0, ub=storage_power)
-                    self.lp_b_ch_H[u,t] = lp_model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
-                                                       lb=0, ub=storage_power)
-                    self.lp_s_H[u,t] = lp_model.addVar(vtype="C", name=f"s_H_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity)
-    
-    def _recreate_objective_for_lp(self, lp_model):
-        """Recreate objective function for LP model (without binary startup costs)"""
-        
-        obj_terms = []
-        
-        # Production costs (excluding startup costs since binaries are fixed)
-        for u in self.players:
-            for t in self.time_periods:
-                if u in self.U_E and (u,'res',t) in self.lp_p:
-                    c_res = self.params.get(f'c_res_{u}', 0)
-                    obj_terms.append(c_res * self.lp_p[u,'res',t])
-                
-                if u in self.U_H and (u,'hp',t) in self.lp_p:
-                    c_hp = self.params.get(f'c_hp_{u}', 0)
-                    obj_terms.append(c_hp * self.lp_p[u,'hp',t])
-                
-                if u in self.U_G and (u,'els',t) in self.lp_p:
-                    c_els = self.params.get(f'c_els_{u}', 0)
-                    obj_terms.append(c_els * self.lp_p[u,'els',t])
-        
-        # Grid interaction costs
-        for u in self.players:
-            for t in self.time_periods:
-                # pi_E_gri = self.params.get(f'pi_E_gri_{t}', 0)
-                # pi_H_gri = self.params.get(f'pi_H_gri_{t}', 0)
-                # pi_G_gri = self.params.get(f'pi_G_gri_{t}', 0)
-                pi_E_gri_import, pi_E_gri_export = self.params.get(f'pi_E_gri_import_{t}', 0), self.params.get(f'pi_E_gri_export_{t}', 0)
-                pi_H_gri_import, pi_H_gri_export = self.params.get(f'pi_H_gri_import_{t}', 0), self.params.get(f'pi_H_gri_export_{t}', 0)
-                pi_G_gri_import, pi_G_gri_export = self.params.get(f'pi_G_gri_import_{t}', 0), self.params.get(f'pi_G_gri_export_{t}', 0)
-                
-                obj_terms.append(pi_E_gri_import * self.lp_i_E_gri[u,t] - pi_E_gri_export * self.lp_e_E_gri[u,t])
-                obj_terms.append(pi_H_gri_import * self.lp_i_H_gri[u,t] - pi_H_gri_export * self.lp_e_H_gri[u,t])
-                obj_terms.append(pi_G_gri_import * self.lp_i_G_gri[u,t] - pi_G_gri_export * self.lp_e_G_gri[u,t])
-        
-        # Storage usage costs
-        for u in self.players:
-            c_sto = self.params.get(f'c_sto', 0.01)
-            nu_ch = self.params.get('nu_ch', 0.9)
-            nu_dis = self.params.get('nu_dis', 0.9)
-            
-            for t in self.time_periods:
-                if u in self.players_with_elec_storage and (u,t) in self.lp_b_ch_E and (u,t) in self.lp_b_dis_E:
-                    obj_terms.append(c_sto * (nu_ch * self.lp_b_ch_E[u,t] + (1/nu_dis) * self.lp_b_dis_E[u,t]))
-                
-                if u in self.players_with_hydro_storage and (u,t) in self.lp_b_ch_G and (u,t) in self.lp_b_dis_G:
-                    obj_terms.append(c_sto * (nu_ch * self.lp_b_ch_G[u,t] + (1/nu_dis) * self.lp_b_dis_G[u,t]))
-                
-                if u in self.players_with_heat_storage and (u,t) in self.lp_b_ch_H and (u,t) in self.lp_b_dis_H:
-                    obj_terms.append(c_sto * (nu_ch * self.lp_b_ch_H[u,t] + (1/nu_dis) * self.lp_b_dis_H[u,t]))
-        
-        # Peak power penalty
-        pi_peak = self.params.get('pi_peak', 0)
-        obj_terms.append(pi_peak * self.lp_chi_peak)
-        
-        lp_model.setObjective(quicksum(obj_terms), "minimize")
-    
-    def _recreate_constraints_for_lp(self, lp_model, binary_values):
-        """Recreate all constraints for LP model with fixed binary variables"""
-        
-        lp_community_elec_cons = {}
-        lp_community_heat_cons = {}
-        lp_community_hydro_cons = {}
-        
-        # Electricity constraints
-        for u in self.players:
-            for t in self.time_periods:
-                lhs = (self.lp_i_E_gri[u,t] - self.lp_e_E_gri[u,t] + 
-                       self.lp_i_E_com[u,t] - self.lp_e_E_com[u,t])
-                
-                if u in self.players_with_renewables and (u,'res',t) in self.lp_p:
-                    lhs += self.lp_p[u,'res',t]
-                
-                if u in self.players_with_elec_storage:
-                    if (u,t) in self.lp_b_dis_E and (u,t) in self.lp_b_ch_E:
-                        lhs += self.lp_b_dis_E[u,t] - self.lp_b_ch_E[u,t]
-                
-                rhs = self.params.get(f'd_E_nfl_{u}_{t}', 0)
-                
-                if u in self.players_with_heatpumps and (u,'hp',t) in self.lp_d:
-                    rhs += self.lp_d[u,'hp',t]
-                if u in self.players_with_electrolyzers and (u,'els',t) in self.lp_d:
-                    rhs += self.lp_d[u,'els',t]
-                
-                lp_model.addCons(lhs == rhs, name=f"elec_balance_{u}_{t}")
-        
-        # Electricity storage SOC constraints
-        for u in self.players_with_elec_storage:
-            if (u,0) in self.lp_s_E:
-                initial_soc = self.params.get(f'initial_soc_E', np.inf)
-                lp_model.addCons(self.lp_s_E[u,0] == initial_soc, name=f"initial_soc_E_{u}")
-            
-            for t in self.time_periods:
-                if t > 0 and (u,t) in self.lp_s_E and (u,t-1) in self.lp_s_E:
-                    nu_ch = self.params.get('nu_ch', 0.9)
-                    nu_dis = self.params.get('nu_dis', 0.9)
-                    
-                    lp_model.addCons(
-                        self.lp_s_E[u,t] == self.lp_s_E[u,t-1] + nu_ch * self.lp_b_ch_E[u,t] - (1/nu_dis) * self.lp_b_dis_E[u,t],
-                        name=f"soc_transition_E_{u}_{t}"
-                    )
-        
-        # Community electricity balance (IMPORTANT: store constraint reference for dual)
-        for t in self.time_periods:
-            community_balance = quicksum(self.lp_i_E_com[u,t] - self.lp_e_E_com[u,t] for u in self.players)
-            cons = lp_model.addCons(community_balance == 0, name=f"community_elec_balance_{t}")
-            lp_community_elec_cons[f"community_elec_balance_{t}"] = cons
-        
-        
-        # Heat constraints
-        for u in self.players:
-            for t in self.time_periods:
-                lhs = (self.lp_i_H_gri[u,t] - self.lp_e_H_gri[u,t] + 
-                       self.lp_i_H_com[u,t] - self.lp_e_H_com[u,t])
-                
-                if u in self.players_with_heatpumps and (u,'hp',t) in self.lp_p:
-                    lhs += self.lp_p[u,'hp',t]
-                
-                if u in self.players_with_heat_storage:
-                    if (u,t) in self.lp_b_dis_H and (u,t) in self.lp_b_ch_H:
-                        lhs += self.lp_b_dis_H[u,t] - self.lp_b_ch_H[u,t]
-                
-                rhs = self.params.get(f'd_H_nfl_{u}_{t}', 0)
-                
-                lp_model.addCons(lhs == rhs, name=f"heat_balance_{u}_{t}")
-        
-        # Heat pump coupling
-        for u in self.players_with_heatpumps:
-            for t in self.time_periods:
-                if (u,'hp',t) in self.lp_d and (u,'hp',t) in self.lp_p:
-                    nu_COP = self.params.get(f'nu_COP_{u}', 3.0)
-                    lp_model.addCons(
-                        nu_COP * self.lp_d[u,'hp',t] == self.lp_p[u,'hp',t],
-                        name=f"heatpump_coupling_{u}_{t}"
-                    )
-        
-        # Heat storage SOC constraints
-        for u in self.players_with_heat_storage:
-            if (u,0) in self.lp_s_H:
-                initial_soc = self.params.get(f'initial_soc_H', np.inf)
-                lp_model.addCons(self.lp_s_H[u,0] == initial_soc, name=f"initial_soc_H_{u}")
-            
-            for t in self.time_periods:
-                if t > 0 and (u,t) in self.lp_s_H and (u,t-1) in self.lp_s_H:
-                    nu_ch = self.params.get('nu_ch', 0.9)
-                    nu_dis = self.params.get('nu_dis', 0.9)
-                    
-                    lp_model.addCons(
-                        self.lp_s_H[u,t] == self.lp_s_H[u,t-1] + nu_ch * self.lp_b_ch_H[u,t] - (1/nu_dis) * self.lp_b_dis_H[u,t],
-                        name=f"soc_transition_H_{u}_{t}"
-                    )
-        
-        # Community heat balance (IMPORTANT: store constraint reference for dual)
-        for t in self.time_periods:
-            community_heat_balance = quicksum(self.lp_i_H_com[u,t] - self.lp_e_H_com[u,t] for u in self.players)
-            cons = lp_model.addCons(community_heat_balance == 0, name=f"community_heat_balance_{t}")
-            lp_community_heat_cons[f"community_heat_balance_{t}"] = cons
-        
-        # hydro constraints
-        for u in self.players:
-            for t in self.time_periods:
-                lhs = (self.lp_i_G_gri[u,t] - self.lp_e_G_gri[u,t] + 
-                       self.lp_i_G_com[u,t] - self.lp_e_G_com[u,t])
-                
-                if u in self.players_with_electrolyzers and (u,'els',t) in self.lp_p:
-                    lhs += self.lp_p[u,'els',t]
-                
-                if u in self.players_with_hydro_storage:
-                    if (u,t) in self.lp_b_dis_G and (u,t) in self.lp_b_ch_G:
-                        lhs += self.lp_b_dis_G[u,t] - self.lp_b_ch_G[u,t]
-                
-                rhs = self.params.get(f'd_G_nfl_{u}_{t}', 0)
-                
-                lp_model.addCons(lhs == rhs, name=f"hydro_balance_{u}_{t}")
-        
-        # Electrolyzer coupling (with fixed binary variables)
-        for u in self.players_with_electrolyzers:
-            for t in self.time_periods:
-                if (u,'els',t) in self.lp_p and (u,'els',t) in self.lp_d:
-                    phi1 = self.params.get(f'phi1_{u}', 0.7)
-                    phi0 = self.params.get(f'phi0_{u}', 0.0)
-                    
-                    lp_model.addCons(
-                        self.lp_p[u,'els',t] <= phi1 * self.lp_d[u,'els',t] + phi0,
-                        name=f"electrolyzer_coupling_{u}_{t}"
-                    )
-        
-        # Electrolyzer commitment constraints with FIXED binary values
-        for u in self.players_with_electrolyzers:
-            for t in self.time_periods:
-                if (u,'els',t) in self.lp_d:
-                    C_max = self.params.get(f'C_max_{u}', 100)
-                    C_sb = self.params.get(f'C_sb_{u}', 10)
-                    C_min = self.params.get(f'C_min_{u}', 80)
-                    
-                    # Use FIXED binary values instead of binary variables
-                    z_on_val = binary_values.get(('z_on', u, t), 0)
-                    z_sb_val = binary_values.get(('z_sb', u, t), 0)
-                    
-                    lp_model.addCons(
-                        self.lp_d[u,'els',t] <= C_max * z_on_val + C_sb * z_sb_val,
-                        name=f"electrolyzer_max_{u}_{t}"
-                    )
-                    lp_model.addCons(
-                        self.lp_d[u,'els',t] >= C_min * z_on_val + C_sb * z_sb_val,
-                        name=f"electrolyzer_min_{u}_{t}"
-                    )
-        
-        # hydro storage SOC constraints
-        for u in self.players_with_hydro_storage:
-            if (u,0) in self.lp_s_G:
-                initial_soc = self.params.get(f'initial_soc_G', np.inf)
-                lp_model.addCons(self.lp_s_G[u,0] == initial_soc, name=f"initial_soc_G_{u}")
-            
-            for t in self.time_periods:
-                if t > 0 and (u,t) in self.lp_s_G and (u,t-1) in self.lp_s_G:
-                    nu_ch = self.params.get('nu_ch', 0.9)
-                    nu_dis = self.params.get('nu_dis', 0.9)
-                    
-                    lp_model.addCons(
-                        self.lp_s_G[u,t] == self.lp_s_G[u,t-1] + nu_ch * self.lp_b_ch_G[u,t] - (1/nu_dis) * self.lp_b_dis_G[u,t],
-                        name=f"soc_transition_G_{u}_{t}"
-                    )
-        
-        # Community hydro balance (IMPORTANT: store constraint reference for dual)
-        for t in self.time_periods:
-            community_hydro_balance = quicksum(self.lp_e_G_com[u,t] - self.lp_i_G_com[u,t] for u in self.players)
-            cons = lp_model.addCons(community_hydro_balance == 0, name=f"community_hydro_balance_{t}")
-            lp_community_hydro_cons[f"community_hydro_balance_{t}"] = cons
-        
-        # Renewable availability constraints
-        for u in self.players_with_renewables:
-            for t in self.time_periods:
-                if (u,'res',t) in self.lp_p:
-                    availability = self.params.get(f'renewable_availability_{u}_{t}', 1.0)
-                    renewable_cap = self.params.get(f'renewable_cap_{u}', 2)
-                    
-                    lp_model.addCons(
-                        self.lp_p[u,'res',t] <= availability * renewable_cap,
-                        name=f"renewable_availability_{u}_{t}"
-                    )
-        
-        return lp_community_elec_cons, lp_community_heat_cons, lp_community_hydro_cons
-    
-    def _extract_lp_results(self, lp_model):
-        """Extract results from LP model"""
-        
-        results = {
-            'objective_value': lp_model.getObjVal(),
-            'electricity': {},
-            'heat': {},
-            'hydro': {},
-            'storage': {},
-            'production': {}        }
-        
-        for u in self.players:
-            for t in self.time_periods:
-                # Electricity results
-                results['electricity'][u,t] = {
-                    'e_gri': lp_model.getVal(self.lp_e_E_gri[u,t]),
-                    'i_gri': lp_model.getVal(self.lp_i_E_gri[u,t]),
-                    'e_com': lp_model.getVal(self.lp_e_E_com[u,t]),
-                    'i_com': lp_model.getVal(self.lp_i_E_com[u,t])
-                }
-                
-                # Heat results
-                results['heat'][u,t] = {
-                    'e_gri': lp_model.getVal(self.lp_e_H_gri[u,t]),
-                    'i_gri': lp_model.getVal(self.lp_i_H_gri[u,t]),
-                    'e_com': lp_model.getVal(self.lp_e_H_com[u,t]),
-                    'i_com': lp_model.getVal(self.lp_i_H_com[u,t])
-                }
-                
-                # hydro results
-                results['hydro'][u,t] = {
-                    'e_gri': lp_model.getVal(self.lp_e_G_gri[u,t]),
-                    'i_gri': lp_model.getVal(self.lp_i_G_gri[u,t]),
-                    'e_com': lp_model.getVal(self.lp_e_G_com[u,t]),
-                    'i_com': lp_model.getVal(self.lp_i_G_com[u,t])
-                }
-                
-                # Production results
-                if (u,'res',t) in self.lp_p:
-                    results['production'][u,'res',t] = lp_model.getVal(self.lp_p[u,'res',t])
-                if (u,'hp',t) in self.lp_p:
-                    results['production'][u,'hp',t] = lp_model.getVal(self.lp_p[u,'hp',t])
-                if (u,'els',t) in self.lp_p:
-                    results['production'][u,'els',t] = lp_model.getVal(self.lp_p[u,'els',t])
-                
-                # Storage results
-                if (u,t) in self.lp_s_E:
-                    results['storage']['elec',u,t] = {
-                        'soc': lp_model.getVal(self.lp_s_E[u,t]),
-                        'charge': lp_model.getVal(self.lp_b_ch_E[u,t]),
-                        'discharge': lp_model.getVal(self.lp_b_dis_E[u,t])
-                    }
-                
-                if (u,t) in self.lp_s_G:
-                    results['storage']['hydro',u,t] = {
-                        'soc': lp_model.getVal(self.lp_s_G[u,t]),
-                        'charge': lp_model.getVal(self.lp_b_ch_G[u,t]),
-                        'discharge': lp_model.getVal(self.lp_b_dis_G[u,t])
-                    }
-                
-                if (u,t) in self.lp_s_H:
-                    results['storage']['heat',u,t] = {
-                        'soc': lp_model.getVal(self.lp_s_H[u,t]),
-                        'charge': lp_model.getVal(self.lp_b_ch_H[u,t]),
-                        'discharge': lp_model.getVal(self.lp_b_dis_H[u,t])
-                    }
-        
-        return results
-    def print_economic_summary_table(self, revenue_analysis):
-        """
-        목적함수 분석을 요약 테이블로 출력 (Beamer 슬라이드 형식)
-        
-        Args:
-            revenue_analysis: _analyze_revenue_by_resource의 결과
-        """
-        print("\n" + "="*60)
-        print("목적함수 분석")
-        print("="*60)
-        
-        # 헤더
-        print(f"{'':^20} {'항목':^20} {'수익(EUR)':^10} {'비용(EUR)':^10}")
-        print("-"*60)
-        
-        # 전력 섹션
-        print(f"{'전력':^20}")
-        if revenue_analysis['electricity']['grid_export_revenue'] > 0:
-            print(f"{'':^20} {'그리드 수출':^20} {revenue_analysis['electricity']['grid_export_revenue']:>10.2f} {'-':^10}")
-        if revenue_analysis['electricity']['grid_import_cost'] > 0:
-            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['electricity']['grid_import_cost']:>10.2f}")
-        if revenue_analysis['electricity']['production_cost'] > 0:
-            print(f"{'':^20} {'생산 비용':^20} {'-':^10} {revenue_analysis['electricity']['production_cost']:>10.2f}")
-        if revenue_analysis['electricity']['storage_cost'] > 0:
-            print(f"{'':^20} {'저장 비용':^20} {'-':^10} {revenue_analysis['electricity']['storage_cost']:>10.2f}")
-        
-        elec_net = revenue_analysis['electricity']['net']
-        net_sign = '+' if elec_net >= 0 else ''
-        print(f"{'':^20} {'소계':^20} {net_sign}{elec_net:>10.2f}")
-        print("-"*60)
-        
-        # 수소 섹션
-        print(f"{'수소':^20}")
-        if revenue_analysis['hydrogen']['grid_export_revenue'] > 0:
-            print(f"{'':^20} {'그리드 수출':^20} {revenue_analysis['hydrogen']['grid_export_revenue']:>10.2f} {'-':^10}")
-        if revenue_analysis['hydrogen']['grid_import_cost'] > 0:
-            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['hydrogen']['grid_import_cost']:>10.2f}")
-        if revenue_analysis['hydrogen']['production_cost'] > 0:
-            print(f"{'':^20} {'생산 비용':^20} {'-':^10} {revenue_analysis['hydrogen']['production_cost']:>10.2f}")
-        if revenue_analysis['hydrogen']['startup_cost'] > 0:
-            print(f"{'':^20} {'생산/시작 비용':^20} {'-':^10} {revenue_analysis['hydrogen']['startup_cost'] + revenue_analysis['hydrogen']['production_cost']:>10.2f}")
-        
-        hydro_net = revenue_analysis['hydrogen']['net']
-        net_sign = '+' if hydro_net >= 0 else '-'
-        print(f"{'':^20} {'소계':^20} {net_sign}{abs(hydro_net):>10.2f}")
-        print("-"*60)
-        
-        # 열 섹션
-        print(f"{'열':^20}")
-        if revenue_analysis['heat']['grid_import_cost'] > 0:
-            print(f"{'':^20} {'그리드 수입':^20} {'-':^10} {revenue_analysis['heat']['grid_import_cost']:>10.2f}")
-        
-        heat_net = revenue_analysis['heat']['net']
-        net_sign = '+' if heat_net >= 0 else '-'
-        print(f"{'':^20} {'소계':^20} {net_sign}{abs(heat_net):>10.2f}")
-        
-        print("="*60)
-        
-        # 총계
-        total_profit = revenue_analysis['net_profit']
-        profit_sign = '+' if total_profit >= 0 else '-'
-        print(f"{'총 순이익':^20} {profit_sign}{abs(total_profit):>10.2f} EUR/일")
-        print("="*60)
 
     def generate_beamer_economic_table(self, revenue_analysis, player_profits, community_total, filename='energy_community_results.tex'):
         """
@@ -3650,25 +3177,27 @@ class LocalEnergyMarket:
                         profit_breakdown['production_cost'] += results['p'][u,'hp',t] * self.params.get(f'c_hp_{u}', 0)
                 
                 # 4. 저장 비용
-                c_sto = self.params.get('c_sto', 0.01)
+                c_E_sto = self.params.get('c_E_sto', 0.01)
+                c_G_sto = self.params.get('c_G_sto', 0.01)
+                c_H_sto = self.params.get('c_H_sto', 0.01)
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)
                 
                 if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
-                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_E_sto * nu_ch
                 if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
-                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_E_sto * (1/nu_dis)
                 # 수소 저장 비용 추가
                 if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
-                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_G_sto * nu_ch
                 if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
-                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_G_sto * (1/nu_dis)
                 
                 # 열 저장 비용 추가
                 if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
-                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_H_sto * nu_ch
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
-                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
                 # 5. 시작 비용
                 if 'z_su' in results and (u,t) in results['z_su']:
                     profit_breakdown['startup_cost'] += results['z_su'][u,t] * self.params.get(f'c_su_{u}', 50)
@@ -3724,7 +3253,7 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("SOLVING COMPLETE MODEL AND ANALYZING REVENUE")
     print("="*60)
-    status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model()
+    status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model(lp_relax=False)
     
     if status_complete == "optimal":
         # Analyze electrolyzer specific operation
