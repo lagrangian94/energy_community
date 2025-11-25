@@ -261,29 +261,23 @@ class SeparationProblem(LocalEnergyMarket):
             for t in self.time_periods:
                 if (u,'elec',t) in self.nfl_d:
                     nfl_demand_param = self.params.get(f'd_E_nfl_{u}_{t}', np.inf)
-                    cons_fix_nfl_lb = self.elec_nfl_demand_lb_cons.get(f"elec_nfl_demand_lb_cons_{u}_{t}", None)
-                    cons_fix_nfl_ub = self.elec_nfl_demand_ub_cons.get(f"elec_nfl_demand_ub_cons_{u}_{t}", None)
-                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
-                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
+                    cons = self.elec_nfl_demand_cons.get(f"elec_nfl_demand_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons, 0.0)
+                    self.model.chgLhs(cons, 0.0)
         
                 if (u,'hydro',t) in self.nfl_d:
                     nfl_demand_param = self.params.get(f'd_G_nfl_{u}_{t}', np.inf)
-                    cons_fix_nfl_lb = self.hydro_nfl_demand_lb_cons.get(f"hydro_nfl_demand_lb_cons_{u}_{t}", None)
-                    cons_fix_nfl_ub = self.hydro_nfl_demand_ub_cons.get(f"hydro_nfl_demand_ub_cons_{u}_{t}", None)
-                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
-                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
+                    cons = self.hydro_nfl_demand_cons.get(f"hydro_nfl_demand_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons, 0.0)
+                    self.model.chgLhs(cons, 0.0)
                 if (u,'heat',t) in self.nfl_d:
                     nfl_demand_param = self.params.get(f'd_H_nfl_{u}_{t}', np.inf)
-                    cons_fix_nfl_lb = self.heat_nfl_demand_lb_cons.get(f"heat_nfl_demand_lb_cons_{u}_{t}", None)
-                    cons_fix_nfl_ub = self.heat_nfl_demand_ub_cons.get(f"heat_nfl_demand_ub_cons_{u}_{t}", None)
-                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
-                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
-                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
+                    cons = self.heat_nfl_demand_cons.get(f"heat_nfl_demand_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons, 0.0)
+                    self.model.chgLhs(cons, 0.0)
 
             if u in self.players_with_elec_storage:
                 initial_soc = self.params.get(f'initial_soc_E', np.inf)
@@ -863,8 +857,8 @@ if __name__ == "__main__":
     #     print("="*70)
 
     # Compute stability violation of certain cost allocations
-    # cost_allocation = {'u1': -822.61, 'u2': -27.05, 'u3': -44.58, 'u4': 115.3, 'u5': 367.99, 'u6': 54.31} # max violation:0.4025
-    cost_allocation = {'u1': -829.24, 'u2': -26.75, 'u3': -44.41, 'u4': 115.71, 'u5': 373.74, 'u6': 54.31} # max violation: -0.0075
+    cost_allocation = {'u1': -822.61, 'u2': -27.05, 'u3': -44.58, 'u4': 115.3, 'u5': 367.99, 'u6': 54.31} # max violation:0.4025
+    # cost_allocation = {'u1': -829.24, 'u2': -26.75, 'u3': -44.41, 'u4': 115.71, 'u5': 373.74, 'u6': 54.31} # max violation: -0.0075
     violation = core_comp.measure_stability_violation(cost_allocation)
     # violation = core_comp.measure_stability_violation(cost_allocation, brute_force=True)
     coalition_values = core_comp.find_all_coalitions()

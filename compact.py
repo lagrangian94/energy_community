@@ -405,12 +405,9 @@ class LocalEnergyMarket:
         self.renewable_cons = {}
         
         # Initialize non-flexible demand fixing constraints
-        self.elec_nfl_demand_lb_cons = {}
-        self.elec_nfl_demand_ub_cons = {}
-        self.hydro_nfl_demand_lb_cons = {}
-        self.hydro_nfl_demand_ub_cons = {}
-        self.heat_nfl_demand_lb_cons = {}
-        self.heat_nfl_demand_ub_cons = {}
+        self.elec_nfl_demand_cons = {}
+        self.hydro_nfl_demand_cons = {}
+        self.heat_nfl_demand_cons = {}
 
         # Initialize variables
         self._create_variables(isLP=self.isLP)
@@ -517,30 +514,24 @@ class LocalEnergyMarket:
                     nfl_elec_demand_t = self.params.get(f'd_E_nfl_{u}_{t}', 0)
                     res_capacity = 2
                     self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_nfl_{u}_{t}")
-                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'elec',t] <= -1*nfl_elec_demand_t, name=f"fix_lb_nfl_d_elec_{u}_{t}")
-                    cons_ub = self.model.addCons(self.nfl_d[u,'elec',t] <= nfl_elec_demand_t, name=f"fix_ub_nfl_d_elec_{u}_{t}")
-                    self.elec_nfl_demand_lb_cons[f"elec_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
-                    self.elec_nfl_demand_ub_cons[f"elec_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
+                    cons = self.model.addCons(self.nfl_d[u,'elec',t] == nfl_elec_demand_t, name=f"fix_nfl_d_elec_{u}_{t}")
+                    self.elec_nfl_demand_cons[f"elec_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity, obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity)
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}")
-                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'hydro',t] <= -1*nfl_hydro_demand_t, name=f"fix_lb_nfl_d_hydro_{u}_{t}")
-                    cons_ub = self.model.addCons(self.nfl_d[u,'hydro',t] <= nfl_hydro_demand_t, name=f"fix_ub_nfl_d_hydro_{u}_{t}")
-                    self.hydro_nfl_demand_lb_cons[f"hydro_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
-                    self.hydro_nfl_demand_ub_cons[f"hydro_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
+                    cons = self.model.addCons(self.nfl_d[u,'hydro',t] == nfl_hydro_demand_t, name=f"fix_nfl_d_hydro_{u}_{t}")
+                    self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}")
-                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'heat',t] <= -1*nfl_heat_demand_t, name=f"fix_lb_nfl_d_heat_{u}_{t}")
-                    cons_ub = self.model.addCons(self.nfl_d[u,'heat',t] <= nfl_heat_demand_t, name=f"fix_ub_nfl_d_heat_{u}_{t}")
-                    self.heat_nfl_demand_lb_cons[f"heat_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
-                    self.heat_nfl_demand_ub_cons[f"heat_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
+                    cons = self.model.addCons(self.nfl_d[u,'heat',t] == nfl_heat_demand_t, name=f"fix_nfl_d_heat_{u}_{t}")
+                    self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
@@ -675,12 +666,9 @@ class LocalEnergyMarket:
         self.model.data["cons"]["electrolyzer"] = self.electrolyzer_cons
         self.model.data["cons"]["heatpump"] = self.heatpump_cons
         self.model.data["cons"]["renewable"] = self.renewable_cons
-        self.model.data["cons"]["elec_nfl_demand_lb"] = self.elec_nfl_demand_lb_cons
-        self.model.data["cons"]["elec_nfl_demand_ub"] = self.elec_nfl_demand_ub_cons
-        self.model.data["cons"]["hydro_nfl_demand_lb"] = self.hydro_nfl_demand_lb_cons
-        self.model.data["cons"]["hydro_nfl_demand_ub"] = self.hydro_nfl_demand_ub_cons
-        self.model.data["cons"]["heat_nfl_demand_lb"] = self.heat_nfl_demand_lb_cons
-        self.model.data["cons"]["heat_nfl_demand_ub"] = self.heat_nfl_demand_ub_cons
+        self.model.data["cons"]["elec_nfl_demand"] = self.elec_nfl_demand_cons
+        self.model.data["cons"]["hydro_nfl_demand"] = self.hydro_nfl_demand_cons
+        self.model.data["cons"]["heat_nfl_demand"] = self.heat_nfl_demand_cons
     def _add_electricity_constraints(self):
         """Add electricity-related constraints from slides 9-10"""
         
