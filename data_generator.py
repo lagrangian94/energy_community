@@ -200,7 +200,7 @@ def generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices
     return parameters
 
 
-def setup_lem_parameters(players, time_periods):
+def setup_lem_parameters(players, configuration, time_periods):
     """
     Setup parameters for Local Energy Market problem
     
@@ -234,18 +234,18 @@ def setup_lem_parameters(players, time_periods):
     
     # Example parameters with proper bounds and storage types
     parameters = {
-        'players_with_renewables': ['u1'],
-        'players_with_electrolyzers': ['u2'],
-        'players_with_heatpumps': ['u3'],
-        'players_with_elec_storage': ['u1'],
-        'players_with_hydro_storage': ['u2'],
-        'players_with_heat_storage': ['u3'],
-        'players_with_nfl_elec_demand': ['u4'],
-        'players_with_nfl_hydro_demand': ['u5'],
-        'players_with_nfl_heat_demand': ['u6'],
-        'players_with_fl_elec_demand': ['u2'],
-        'players_with_fl_hydro_demand': [],
-        'players_with_fl_heat_demand': [],
+        'players_with_renewables': configuration['players_with_renewables'],
+        'players_with_electrolyzers': configuration['players_with_electrolyzers'],
+        'players_with_heatpumps': configuration['players_with_heatpumps'],
+        'players_with_elec_storage': configuration['players_with_elec_storage'],
+        'players_with_hydro_storage': configuration['players_with_hydro_storage'],
+        'players_with_heat_storage': configuration['players_with_heat_storage'],
+        'players_with_nfl_elec_demand': configuration['players_with_nfl_elec_demand'],
+        'players_with_nfl_hydro_demand': configuration['players_with_nfl_hydro_demand'],
+        'players_with_nfl_heat_demand': configuration['players_with_nfl_heat_demand'],
+        'players_with_fl_elec_demand': configuration['players_with_fl_elec_demand'],
+        'players_with_fl_hydro_demand': configuration['players_with_fl_hydro_demand'],
+        'players_with_fl_heat_demand': configuration['players_with_fl_heat_demand'],
         'nu_ch': 0.9,
         'nu_dis': 0.9,
         'pi_peak': 100,
@@ -259,18 +259,16 @@ def setup_lem_parameters(players, time_periods):
         'storage_power_heat': 0.10,
         'storage_capacity_heat': 0.40,
         'nu_ch': 0.95,
-        'nu_dis': 0.95,
-        'pi_peak': 50,
-        
+        'nu_dis': 0.95,        
         # Equipment capacities
-        'hp_cap_u3': 0.08,
-        'els_cap_u2': 1,
-        'C_min_u2': 0.15,
-        'C_sb_u2': 0.01,
-        'phi1_1_u2': 21.12266316,
-        'phi0_1_u2': -0.37924094,
-        'phi1_2_u2': 16.66883134,
-        'phi0_2_u2': 0.87814262,
+        'hp_cap': 0.08,
+        'els_cap': 1,
+        'C_min': 0.15,
+        'C_sb': 0.01,
+        'phi1_1': 21.12266316,
+        'phi0_1': -0.37924094,
+        'phi1_2': 16.66883134,
+        'phi0_2': 0.87814262,
         'c_res': 0.05,
         'c_hp': 0.1,
         'c_els': 0.05,
@@ -279,14 +277,13 @@ def setup_lem_parameters(players, time_periods):
         'min_down_time': 2,
         
         # Grid connection limits
-        'e_E_cap_u1_t': 0.1,
-        'i_E_cap_u1_t': 0.5,
-        'i_E_cap_u2_t': 0.5,
-        'i_E_cap_u3_t': 0.5,
-        'e_H_cap_u3_t': 0.06,
-        'i_H_cap_u3_t': 0.08,
-        'e_G_cap_u2_t': 50,
-        'i_G_cap_u2_t': 30,
+        'res_capacity': 2,
+        'e_E_cap': 0.5*2,
+        'i_E_cap': 0.5*2,
+        'e_H_cap': 500, #0.06,
+        'i_H_cap': 500, #0.08,
+        'e_G_cap': 50,
+        'i_G_cap': 100 , #30,
         
         # Cost parameters
         'c_E_sto': 0.01,
@@ -298,17 +295,18 @@ def setup_lem_parameters(players, time_periods):
         parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']
     ))
     
-    # RENEWABLE AVAILABILITY - Natural solar curve
-    for t in time_periods:
-        if 6 <= t <= 18:
-            solar_factor = np.exp(-((t - 12) / 3.5)**2)
-            parameters[f'renewable_cap_u1_{t}'] = 2 * solar_factor  # MW
-        else:
-            parameters[f'renewable_cap_u1_{t}'] = 0
+
     
     # Add cost parameters
     for u in parameters['players_with_renewables']:
         parameters[f'c_res_{u}'] = parameters['c_res']
+        # RENEWABLE AVAILABILITY - Natural solar curve
+        for t in time_periods:
+            if 6 <= t <= 18:
+                solar_factor = np.exp(-((t - 12) / 3.5)**2)
+                parameters[f'renewable_cap_{u}_{t}'] = 2 * solar_factor  # MW
+            else:
+                parameters[f'renewable_cap_{u}_{t}'] = 0
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_hp_{u}'] = parameters['c_hp']
     for u in parameters['players_with_electrolyzers']:
@@ -360,7 +358,7 @@ def setup_lem_parameters(players, time_periods):
     for u in players:
         for t in time_periods:
             # HYDROGEN DEMAND
-            if u == 'u5':
+            if u in parameters['players_with_nfl_hydro_demand']:
                 if 6 <= t <= 11:
                     h2_demand = 6 + 4 * np.exp(-((t-9)/2)**2)
                 elif 14 <= t <= 20:
@@ -376,7 +374,7 @@ def setup_lem_parameters(players, time_periods):
                 parameters[f'd_G_nfl_{u}_{t}'] = 0
             
             # ELEC DEMAND
-            if u == 'u4':
+            if u in parameters['players_with_nfl_elec_demand']:
                 morning_peak = 20 * np.exp(-((t - 8) / 2)**2)
                 evening_peak = 40 * np.exp(-((t - 19.5) / 2)**2)
                 base_demand = 60
@@ -384,7 +382,7 @@ def setup_lem_parameters(players, time_periods):
                 parameters[f'd_E_nfl_{u}_{t}'] = elec_demand
             
             # HEAT DEMAND
-            if u == 'u6':
+            if u in parameters['players_with_nfl_heat_demand']:
                 heat_demand_kw = 60 + 30 * np.cos(2 * np.pi * (t - 3) / 24)
                 heat_demand = heat_demand_kw * 0.001
                 parameters[f'd_H_nfl_{u}_{t}'] = heat_demand

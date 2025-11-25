@@ -380,7 +380,11 @@ class CoreComputation:
         print(f"Number of players: {len(players)}")
         print(f"Time periods: {len(time_periods)}")
         print(f"{'='*70}\n")
-    
+
+        # Calculate individual costs (coalition costs에 저장하면 됨. 왜냐하면 플레이어 개개인도 각각이 sub-coalition이라서)
+        for player in self.players:
+            self.coalition_costs[tuple([player])] = self.compute_coalition_cost([player])
+        
     def compute_coalition_cost(self, coalition: List[str]) -> float:
         """
         Compute the cost c(S) for a given coalition S
@@ -484,10 +488,18 @@ class CoreComputation:
         # Need to free transformed problem before adding constraints
         self.master_model.freeTransform()
         
-        cons = self.master_model.addCons(
-            quicksum(self.payoff_vars[i] for i in coalition) <= coalition_cost + self.slack_var,
-            name=f"stability_{coalition_str}"
-        )
+        try:
+            cons = self.master_model.addCons(
+                quicksum(self.payoff_vars[i] for i in coalition) <= coalition_cost + self.slack_var,
+                name=f"stability_{coalition_str}"
+            )
+        except Exception as e:
+            print(f"Error adding coalition constraint: {e}")
+            print(f"Coalition: {coalition}")
+            print(f"Coalition cost: {coalition_cost:.4f}")
+            print(f"Slack variable: {self.slack_var:.4f}")
+            print(f"Payoff variables: {self.payoff_vars}")
+            raise e
         
         print(f"  Added constraint for {coalition}: Σp[i] <= {coalition_cost:.4f} + v")
     
@@ -664,11 +676,25 @@ class CoreComputation:
                 ... else:
                 ...     print(f"Payoff violates core by {violation:.4f}")
             """
+            ## First, check whether the cost allocation is the imputation (at least no worse than the individually played cost)
+            is_imputation = self.check_imputation(payoffs)
+            if not is_imputation:
+                violation = np.inf
+                print("Cost allocation is not an imputation")
+                return violation
             if not brute_force:
                 coalition, violation = self.find_violated_coalition(payoffs)
             else:
                 violation = self._measure_violation_brute_force(payoffs)
             return violation
+    def check_imputation(self, payoffs: Dict[str, float]) -> bool:
+        """
+        Check whether the cost allocation is the imputation (at least no worse than the individually played cost)
+        """
+        for player in self.players:
+            if payoffs[player] - self.coalition_costs[tuple([player])] >= 1e-6:
+                return False
+        return True
     def _measure_violation_brute_force(self, payoffs: Dict[str, float]) -> float:
         """
         Measure violation by solving LP with all coalition constraints

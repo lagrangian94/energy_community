@@ -307,6 +307,7 @@ class ColumnGenerationSolver:
         print("\nNote: Convex hull prices ensure efficient market clearing and")
         print("      reflect true opportunity costs in the community market.")
         
+        # results_comparison = {"individual":{u: }}
         return {
             'individual_profits': individual_profits,
             'community_profits': player_profits_chp,
