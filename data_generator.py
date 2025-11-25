@@ -253,8 +253,9 @@ def setup_lem_parameters(players, time_periods):
         # Storage parameters
         'storage_power': 0.5,
         'storage_capacity': 2.0,
-        'initial_soc': 0.5*1,
-        'initial_soc_heat': 0.2,
+        'initial_soc_E': 0.5*1,
+        'initial_soc_G': 25,
+        'initial_soc_H': 0.2,
         'storage_power_heat': 0.10,
         'storage_capacity_heat': 0.40,
         'nu_ch': 0.95,

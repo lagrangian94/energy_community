@@ -46,7 +46,7 @@ class SeparationProblem(LocalEnergyMarket):
         # Add binary selection variables and constraints
         self._add_selection_variables()
         self._add_bigm_constraints()
-        self._modify_balance_constraints()
+        self._modify_constraints()
         
     def _add_selection_variables(self):
         """Add binary selection variables z[i] for each player"""
@@ -57,7 +57,7 @@ class SeparationProblem(LocalEnergyMarket):
             # We want to maximize Σ payoff[i]*z[i] - cost
             # which is equivalent to minimize -Σ payoff[i]*z[i] + cost
             # Since original model minimizes cost, we just set z coefficient to -payoff
-            payoff = self.current_payoffs.get(i, 0.0)
+            payoff = self.current_payoffs.get(i, np.inf)
             self.z[i] = self.model.addVar(
                 vtype="B", 
                 name=f"z_{i}",
@@ -82,159 +82,148 @@ class SeparationProblem(LocalEnergyMarket):
                                       name=f"bigm_e_E_gri_{u}_{t}")
                 
                 if (u, t) in self.i_E_gri:
-                    res_capacity = 2
-                    M = self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity
-                    if M < 1:  # For non-demand players
-                        M = M_default
+                    M = self.params.get(f'i_E_cap_{u}_{t}', M_default)
                     self.model.addCons(self.i_E_gri[u,t] <= M * z_u,
                                       name=f"bigm_i_E_gri_{u}_{t}")
                 
                 # Community trading - Electricity
                 if (u, t) in self.e_E_com:
-                    M = 1000
+                    M = M_default
                     self.model.addCons(self.e_E_com[u,t] <= M * z_u,
                                       name=f"bigm_e_E_com_{u}_{t}")
                 
                 if (u, t) in self.i_E_com:
-                    M = self.params.get(f'i_E_cap_{u}_{t}', 0.5) * 2
-                    if M < 1:
-                        M = 1000
+                    M = self.params.get(f'i_E_cap_{u}_{t}', M_default)
                     self.model.addCons(self.i_E_com[u,t] <= M * z_u,
                                       name=f"bigm_i_E_com_{u}_{t}")
                 
                 # Grid trading - Heat
                 if (u, t) in self.e_H_gri:
-                    M = self.params.get(f'e_H_cap_{u}_{t}', 500)
+                    M = self.params.get(f'e_H_cap_{u}_{t}', M_default)
                     self.model.addCons(self.e_H_gri[u,t] <= M * z_u,
                                       name=f"bigm_e_H_gri_{u}_{t}")
                 
                 if (u, t) in self.i_H_gri:
-                    M = self.params.get(f'i_H_cap_{u}_{t}', 500)
+                    M = self.params.get(f'i_H_cap_{u}_{t}', M_default)
                     self.model.addCons(self.i_H_gri[u,t] <= M * z_u,
                                       name=f"bigm_i_H_gri_{u}_{t}")
                 
                 # Community trading - Heat
                 if (u, t) in self.e_H_com:
-                    M = 500
+                    M = M_default
                     self.model.addCons(self.e_H_com[u,t] <= M * z_u,
                                       name=f"bigm_e_H_com_{u}_{t}")
                 
                 if (u, t) in self.i_H_com:
-                    M = 500
+                    M = M_default
                     self.model.addCons(self.i_H_com[u,t] <= M * z_u,
                                       name=f"bigm_i_H_com_{u}_{t}")
                 
                 # Grid trading - Hydrogen
                 if (u, t) in self.e_G_gri:
-                    M = self.params.get(f'e_G_cap_{u}_{t}', 100)
+                    M = self.params.get(f'e_G_cap_{u}_{t}', M_default)
                     self.model.addCons(self.e_G_gri[u,t] <= M * z_u,
                                       name=f"bigm_e_G_gri_{u}_{t}")
                 
                 if (u, t) in self.i_G_gri:
-                    M = self.params.get(f'i_G_cap_{u}_{t}', 100)
+                    M = self.params.get(f'i_G_cap_{u}_{t}', M_default)
                     self.model.addCons(self.i_G_gri[u,t] <= M * z_u,
                                       name=f"bigm_i_G_gri_{u}_{t}")
                 
                 # Community trading - Hydrogen
                 if (u, t) in self.e_G_com:
-                    M = 100
+                    M = M_default
                     self.model.addCons(self.e_G_com[u,t] <= M * z_u,
                                       name=f"bigm_e_G_com_{u}_{t}")
                 
                 if (u, t) in self.i_G_com:
-                    M = 100
+                    M = M_default
                     self.model.addCons(self.i_G_com[u,t] <= M * z_u,
                                       name=f"bigm_i_G_com_{u}_{t}")
                 
                 # Production variables
                 if (u, 'res', t) in self.p:
-                    M = self.params.get(f'renewable_cap_{u}_{t}', 200)
+                    M = self.params.get(f'renewable_cap_{u}_{t}', M_default)
                     self.model.addCons(self.p[u,'res',t] <= M * z_u,
                                       name=f"bigm_p_res_{u}_{t}")
                 
                 if (u, 'hp', t) in self.p:
-                    M = self.params.get(f'hp_cap_{u}', 100)
+                    M = self.params.get(f'hp_cap_{u}', M_default)
                     self.model.addCons(self.p[u,'hp',t] <= M * z_u,
                                       name=f"bigm_p_hp_{u}_{t}")
                 
                 if (u, 'els', t) in self.p:
-                    M = self.params.get(f'els_cap_{u}', 1) * 25  # Upper bound for hydrogen production
+                    M = self.params.get(f'els_cap_{u}', M_default) * 25  # Upper bound for hydrogen production
                     self.model.addCons(self.p[u,'els',t] <= M * z_u,
                                       name=f"bigm_p_els_{u}_{t}")
                 
                 # Electrolyzer demand
                 if (u, t) in self.els_d:
-                    M = self.params.get(f'els_cap_{u}', 1)
+                    M = self.params.get(f'els_cap_{u}', M_default)
                     self.model.addCons(self.els_d[u,t] <= M * z_u,
                                       name=f"bigm_els_d_{u}_{t}")
                 
                 # Flexible demand
                 if (u, 'elec', t) in self.fl_d:
-                    M = 1  # From compact.py line 533
+                    M = M_default  # From compact.py line 533
                     self.model.addCons(self.fl_d[u,'elec',t] <= M * z_u,
                                       name=f"bigm_fl_d_elec_{u}_{t}")
                 
                 if (u, 'hydro', t) in self.fl_d:
-                    M = 10**6
+                    M = M_default
                     self.model.addCons(self.fl_d[u,'hydro',t] <= M * z_u,
                                       name=f"bigm_fl_d_hydro_{u}_{t}")
                 
                 if (u, 'heat', t) in self.fl_d:
-                    M = 10**6
+                    M = M_default
                     self.model.addCons(self.fl_d[u,'heat',t] <= M * z_u,
                                       name=f"bigm_fl_d_heat_{u}_{t}")
                 
                 # Storage variables - Electricity
                 if (u, t) in self.s_E:
-                    M = self.params.get('storage_capacity', 100)
+                    M = self.params.get('storage_capacity', M_default)
                     self.model.addCons(self.s_E[u,t] <= M * z_u,
                                       name=f"bigm_s_E_{u}_{t}")
                     
                 if (u, t) in self.b_ch_E:
-                    M = self.params.get('storage_power', 50)
+                    M = self.params.get('storage_power', M_default)
                     self.model.addCons(self.b_ch_E[u,t] <= M * z_u,
                                       name=f"bigm_b_ch_E_{u}_{t}")
                     
                 if (u, t) in self.b_dis_E:
-                    M = self.params.get('storage_power', 50)
+                    M = self.params.get('storage_power', M_default)
                     self.model.addCons(self.b_dis_E[u,t] <= M * z_u,
                                       name=f"bigm_b_dis_E_{u}_{t}")
                 
                 # Storage variables - Hydrogen
                 if (u, t) in self.s_G:
-                    M = 50  # From compact.py line 572
+                    M = M_default  # From compact.py line 572
                     self.model.addCons(self.s_G[u,t] <= M * z_u,
                                       name=f"bigm_s_G_{u}_{t}")
                 
                 if (u, t) in self.b_ch_G:
-                    M = 10  # From compact.py line 571
+                    M = M_default  # From compact.py line 571
                     self.model.addCons(self.b_ch_G[u,t] <= M * z_u,
                                       name=f"bigm_b_ch_G_{u}_{t}")
                 
                 if (u, t) in self.b_dis_G:
-                    M = 10
+                    M = M_default
                     self.model.addCons(self.b_dis_G[u,t] <= M * z_u,
                                       name=f"bigm_b_dis_G_{u}_{t}")
                 
                 # Storage variables - Heat
-                if (u, t) in self.s_H:
-                    M = self.params.get('storage_capacity_heat', 400)
-                    if M < 0:  # Check if parameter was set
-                        M = 400
+                if (u, t) in self.s_H: #TODO
+                    M = self.params.get('storage_capacity_heat', M_default)
                     self.model.addCons(self.s_H[u,t] <= M * z_u,
                                       name=f"bigm_s_H_{u}_{t}")
                 
                 if (u, t) in self.b_ch_H:
-                    M = self.params.get('storage_power_heat', 100)
-                    if M < 0:
-                        M = 100
+                    M = self.params.get('storage_power_heat', M_default)
                     self.model.addCons(self.b_ch_H[u,t] <= M * z_u,
                                       name=f"bigm_b_ch_H_{u}_{t}")
                 
                 if (u, t) in self.b_dis_H:
-                    M = self.params.get('storage_power_heat', 100)
-                    if M < 0:
-                        M = 100
+                    M = self.params.get('storage_power_heat', M_default)
                     self.model.addCons(self.b_dis_H[u,t] <= M * z_u,
                                       name=f"bigm_b_dis_H_{u}_{t}")
                 
@@ -246,114 +235,75 @@ class SeparationProblem(LocalEnergyMarket):
                 if (u, t) in self.z_on:
                     self.model.addCons(self.z_on[u,t] <= z_u,
                                       name=f"bigm_z_on_{u}_{t}")
-                
-                if (u, t) in self.z_off:
-                    self.model.addCons(self.z_off[u,t] <= z_u,
-                                      name=f"bigm_z_off_{u}_{t}")
-                
+                """
+                z_on + z_off + z_sb == 1 이기 때문에 z_off는 bigm으로 가두면 안됨.
+                """
                 if (u, t) in self.z_sb:
                     self.model.addCons(self.z_sb[u,t] <= z_u,
                                       name=f"bigm_z_sb_{u}_{t}")
         
         print(f"Added Big-M constraints for all variables")
     
-    def _modify_balance_constraints(self):
+    def _modify_constraints(self):
         """
         Modify individual balance constraints to incorporate z[i]
         
-        Original: LHS == nfl_d + fl_d
-        Modified: LHS - fl_d == nfl_d_param * z[i]
+        --- for Non-flexible demand ---
+        Original: LHS == nfl_d + fl_d, nfl_d == nfl_d_param
+        Modified: LHS == nfl_d + fl_d, nfl_d <= nfl_d_param * z[i], nfl_d >= nfl_d_param * z[i]
         
-        This ensures that when z[i] = 0:
-        - RHS = 0
-        - All variables are forced to 0 by Big-M constraints
-        - Balance is automatically satisfied
+        --- for Storage ---
+        Original: s_E, s_G, s_H at time 6 == initial SOC of E, G, H
+        Modified: s_E, s_G, s_H at time 6 : s == initial SOC * z[i]
         """
-        
-        # Remove old balance constraints
-        for cons_name in list(self.elec_balance_cons.keys()):
-            cons = self.elec_balance_cons[cons_name]
-            self.model.delCons(cons)
-        self.elec_balance_cons = {}
-        
-        for cons_name in list(self.heat_balance_cons.keys()):
-            cons = self.heat_balance_cons[cons_name]
-            self.model.delCons(cons)
-        self.heat_balance_cons = {}
-        
-        for cons_name in list(self.hydro_balance_cons.keys()):
-            cons = self.hydro_balance_cons[cons_name]
-            self.model.delCons(cons)
-        self.hydro_balance_cons = {}
-        
         # Add modified electricity balance constraints
         for u in self.players:
             for t in self.time_periods:
-                lhs = (self.i_E_gri.get((u,t),0) - self.e_E_gri.get((u,t),0) + 
-                       self.i_E_com.get((u,t),0) - self.e_E_com.get((u,t),0))
-                
-                # Add renewable generation
-                lhs += self.p.get((u,'res',t),0)
-                
-                # Add electricity storage discharge/charge
-                lhs += self.b_dis_E.get((u,t),0) - self.b_ch_E.get((u,t),0)
-                
-                # Subtract flexible demand from LHS
-                lhs -= self.fl_d.get((u,'elec',t),0)
-                
-                # RHS: non-flexible demand * z[u]
-                nfl_demand_param = self.params.get(f'd_E_nfl_{u}_{t}', 0)
-                rhs = nfl_demand_param * self.z[u]
-                
-                if not (type(lhs) == int):
-                    cons = self.model.addCons(lhs == rhs, name=f"elec_balance_modified_{u}_{t}")
-                    self.elec_balance_cons[f"elec_balance_modified_{u}_{t}"] = cons
+                if (u,'elec',t) in self.nfl_d:
+                    nfl_demand_param = self.params.get(f'd_E_nfl_{u}_{t}', np.inf)
+                    cons_fix_nfl_lb = self.elec_nfl_demand_lb_cons.get(f"elec_nfl_demand_lb_cons_{u}_{t}", None)
+                    cons_fix_nfl_ub = self.elec_nfl_demand_ub_cons.get(f"elec_nfl_demand_ub_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
+                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
         
-        # Add modified heat balance constraints
-        for u in self.players:
-            for t in self.time_periods:
-                lhs = (self.i_H_gri.get((u,t),0) - self.e_H_gri.get((u,t),0) + 
-                       self.i_H_com.get((u,t),0) - self.e_H_com.get((u,t),0))
-                
-                # Add heat pump production
-                lhs += self.p.get((u,'hp',t),0)
-                
-                # Add heat storage discharge/charge
-                lhs += self.b_dis_H.get((u,t),0) - self.b_ch_H.get((u,t),0)
-                
-                # Subtract flexible demand from LHS
-                lhs -= self.fl_d.get((u,'heat',t),0)
-                
-                # RHS: non-flexible demand * z[u]
-                nfl_demand_param = self.params.get(f'd_H_nfl_{u}_{t}', 0)
-                rhs = nfl_demand_param * self.z[u]
-                
-                if not (type(lhs) == int):
-                    cons = self.model.addCons(lhs == rhs, name=f"heat_balance_modified_{u}_{t}")
-                    self.heat_balance_cons[f"heat_balance_modified_{u}_{t}"] = cons
+                if (u,'hydro',t) in self.nfl_d:
+                    nfl_demand_param = self.params.get(f'd_G_nfl_{u}_{t}', np.inf)
+                    cons_fix_nfl_lb = self.hydro_nfl_demand_lb_cons.get(f"hydro_nfl_demand_lb_cons_{u}_{t}", None)
+                    cons_fix_nfl_ub = self.hydro_nfl_demand_ub_cons.get(f"hydro_nfl_demand_ub_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
+                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
+                if (u,'heat',t) in self.nfl_d:
+                    nfl_demand_param = self.params.get(f'd_H_nfl_{u}_{t}', np.inf)
+                    cons_fix_nfl_lb = self.heat_nfl_demand_lb_cons.get(f"heat_nfl_demand_lb_cons_{u}_{t}", None)
+                    cons_fix_nfl_ub = self.heat_nfl_demand_ub_cons.get(f"heat_nfl_demand_ub_cons_{u}_{t}", None)
+                    self.model.addConsCoeff(cons_fix_nfl_lb, self.z[u], nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_lb, 0.0)
+                    self.model.addConsCoeff(cons_fix_nfl_ub, self.z[u], -1*nfl_demand_param)
+                    self.model.chgRhs(cons_fix_nfl_ub, 0.0)
+
+            if u in self.players_with_elec_storage:
+                initial_soc = self.params.get(f'initial_soc_E', np.inf)
+                cons_fix_s_E = self.storage_cons[f"initial_soc_E_{u}"]
+                self.model.addConsCoeff(cons_fix_s_E, self.z[u], -initial_soc)
+                self.model.chgRhs(cons_fix_s_E, 0.0)
+                self.model.chgLhs(cons_fix_s_E, 0.0) ## equality constraint니까 LHS도 바꿔줘야 함.
+            if u in self.players_with_hydro_storage:
+                initial_soc = self.params.get(f'initial_soc_G', np.inf)
+                cons_fix_s_G = self.storage_cons[f"initial_soc_G_{u}"]
+                self.model.addConsCoeff(cons_fix_s_G, self.z[u], -initial_soc)
+                self.model.chgRhs(cons_fix_s_G, 0.0)
+                self.model.chgLhs(cons_fix_s_G, 0.0)
+            if u in self.players_with_heat_storage:
+                initial_soc = self.params.get(f'initial_soc_H', np.inf)
+                cons_fix_s_H = self.storage_cons[f"initial_soc_H_{u}"]
+                self.model.addConsCoeff(cons_fix_s_H, self.z[u], -initial_soc)
+                self.model.chgRhs(cons_fix_s_H, 0.0)
+                self.model.chgLhs(cons_fix_s_H, 0.0)
         
-        # Add modified hydrogen balance constraints
-        for u in self.players:
-            for t in self.time_periods:
-                lhs = (self.i_G_gri.get((u,t),0) - self.e_G_gri.get((u,t),0) + 
-                       self.i_G_com.get((u,t),0) - self.e_G_com.get((u,t),0))
-                
-                # Add electrolyzer production
-                lhs += self.p.get((u,'els',t),0)
-                
-                # Add hydrogen storage discharge/charge
-                lhs += self.b_dis_G.get((u,t),0) - self.b_ch_G.get((u,t),0)
-                
-                # Subtract flexible demand from LHS
-                lhs -= self.fl_d.get((u,'hydro',t),0)
-                
-                # RHS: non-flexible demand * z[u]
-                nfl_demand_param = self.params.get(f'd_G_nfl_{u}_{t}', 0)
-                rhs = nfl_demand_param * self.z[u]
-                
-                if not (type(lhs) == int):
-                    cons = self.model.addCons(lhs == rhs, name=f"hydro_balance_modified_{u}_{t}")
-                    self.hydro_balance_cons[f"hydro_balance_modified_{u}_{t}"] = cons
         
         print(f"Modified balance constraints to incorporate z variables")
     
@@ -605,9 +555,8 @@ class CoreComputation:
             parameters=self.params,
             current_payoffs=payoffs
         )
-        
+        model = sep_problem.model
         coalition, violation = sep_problem.solve_separation()
-        
         # Compute actual violation for verification
         if len(coalition) > 0:
             coalition_cost = self.compute_coalition_cost(coalition)
@@ -619,7 +568,7 @@ class CoreComputation:
             print(f"  Coalition cost c(S): {coalition_cost:.4f}")
             print(f"  Actual violation (Σ payoffs - cost): {actual_violation:.4f}")
             print(f"  Separation problem violation: {violation:.4f}")
-            
+            print(f"  Found coalition: {coalition}")
             if abs(actual_violation - violation) > 1e-4:
                 raise RuntimeError("Mismatch between actual and computed violation!")
             
@@ -693,7 +642,7 @@ class CoreComputation:
         print(f"WARNING: Maximum iterations ({max_iterations}) reached")
         print(f"{'='*70}\n")
         return payoffs
-    def measure_stability_violation(self, payoffs: Dict[str, float]) -> float:
+    def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False) -> float:
             """
             Measure the maximum stability violation for a given payoff allocation
             
@@ -703,7 +652,8 @@ class CoreComputation:
             Args:
                 payoffs: Payoff allocation dictionary {player_id: payoff}
                         Example: {'u1': -5.0, 'u2': 0.0, 'u3': -0.2}
-                
+                brute_force: If True, compute all coalition costs and solve LP with all constraints.
+                        If False, use separation problem (faster for large N).
             Returns:
                 float: Maximum violation amount
                     - violation > 0: Payoff allocation is NOT in the core
@@ -720,8 +670,90 @@ class CoreComputation:
                 ... else:
                 ...     print(f"Payoff violates core by {violation:.4f}")
             """
-            coalition, violation = self.find_violated_coalition(payoffs)
+            if not brute_force:
+                coalition, violation = self.find_violated_coalition(payoffs)
+            else:
+                violation = self._measure_violation_brute_force(payoffs)
             return violation
+    def _measure_violation_brute_force(self, payoffs: Dict[str, float]) -> float:
+        """
+        Measure violation by solving LP with all coalition constraints
+        
+        This method:
+        1. Computes all coalition costs (if not already computed)
+        2. Solves: min v
+                  s.t. Σ_{i∈S} payoffs[i] ≤ c(S) + v  for all S
+                       v ≥ 0
+        3. Returns optimal v (maximum violation)
+        
+        Args:
+            payoffs: Payoff allocation dictionary
+            
+        Returns:
+            float: Maximum violation (optimal slack variable v)
+        """
+        print("\n" + "="*70)
+        print("BRUTE FORCE VIOLATION MEASUREMENT")
+        print("="*70)
+        print(f"Payoffs: {payoffs}")
+        
+        # Ensure all coalition costs are computed
+        if len(self.coalition_costs) < (2**len(self.players) - 1):
+            print("\nComputing all coalition costs...")
+            self.find_all_coalitions(verbose=False)
+        else:
+            print(f"\n✓ Using cached coalition costs ({len(self.coalition_costs)} coalitions)")
+        
+        # Create LP model
+        print("\nCreating LP model with all stability constraints...")
+        lp_model = Model("ViolationLP")
+        
+        # Create slack variable v
+        v = lp_model.addVar(vtype="C", name="v", lb=0, obj=1.0)
+        
+        # Add constraint for each coalition
+        num_constraints = 0
+        for coalition_tuple, cost in self.coalition_costs.items():
+            coalition = list(coalition_tuple)
+                        
+            # Constraint: Σ_{i∈S} payoffs[i] ≤ c(S) + v
+            lhs = sum(payoffs[i] for i in coalition)
+            lp_model.addCons(lhs <= cost + v, 
+                           name=f"stability_{'_'.join(sorted(coalition))}")
+            num_constraints += 1
+        
+        print(f"✓ Added {num_constraints} stability constraints")
+        
+        # Solve LP
+        print("\nSolving LP...")
+        lp_model.optimize()
+        
+        status = lp_model.getStatus()
+        if status != "optimal":
+            print(f"WARNING: LP failed with status {status}")
+            return float('inf')
+        
+        violation = lp_model.getVal(v)
+        
+        print(f"\n✓ Optimal solution found")
+        print(f"  Maximum violation (slack v): {violation:.6f}")
+        
+        if violation <= 1e-6:
+            print(f"  → Payoff IS in the core (stable)")
+        else:
+            print(f"  → Payoff is NOT in the core (violation = {violation:.6f})")
+            binding_cons = [cons for cons in lp_model.getConss(False) if lp_model.getSlack(cons) <= 1e-6]
+            if len(binding_cons) >1:
+                raise RuntimeError("Multiple binding constraints found!")
+            coalition_str = binding_cons[0].name.replace("stability_", "")
+            coalition = tuple(sorted(coalition_str.split("_")))
+            coalition_cost = self.coalition_costs.get(coalition, None)
+            payoff_sum = sum(payoffs[i] for i in coalition)
+
+            print(f"  Binding coalition: {coalition}")
+        print("="*70 + "\n")
+        
+        return coalition,violation
     def find_all_coalitions(self, verbose: bool = True) -> Dict:
             """
             Compute costs for all non-trivial sub-coalitions
@@ -816,27 +848,23 @@ if __name__ == "__main__":
     )
     
     # Compute core allocation
-    core_allocation = core_comp.compute_core(
-        max_iterations=50,
-        tolerance=1e-6
-    )
+    # core_allocation = core_comp.compute_core(
+    #     max_iterations=500,
+    #     tolerance=1e-6
+    # )
     
-    if core_allocation:
-        print("\n" + "="*70)
-        print("SUCCESS: Core allocation found")
-        print("="*70)
-    else:
-        print("\n" + "="*70)
-        print("RESULT: Core is empty for this game instance")
-        print("="*70)
+    # if core_allocation:
+    #     print("\n" + "="*70)
+    #     print("SUCCESS: Core allocation found")
+    #     print("="*70)
+    # else:
+    #     print("\n" + "="*70)
+    #     print("RESULT: Core is empty for this game instance")
+    #     print("="*70)
 
-        # Compute stability violation of certain cost allocations
-    # 줄리아(Julia)에서 하려면:
-    # cost_allocation = -1.0 .* [822.61, 27.05, 44.58, -115.3, -367.99, -54.31]
-
-    # 파이썬에서는:
-    cost_allocation = {'u1': -822.61, 'u2': -27.05, 'u3': -44.58, 'u4': 115.3, 'u5': 367.99, 'u6': 54.31} # max violation:0.4025
+    # Compute stability violation of certain cost allocations
+    # cost_allocation = {'u1': -822.61, 'u2': -27.05, 'u3': -44.58, 'u4': 115.3, 'u5': 367.99, 'u6': 54.31} # max violation:0.4025
     cost_allocation = {'u1': -829.24, 'u2': -26.75, 'u3': -44.41, 'u4': 115.71, 'u5': 373.74, 'u6': 54.31} # max violation: -0.0075
     violation = core_comp.measure_stability_violation(cost_allocation)
-
+    # violation = core_comp.measure_stability_violation(cost_allocation, brute_force=True)
     coalition_values = core_comp.find_all_coalitions()

@@ -404,6 +404,14 @@ class LocalEnergyMarket:
         self.heatpump_cons = {}
         self.renewable_cons = {}
         
+        # Initialize non-flexible demand fixing constraints
+        self.elec_nfl_demand_lb_cons = {}
+        self.elec_nfl_demand_ub_cons = {}
+        self.hydro_nfl_demand_lb_cons = {}
+        self.hydro_nfl_demand_ub_cons = {}
+        self.heat_nfl_demand_lb_cons = {}
+        self.heat_nfl_demand_ub_cons = {}
+
         # Initialize variables
         self._create_variables(isLP=self.isLP)
         self._create_constraints()
@@ -508,22 +516,31 @@ class LocalEnergyMarket:
                 if u in self.players_with_nfl_elec_demand:
                     nfl_elec_demand_t = self.params.get(f'd_E_nfl_{u}_{t}', 0)
                     res_capacity = 2
-                    self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
-                                                       lb=nfl_elec_demand_t, ub=nfl_elec_demand_t)
+                    self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_nfl_{u}_{t}")
+                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'elec',t] <= -1*nfl_elec_demand_t, name=f"fix_lb_nfl_d_elec_{u}_{t}")
+                    cons_ub = self.model.addCons(self.nfl_d[u,'elec',t] <= nfl_elec_demand_t, name=f"fix_ub_nfl_d_elec_{u}_{t}")
+                    self.elec_nfl_demand_lb_cons[f"elec_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
+                    self.elec_nfl_demand_ub_cons[f"elec_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity, obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap_{u}_{t}', 0.5) * res_capacity)
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
-                    self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
-                                                       lb=nfl_hydro_demand_t, ub=nfl_hydro_demand_t)
+                    self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}")
+                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'hydro',t] <= -1*nfl_hydro_demand_t, name=f"fix_lb_nfl_d_hydro_{u}_{t}")
+                    cons_ub = self.model.addCons(self.nfl_d[u,'hydro',t] <= nfl_hydro_demand_t, name=f"fix_ub_nfl_d_hydro_{u}_{t}")
+                    self.hydro_nfl_demand_lb_cons[f"hydro_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
+                    self.hydro_nfl_demand_ub_cons[f"hydro_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_G_cap_{u}_{t}', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
-                    self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
-                                                       lb=nfl_heat_demand_t, ub=nfl_heat_demand_t)
+                    self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}")
+                    cons_lb = self.model.addCons(-1*self.nfl_d[u,'heat',t] <= -1*nfl_heat_demand_t, name=f"fix_lb_nfl_d_heat_{u}_{t}")
+                    cons_ub = self.model.addCons(self.nfl_d[u,'heat',t] <= nfl_heat_demand_t, name=f"fix_ub_nfl_d_heat_{u}_{t}")
+                    self.heat_nfl_demand_lb_cons[f"heat_nfl_demand_lb_cons_{u}_{t}"] = cons_lb
+                    self.heat_nfl_demand_ub_cons[f"heat_nfl_demand_ub_cons_{u}_{t}"] = cons_ub
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_H_cap_{u}_{t}', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
@@ -658,7 +675,12 @@ class LocalEnergyMarket:
         self.model.data["cons"]["electrolyzer"] = self.electrolyzer_cons
         self.model.data["cons"]["heatpump"] = self.heatpump_cons
         self.model.data["cons"]["renewable"] = self.renewable_cons
-    
+        self.model.data["cons"]["elec_nfl_demand_lb"] = self.elec_nfl_demand_lb_cons
+        self.model.data["cons"]["elec_nfl_demand_ub"] = self.elec_nfl_demand_ub_cons
+        self.model.data["cons"]["hydro_nfl_demand_lb"] = self.hydro_nfl_demand_lb_cons
+        self.model.data["cons"]["hydro_nfl_demand_ub"] = self.hydro_nfl_demand_ub_cons
+        self.model.data["cons"]["heat_nfl_demand_lb"] = self.heat_nfl_demand_lb_cons
+        self.model.data["cons"]["heat_nfl_demand_ub"] = self.heat_nfl_demand_ub_cons
     def _add_electricity_constraints(self):
         """Add electricity-related constraints from slides 9-10"""
         
@@ -687,7 +709,7 @@ class LocalEnergyMarket:
                     
             # Set initial SOC at 6시 (논리적 시작점)
             if (u,6) in self.s_E:
-                initial_soc = self.params.get(f'initial_soc', 1)  # Default 50% SOC
+                initial_soc = self.params.get(f'initial_soc_E', np.inf)  # Default 50% SOC
                 cons = self.model.addCons(self.s_E[u,6] == initial_soc, name=f"initial_soc_E_{u}")
                 self.storage_cons[f"initial_soc_E_{u}"] = cons
             
@@ -791,7 +813,7 @@ class LocalEnergyMarket:
                     
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_H:
-                    initial_soc = self.params.get(f'initial_soc_heat', -1)
+                    initial_soc = self.params.get(f'initial_soc_H', np.inf)
                     cons = self.model.addCons(self.s_H[u,6] == initial_soc, name=f"initial_soc_H_{u}")
                     self.storage_cons[f"initial_soc_H_{u}"] = cons
                 
@@ -984,7 +1006,7 @@ class LocalEnergyMarket:
             if u in self.players_with_hydro_storage:
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)            
-                initial_soc = 25  # 수소 저장소 초기값은 25
+                initial_soc = self.params.get(f'initial_soc_G', np.inf)
                 
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_G:
@@ -2654,7 +2676,7 @@ class LocalEnergyMarket:
         # Electricity storage SOC constraints
         for u in self.players_with_elec_storage:
             if (u,0) in self.lp_s_E:
-                initial_soc = self.params.get(f'initial_soc', 50)
+                initial_soc = self.params.get(f'initial_soc_E', np.inf)
                 lp_model.addCons(self.lp_s_E[u,0] == initial_soc, name=f"initial_soc_E_{u}")
             
             for t in self.time_periods:
@@ -2704,7 +2726,7 @@ class LocalEnergyMarket:
         # Heat storage SOC constraints
         for u in self.players_with_heat_storage:
             if (u,0) in self.lp_s_H:
-                initial_soc = self.params.get(f'initial_soc_heat', -5)
+                initial_soc = self.params.get(f'initial_soc_H', np.inf)
                 lp_model.addCons(self.lp_s_H[u,0] == initial_soc, name=f"initial_soc_H_{u}")
             
             for t in self.time_periods:
@@ -2776,7 +2798,7 @@ class LocalEnergyMarket:
         # hydro storage SOC constraints
         for u in self.players_with_hydro_storage:
             if (u,0) in self.lp_s_G:
-                initial_soc = self.params.get(f'initial_soc', 50)
+                initial_soc = self.params.get(f'initial_soc_G', np.inf)
                 lp_model.addCons(self.lp_s_G[u,0] == initial_soc, name=f"initial_soc_G_{u}")
             
             for t in self.time_periods:
