@@ -246,20 +246,24 @@ def setup_lem_parameters(players, configuration, time_periods):
         'players_with_fl_elec_demand': configuration['players_with_fl_elec_demand'],
         'players_with_fl_hydro_demand': configuration['players_with_fl_hydro_demand'],
         'players_with_fl_heat_demand': configuration['players_with_fl_heat_demand'],
-        'nu_ch': 0.9,
-        'nu_dis': 0.9,
         'pi_peak': 100,
         
         # Storage parameters
-        'storage_power': 0.5,
-        'storage_capacity': 2.0,
+        'storage_power_E': 0.5,
+        'storage_capacity_E': 2.0,
+        'storage_power_G': 10, #kg/h
+        'storage_capacity_G': 50, #kg
         'initial_soc_E': 0.5*1,
         'initial_soc_G': 25,
         'initial_soc_H': 0.2,
         'storage_power_heat': 0.10,
         'storage_capacity_heat': 0.40,
-        'nu_ch': 0.95,
-        'nu_dis': 0.95,        
+        'nu_ch_E': 0.95,
+        'nu_dis_E': 0.95,        
+        'nu_ch_G': 0.95,
+        'nu_dis_G': 0.95,
+        'nu_ch_H': 0.95,
+        'nu_dis_H': 0.95,
         # Equipment capacities
         'hp_cap': 0.08,
         'els_cap': 1,
@@ -286,9 +290,9 @@ def setup_lem_parameters(players, configuration, time_periods):
         'i_G_cap': 100 , #30,
         
         # Cost parameters
-        'c_E_sto': 0.01,
-        'c_G_sto': 0.01,
-        'c_H_sto': 0.01,
+        'c_sto_E': 0.01,
+        'c_sto_G': 0.01,
+        'c_sto_H': 0.01,
     }
     
     parameters['players_with_fl_elec_demand'] = list(set(
@@ -309,15 +313,15 @@ def setup_lem_parameters(players, configuration, time_periods):
                 parameters[f'renewable_cap_{u}_{t}'] = 0
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_hp_{u}'] = parameters['c_hp']
-    for u in parameters['players_with_electrolyzers']:
+    for i,u in enumerate(parameters['players_with_electrolyzers']):
         parameters[f'c_els_{u}'] = parameters['c_els']
         parameters[f'c_su_{u}'] = parameters['c_su']
     for u in parameters['players_with_elec_storage']:
-        parameters[f'c_E_sto_{u}'] = parameters['c_E_sto']
+        parameters[f'c_sto_E_{u}'] = parameters['c_sto_E']
     for u in parameters['players_with_hydro_storage']:
-        parameters[f'c_G_sto_{u}'] = parameters['c_G_sto']
+        parameters[f'c_sto_G_{u}'] = parameters['c_sto_G']
     for u in parameters['players_with_heat_storage']:
-        parameters[f'c_H_sto_{u}'] = parameters['c_H_sto']
+        parameters[f'c_sto_H_{u}'] = parameters['c_sto_H']
     
     # Add grid prices
     if korean_prices_eur and h2_prices_eur:

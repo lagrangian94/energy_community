@@ -556,44 +556,49 @@ class LocalEnergyMarket:
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
                 # Storage variables by type with capacity constraints
-                storage_power = self.params.get(f'storage_power', 50)  # kW power rating
-                storage_capacity = self.params.get(f'storage_capacity', 100)  # kWh capacity
-                nu_ch = self.params.get('nu_ch', 0.9)
-                nu_dis = self.params.get('nu_dis', 0.9)
                 # Electricity storage
                 if u in self.players_with_elec_storage:
-                    c_sto = self.params.get("c_E_sto", 0.0)
+                    storage_power = self.params.get(f'storage_power_E', -np.inf)  # kW power rating
+                    storage_capacity = self.params.get(f'storage_capacity_E', -np.inf)  # kWh capacity
+                    nu_ch = self.params.get('nu_ch_E', 0.9)
+                    nu_dis = self.params.get('nu_dis_E', 0.9)
+                    c_sto_E = self.params.get("c_sto_E", 0.0)
                     self.b_dis_E[u,t] = self.model.addVar(vtype="C", name=f"b_dis_E_{u}_{t}", 
-                                                        lb=0, ub=storage_power, obj=c_sto*(1/nu_dis))
+                                                        lb=0, ub=storage_power, obj=c_sto_E*(1/nu_dis))
                     self.b_ch_E[u,t] = self.model.addVar(vtype="C", name=f"b_ch_E_{u}_{t}", 
-                                                       lb=0, ub=storage_power, obj=c_sto*nu_ch)
+                                                       lb=0, ub=storage_power, obj=c_sto_E*nu_ch)
                     self.s_E[u,t] = self.model.addVar(vtype="C", name=f"s_E_{u}_{t}", 
                                                     lb=0, ub=storage_capacity)
                 
                 # hydro storage
                 if u in self.players_with_hydro_storage:
                     # 수소는 kg 단위
-                    hydro_power = 10 #kg/h
-                    hydro_capacity = 50 #kg
-                    c_sto = self.params.get("c_G_sto", 0.0)
+                    storage_power_G = self.params.get(f'storage_power_G', -np.inf)
+                    storage_capacity_G = self.params.get(f'storage_capacity_G', -np.inf)
+                    nu_ch_G = self.params.get('nu_ch_G', np.inf)
+                    nu_dis_G = self.params.get('nu_dis_G', np.inf)
+                    c_sto_G = self.params.get("c_sto_G", np.inf)
+
                     self.b_dis_G[u,t] = self.model.addVar(vtype="C", name=f"b_dis_G_{u}_{t}", 
-                                                        lb=0, ub=hydro_power, obj=c_sto*(1/nu_dis))
+                                                        lb=0, ub=storage_power_G, obj=c_sto_G*(1/nu_dis_G))
                     self.b_ch_G[u,t] = self.model.addVar(vtype="C", name=f"b_ch_G_{u}_{t}", 
-                                                       lb=0, ub=hydro_power, obj=c_sto*nu_ch)
+                                                       lb=0, ub=storage_power_G, obj=c_sto_G*nu_ch_G)
                     self.s_G[u,t] = self.model.addVar(vtype="C", name=f"s_G_{u}_{t}", 
-                                                    lb=0, ub=hydro_capacity)
+                                                    lb=0, ub=storage_capacity_G)
                 
                 # Heat storage
                 if u in self.players_with_heat_storage:
-                    c_sto = self.params.get("c_H_sto", 0.0)
-                    heat_storage_power = self.params.get("storage_power_heat", -1)
-                    heat_storage_capacity = self.params.get('storage_capacity_heat', -1)  # 400 kWh
+                    c_sto_H = self.params.get("c_sto_H", np.inf)
+                    nu_ch_H = self.params.get('nu_ch_H', np.inf)
+                    nu_dis_H = self.params.get('nu_dis_H', np.inf)
+                    storage_power_heat = self.params.get("storage_power_heat", -np.inf)
+                    storage_capacity_heat = self.params.get('storage_capacity_heat', -np.inf)
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
-                                                        lb=0, ub=heat_storage_power, obj=c_sto*(1/nu_dis))
+                                                        lb=0, ub=storage_power_heat, obj=c_sto_H*(1/nu_dis_H))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
-                                                       lb=0, ub=heat_storage_power, obj=c_sto*nu_ch)
+                                                       lb=0, ub=storage_power_heat, obj=c_sto_H*nu_ch_H)
                     self.s_H[u,t] = self.model.addVar(vtype="C", name=f"s_H_{u}_{t}", 
-                                                    lb=0, ub=heat_storage_capacity)
+                                                    lb=0, ub=storage_capacity_heat)
     
     def _create_constraints(self):
         """Create constraints based on slides 9-15"""
@@ -2923,15 +2928,6 @@ class LocalEnergyMarket:
         print("="*80)
         
         lem_community = LocalEnergyMarket(players, time_periods, base_parameters, isLP=False, dwr=False)
-        # status, results, revenue = lem_community.solve_complete_model()
-        # Presolve와 heuristics 끄기
-        from pyscipopt import SCIP_PARAMSETTING
-        lem_community.model.setPresolve(SCIP_PARAMSETTING.OFF)
-        lem_community.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-        lem_community.model.disablePropagation()
-
-        # 추가 설정: separator도 끄기
-        lem_community.model.setSeparating(SCIP_PARAMSETTING.OFF)
         lem_community.model.optimize()
         status = lem_community.model.getStatus()
         if status == "optimal":

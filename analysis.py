@@ -12,23 +12,24 @@ sys.path.append('/mnt/project')
 
 if __name__ == "__main__":
     # players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
     time_periods = list(range(24))  # 24 hours
     configuration = {}
     configuration["players_with_renewables"] = ['u1']
-    configuration["players_with_electrolyzers"] = ['u2'] + ['u7', 'u8', 'u10']
+    configuration["players_with_electrolyzers"] = ['u2'] + ['u7']
     configuration["players_with_heatpumps"] = ['u3']
     configuration["players_with_elec_storage"] = ['u1']
-    configuration["players_with_hydro_storage"] = ['u2'] + ['u7', 'u10']
+    configuration["players_with_hydro_storage"] = ['u2'] + ['u7']
     configuration["players_with_heat_storage"] = ['u3']
     configuration["players_with_nfl_elec_demand"] = ['u4']
-    configuration["players_with_nfl_hydro_demand"] = ['u5'] + ['u9']
+    configuration["players_with_nfl_hydro_demand"] = ['u5'] + ['u8']
     configuration["players_with_nfl_heat_demand"] = ['u6']
-    configuration["players_with_fl_elec_demand"] = ['u2','u3'] + ['u7', 'u8']
+    configuration["players_with_fl_elec_demand"] = ['u2','u3'] + ['u7']
     configuration["players_with_fl_hydro_demand"] = []
     configuration["players_with_fl_heat_demand"] = []
     parameters = setup_lem_parameters(players, configuration, time_periods)
-
+    parameters["c_els_u7"] = parameters["c_els"]*2
+    parameters["c_su_u7"] = parameters["c_su"]*2
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     ip, lp, chp = True, True, False #True, True, False
@@ -185,5 +186,13 @@ if __name__ == "__main__":
         cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
         violation_chp = core_comp.measure_stability_violation(cost_chp)
         print(f"Violation CHP: {violation_chp:.4f}")
+    if compute_core:
+        ## find all core
+        time_start = time.time()
+        violation_core = core_comp.measure_stability_violation(core_allocation, brute_force=True)
+        time_end = time.time()
+        time_core_bf = time_end - time_start
+        print(f"Time taken: {time_core_bf:.2f} seconds")
+        # print(f"Violation Core: {violation_core:.4f}")
     print('='*70)
     
