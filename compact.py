@@ -591,8 +591,8 @@ class LocalEnergyMarket:
                     c_sto_H = self.params.get("c_sto_H", np.inf)
                     nu_ch_H = self.params.get('nu_ch_H', np.inf)
                     nu_dis_H = self.params.get('nu_dis_H', np.inf)
-                    storage_power_heat = self.params.get("storage_power_heat", -np.inf)
                     storage_capacity_heat = self.params.get('storage_capacity_heat', -np.inf)
+                    storage_power_heat = storage_capacity_heat * self.params.get("storage_power_heat", -np.inf)
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
                                                         lb=0, ub=storage_power_heat, obj=c_sto_H*(1/nu_dis_H))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
