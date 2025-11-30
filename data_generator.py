@@ -264,8 +264,9 @@ def setup_lem_parameters(players, configuration, time_periods):
         'nu_dis_G': 0.95,
         'nu_ch_H': 0.95,
         'nu_dis_H': 0.95,
+        'nu_loss_H':0.002,
         # Equipment capacities
-        'hp_cap': 0.08,
+        'hp_cap': 0.8,
         'els_cap': 1,
         'C_min': 0.15,
         'C_sb': 0.01,
@@ -276,10 +277,11 @@ def setup_lem_parameters(players, configuration, time_periods):
         'c_res': 0.05,
         'c_hp': 0.1,
         'c_els': 0.05,
-        'c_su': 50,
+        'c_su_G': 50,
+        'c_su_H': 10,
         'max_up_time': 3,
         'min_down_time': 2,
-        
+        'nu_COP': 3.28,
         # Grid connection limits
         'res_capacity': 2,
         'e_E_cap': 0.5*2,
@@ -313,9 +315,11 @@ def setup_lem_parameters(players, configuration, time_periods):
                 parameters[f'renewable_cap_{u}_{t}'] = 0
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_hp_{u}'] = parameters['c_hp']
+        parameters[f'nu_COP_{u}'] = parameters['nu_COP']
+        parameters[f'c_su_H_{u}'] = parameters['c_su_H']
     for i,u in enumerate(parameters['players_with_electrolyzers']):
         parameters[f'c_els_{u}'] = parameters['c_els']
-        parameters[f'c_su_{u}'] = parameters['c_su']
+        parameters[f'c_su_G_{u}'] = parameters['c_su_G']
     for u in parameters['players_with_elec_storage']:
         parameters[f'c_sto_E_{u}'] = parameters['c_sto_E']
     for u in parameters['players_with_hydro_storage']:

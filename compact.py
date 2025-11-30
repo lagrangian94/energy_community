@@ -501,9 +501,9 @@ class LocalEnergyMarket:
                                                         lb=0, obj=c_els)
                     
                     # Electrolyzer commitment variables
-                    c_su = self.params.get(f'c_su_{u}', 0)
+                    c_su_G = self.params.get(f'c_su_G_{u}', 0)
                     vartype = "C" if (isLP or self.binary_values is not None) else "B"
-                    self.z_su[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_{u}_{t}", obj=c_su)
+                    self.z_su[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_{u}_{t}", obj=c_su_G)
                     self.z_on[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_{u}_{t}")
                     self.z_off[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_{u}_{t}")
                     self.z_sb[u,t] = self.model.addVar(vtype=vartype, name=f"z_sb_{u}_{t}")
@@ -790,7 +790,7 @@ class LocalEnergyMarket:
         for u in self.players:
             if u in self.players_with_heatpumps:
                 for t in self.time_periods:
-                    nu_COP = self.params.get(f'nu_COP_{u}', 3.0)
+                    nu_COP = self.params.get(f'nu_COP_{u}', np.inf)
                     cons = self.model.addCons(
                         nu_COP * self.fl_d.get((u,'elec',t),0) == self.p.get((u,'hp',t),0),
                         name=f"heatpump_coupling_{u}_{t}"
@@ -800,9 +800,9 @@ class LocalEnergyMarket:
         # Heat storage SOC transition with special 23→0 transition
         for u in self.players:
             if u in self.players_with_heat_storage:
-                nu_ch = self.params.get('nu_ch', 0.9)
-                nu_dis = self.params.get('nu_dis', 0.9)
-                    
+                nu_ch = self.params.get('nu_ch_H', np.inf)
+                nu_dis = self.params.get('nu_dis_H', np.inf)
+                nu_loss = self.params.get('nu_loss_H', np.inf)
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_H:
                     initial_soc = self.params.get(f'initial_soc_H', np.inf)
@@ -813,7 +813,7 @@ class LocalEnergyMarket:
                 for t in range(1, 24):
                     if (u,t) in self.s_H and (u,t-1) in self.s_H:
                         cons = self.model.addCons(
-                            self.s_H[u,t] == self.s_H[u,t-1] + nu_ch * self.b_ch_H[u,t] - (1/nu_dis) * self.b_dis_H[u,t],
+                            self.s_H[u,t] == (1-nu_loss)*self.s_H[u,t-1] + nu_ch * self.b_ch_H[u,t] - (1/nu_dis) * self.b_dis_H[u,t],
                             name=f"soc_transition_H_{u}_{t}"
                         )
                     self.storage_cons[f"soc_transition_H_{u}_{t}"] = cons
@@ -1349,7 +1349,7 @@ class LocalEnergyMarket:
         if 'z_su' in results:
             for (u, t), val in results['z_su'].items():
                 if val > 0:
-                    startup_cost = self.params.get(f'c_su_{u}', 50)
+                    startup_cost = self.params.get(f'c_su_G_{u}', np.inf)
                     revenue_analysis['hydrogen']['startup_cost'] += val * startup_cost
         
         # ========== HEAT ==========
@@ -2244,7 +2244,7 @@ class LocalEnergyMarket:
             summary = electrolyzer_analysis[u]['summary']
             summary['total_hydrogen_produced'] = total_hydrogen
             summary['total_electricity_consumed'] = total_electricity
-            summary['total_startup_cost'] = total_startups * self.params.get(f'c_su_{u}', 50)
+            summary['total_startup_cost'] = total_startups * self.params.get(f'c_su_G_{u}', np.inf)
             summary['hours_online'] = hours_on
             summary['hours_standby'] = hours_sb
             summary['hours_offline'] = hours_off
@@ -3197,7 +3197,7 @@ class LocalEnergyMarket:
                     profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
                 # 5. 시작 비용
                 if 'z_su' in results and (u,t) in results['z_su']:
-                    profit_breakdown['startup_cost'] += results['z_su'][u,t] * self.params.get(f'c_su_{u}', 50)
+                    profit_breakdown['startup_cost'] += results['z_su'][u,t] * self.params.get(f'c_su_G_{u}', 50)
             
             # 순이익 계산
             profit_breakdown['net_profit'] = (

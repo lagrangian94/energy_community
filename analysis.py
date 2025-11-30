@@ -29,7 +29,7 @@ if __name__ == "__main__":
     configuration["players_with_fl_heat_demand"] = []
     parameters = setup_lem_parameters(players, configuration, time_periods)
     parameters["c_els_u7"] = parameters["c_els"]*2
-    parameters["c_su_u7"] = parameters["c_su"]*2
+    parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     ip, lp, chp = True, True, False #True, True, False
