@@ -11,25 +11,25 @@ sys.path.append('/mnt/project')
 
 
 if __name__ == "__main__":
-    # players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+    # players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
     time_periods = list(range(24))  # 24 hours
     configuration = {}
     configuration["players_with_renewables"] = ['u1']
-    configuration["players_with_electrolyzers"] = ['u2'] + ['u7']
+    configuration["players_with_electrolyzers"] = ['u2'] #+ ['u7']
     configuration["players_with_heatpumps"] = ['u3']
     configuration["players_with_elec_storage"] = ['u1']
-    configuration["players_with_hydro_storage"] = ['u2'] + ['u7']
+    configuration["players_with_hydro_storage"] = ['u2'] #+ ['u7']
     configuration["players_with_heat_storage"] = ['u3']
     configuration["players_with_nfl_elec_demand"] = ['u4']
-    configuration["players_with_nfl_hydro_demand"] = ['u5'] + ['u8']
+    configuration["players_with_nfl_hydro_demand"] = ['u5'] #+ ['u8']
     configuration["players_with_nfl_heat_demand"] = ['u6']
-    configuration["players_with_fl_elec_demand"] = ['u2','u3'] + ['u7']
+    configuration["players_with_fl_elec_demand"] = ['u2','u3']# + ['u7']
     configuration["players_with_fl_hydro_demand"] = []
     configuration["players_with_fl_heat_demand"] = []
     parameters = setup_lem_parameters(players, configuration, time_periods)
-    parameters["c_els_u7"] = parameters["c_els"]*2
-    parameters["c_su_u7"] = parameters["c_su_G"]*2
+    # parameters["c_els_u7"] = parameters["c_els"]*2
+    # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     ip, lp, chp = True, True, False #True, True, False

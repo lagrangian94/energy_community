@@ -558,8 +558,8 @@ class LocalEnergyMarket:
                 # Storage variables by type with capacity constraints
                 # Electricity storage
                 if u in self.players_with_elec_storage:
-                    storage_power = self.params.get(f'storage_power_E', -np.inf)  # kW power rating
                     storage_capacity = self.params.get(f'storage_capacity_E', -np.inf)  # kWh capacity
+                    storage_power = storage_capacity * self.params.get(f'storage_power_E', -np.inf)
                     nu_ch = self.params.get('nu_ch_E', 0.9)
                     nu_dis = self.params.get('nu_dis_E', 0.9)
                     c_sto_E = self.params.get("c_sto_E", 0.0)
@@ -1232,6 +1232,9 @@ class LocalEnergyMarket:
             print("  - heat_prices.png") 
             print("  - hydrogen_prices.png")
             print("  - combined_energy_prices.png")
+
+            # 5. Plot storage operation
+            self.plot_storage_operation(results)
         return status, results, revenue_analysis if analyze_revenue else None, prices
     
     def _analyze_revenue_by_resource(self, results):
@@ -3240,9 +3243,22 @@ class LocalEnergyMarket:
 # Example usage with Restricted Pricing
 if __name__ == "__main__":
     # Define example data
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
     time_periods = list(range(24))  # 24 hours
-    parameters = setup_lem_parameters(players, time_periods)
+    configuration = {}
+    configuration["players_with_renewables"] = ['u1']
+    configuration["players_with_electrolyzers"] = ['u2'] + ['u7']
+    configuration["players_with_heatpumps"] = ['u3']
+    configuration["players_with_elec_storage"] = ['u1']
+    configuration["players_with_hydro_storage"] = ['u2'] + ['u7']
+    configuration["players_with_heat_storage"] = ['u3']
+    configuration["players_with_nfl_elec_demand"] = ['u4']
+    configuration["players_with_nfl_hydro_demand"] = ['u5'] + ['u8']
+    configuration["players_with_nfl_heat_demand"] = ['u6']
+    configuration["players_with_fl_elec_demand"] = ['u2','u3'] + ['u7']
+    configuration["players_with_fl_hydro_demand"] = []
+    configuration["players_with_fl_heat_demand"] = []
+    parameters = setup_lem_parameters(players, configuration, time_periods)
     # Create and solve model with Restricted Pricing
     lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
     # lem.model.addCons(lem.z_on[("u2", 0)] == 1)
@@ -3250,7 +3266,7 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("SOLVING COMPLETE MODEL AND ANALYZING REVENUE")
     print("="*60)
-    status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model(lp_relax=False)
+    status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model(analyze_revenue=True)
     
     if status_complete == "optimal":
         # Analyze electrolyzer specific operation

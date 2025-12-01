@@ -5,6 +5,8 @@ Shared parameter configuration for both compact and column generation formulatio
 
 import numpy as np
 import pandas as pd
+from HeatGen import KoreanHeatLoadGenerator
+from HydroGen import KoreanHydrogenLoadGenerator
 
 
 def load_korean_electricity_prices():
@@ -249,7 +251,7 @@ def setup_lem_parameters(players, configuration, time_periods):
         'pi_peak': 100,
         
         # Storage parameters
-        'storage_power_E': 0.5,
+        'storage_power_E': 0.25, #0.25일땐 u2가 이득, 근데 0.5일땐 손해. 왜 그럴까??
         'storage_capacity_E': 2.0,
         'storage_power_G': 10, #kg/h
         'storage_capacity_G': 50, #kg
@@ -363,23 +365,28 @@ def setup_lem_parameters(players, configuration, time_periods):
         parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * tou_multiplier
     
     # DEMANDS
+    heat_generator = KoreanHeatLoadGenerator(floor_area_per_household=42.4, num_households=100)
+    hydro_generator = KoreanHydrogenLoadGenerator()
+    # hydro_generator.generate_profiles()
+    hydro_demand_kg = hydro_generator.get_profiles()
     for u in players:
         for t in time_periods:
             # HYDROGEN DEMAND
             if u in parameters['players_with_nfl_hydro_demand']:
-                if 6 <= t <= 11:
-                    h2_demand = 6 + 4 * np.exp(-((t-9)/2)**2)
-                elif 14 <= t <= 20:
-                    h2_demand = 4 + 3 * np.exp(-((t-17)/2)**2)
-                elif 12 <= t <= 13:
-                    h2_demand = 3.0
-                elif 21 <= t <= 23:
-                    h2_demand = 2.0
-                else:
-                    h2_demand = 1.0
-                parameters[f'd_G_nfl_{u}_{t}'] = h2_demand
-            else:
-                parameters[f'd_G_nfl_{u}_{t}'] = 0
+                parameters[f'd_G_nfl_{u}_{t}'] = hydro_demand_kg[t]
+            #     if 6 <= t <= 11:
+            #         h2_demand = 6 + 4 * np.exp(-((t-9)/2)**2)
+            #     elif 14 <= t <= 20:
+            #         h2_demand = 4 + 3 * np.exp(-((t-17)/2)**2)
+            #     elif 12 <= t <= 13:
+            #         h2_demand = 3.0
+            #     elif 21 <= t <= 23:
+            #         h2_demand = 2.0
+            #     else:
+            #         h2_demand = 1.0
+            #     parameters[f'd_G_nfl_{u}_{t}'] = h2_demand
+            # else:
+            #     parameters[f'd_G_nfl_{u}_{t}'] = 0
             
             # ELEC DEMAND
             if u in parameters['players_with_nfl_elec_demand']:
@@ -388,13 +395,19 @@ def setup_lem_parameters(players, configuration, time_periods):
                 base_demand = 60
                 elec_demand = (base_demand + morning_peak + evening_peak) * 0.001
                 parameters[f'd_E_nfl_{u}_{t}'] = elec_demand
-            
-            # HEAT DEMAND
-            if u in parameters['players_with_nfl_heat_demand']:
-                heat_demand_kw = 60 + 30 * np.cos(2 * np.pi * (t - 3) / 24)
-                heat_demand = heat_demand_kw * 0.001
-                parameters[f'd_H_nfl_{u}_{t}'] = heat_demand
+                        
+            # HEAT DEMAND - NEW: Using Busan data
+            if u in configuration['players_with_nfl_heat_demand']:
+                # Use Korean building data instead of synthetic profile
+                heat_demand_mw = heat_generator.get_hourly_heat_load(hour=t, month=11)
+                parameters[f'd_H_nfl_{u}_{t}'] = heat_demand_mw
             else:
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
+            # if u in parameters['players_with_nfl_heat_demand']:
+            #     heat_demand_kw = 60 + 30 * np.cos(2 * np.pi * (t - 3) / 24)
+            #     heat_demand = heat_demand_kw * 0.001
+            #     parameters[f'd_H_nfl_{u}_{t}'] = heat_demand
+            # else:
+            #     parameters[f'd_H_nfl_{u}_{t}'] = 0
     
     return parameters
