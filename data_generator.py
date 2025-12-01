@@ -5,9 +5,9 @@ Shared parameter configuration for both compact and column generation formulatio
 
 import numpy as np
 import pandas as pd
-from HeatGen import KoreanHeatLoadGenerator
+from HeatGen import KoreanHeatLoadGenerator, KoreanHeatPriceGenerator
 from HydroGen import KoreanHydrogenLoadGenerator
-
+from ElecGen import KoreanElectricityLoadGenerator
 
 def load_korean_electricity_prices():
     """한국 전력가격 데이터 로드 및 처리"""
@@ -47,7 +47,7 @@ def calculate_hydrogen_prices(elec_prices_eur):
     """
     논문 기반 수소 가격 계산
     - 논문: 고정 €2.1/kg
-    - 여기서는 전력 가격에 반비례하도록 동적 설정
+    - sensitivity analysis: 고정? 아니면 다이나믹하게? 여기서는 전력 가격에 반비례하도록 동적 설정
     """
     h2_prices = []
     
@@ -177,23 +177,25 @@ def generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices
     print(f"평균 스프레드: {avg_tou - avg_smp:.2f} EUR/MWh ({(avg_tou/avg_smp - 1)*100:.1f}%)")
 
     # 2. HEAT - 기존 코사인 패턴 유지
+    heat_price_generator = KoreanHeatPriceGenerator()
+    heat_price_profiles = heat_price_generator.get_profiles(11, 'residential', False, False)
     for t in time_periods:
         # 기존 방식 그대로: 아침/저녁 높은 수요
-        heat_demand_factor = 1.0 + 0.3 * np.cos(2 * np.pi * (t - 7) / 24)
-        parameters[f'pi_H_gri_export_{t}'] = 0.25 * heat_demand_factor
+        # heat_demand_factor = 1.0 + 0.3 * np.cos(2 * np.pi * (t - 7) / 24)
+        # parameters[f'pi_H_gri_export_{t}'] = 0.25 * heat_demand_factor
+        parameters[f'pi_H_gri_export_{t}'] = heat_price_profiles[t]
+        # # Import는 Export에 TOU 승수 적용
+        # # 열 TOU: 피크(6-9, 17-23시) 1.2x, 심야(23-6시) 0.8x, 주간 1.0x
+        # if 6 <= t < 9 or 17 <= t < 23:
+        #     tou_multiplier = 1.2
+        # elif 23 <= t or t < 6:
+        #     tou_multiplier = 0.8
+        # else:
+        #     tou_multiplier = 1.0
         
-        # Import는 Export에 TOU 승수 적용
-        # 열 TOU: 피크(6-9, 17-23시) 1.2x, 심야(23-6시) 0.8x, 주간 1.0x
-        if 6 <= t < 9 or 17 <= t < 23:
-            tou_multiplier = 1.2
-        elif 23 <= t or t < 6:
-            tou_multiplier = 0.8
-        else:
-            tou_multiplier = 1.0
-        
-        # 기본 20% 마진 + TOU 조정
-        parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * 1.2 * tou_multiplier
-    
+        # # 기본 20% 마진 + TOU 조정
+        # parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * 1.2 * tou_multiplier
+        parameters[f'pi_H_gri_import_{t}'] = heat_price_profiles[t]
     # 3. HYDROGEN - 기존 유지
     for t in time_periods:
         h2_price = h2_prices_eur[t]
@@ -330,45 +332,18 @@ def setup_lem_parameters(players, configuration, time_periods):
         parameters[f'c_sto_H_{u}'] = parameters['c_sto_H']
     
     # Add grid prices
-    if korean_prices_eur and h2_prices_eur:
-        parameters = generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices_eur)
-    else:
-        # Fallback to synthetic prices
-        for t in time_periods:
-            if 6 <= t <= 9:
-                base_price = 0.6 + 0.2 * np.sin((t-6) * np.pi / 6)
-            elif 10 <= t <= 15:
-                base_price = 0.2 + 0.1 * np.cos((t-12.5) * np.pi / 3)
-            elif 17 <= t <= 20:
-                base_price = 0.9 + 0.3 * np.sin((t-17) * np.pi / 6)
-            elif 21 <= t <= 23 or 0 <= t <= 5:
-                base_price = 0.3 + 0.1 * np.sin(t * np.pi / 12)
-            else:
-                base_price = 0.5
-            
-            variation = 0.02 * np.sin(2 * np.pi * t / 4)
-            parameters[f'pi_E_gri_export_{t}'] = base_price + variation
-            parameters[f'pi_E_gri_import_{t}'] = (base_price + variation) * 1.15
+    parameters = generate_market_price(parameters, time_periods, korean_prices_eur, h2_prices_eur)
     
-    # HEAT PRICES
-    for t in time_periods:
-        heat_demand_factor = 1.0 + 0.3 * np.cos(2 * np.pi * (t - 7) / 24)
-        parameters[f'pi_H_gri_export_{t}'] = (0.4 * parameters[f'pi_E_gri_import_{t}']) * heat_demand_factor
-        
-        if 6 <= t < 9 or 17 <= t < 23:
-            tou_multiplier = 1.30
-        elif 23 <= t or t < 6:
-            tou_multiplier = 1.15
-        else:
-            tou_multiplier = 1.20
-        
-        parameters[f'pi_H_gri_import_{t}'] = parameters[f'pi_H_gri_export_{t}'] * tou_multiplier
     
     # DEMANDS
-    heat_generator = KoreanHeatLoadGenerator(floor_area_per_household=42.4, num_households=100)
+    num_households = 100
+    elec_generator = KoreanElectricityLoadGenerator(num_households=num_households)
+    heat_generator = KoreanHeatLoadGenerator(num_households=num_households)
     hydro_generator = KoreanHydrogenLoadGenerator()
     # hydro_generator.generate_profiles()
+    elec_demand_mwh = elec_generator.generate_community_load(monthly_base_load_mwh_per_household=0.036*3, season='summer', num_days=1, variability='normal', method='empirical')
     hydro_demand_kg = hydro_generator.get_profiles()
+    heat_demand_mwh = heat_generator.get_profiles(month=11)
     for u in players:
         for t in time_periods:
             # HYDROGEN DEMAND
@@ -390,17 +365,16 @@ def setup_lem_parameters(players, configuration, time_periods):
             
             # ELEC DEMAND
             if u in parameters['players_with_nfl_elec_demand']:
-                morning_peak = 20 * np.exp(-((t - 8) / 2)**2)
-                evening_peak = 40 * np.exp(-((t - 19.5) / 2)**2)
-                base_demand = 60
-                elec_demand = (base_demand + morning_peak + evening_peak) * 0.001
-                parameters[f'd_E_nfl_{u}_{t}'] = elec_demand
+                # morning_peak = 20 * np.exp(-((t - 8) / 2)**2)
+                # evening_peak = 40 * np.exp(-((t - 19.5) / 2)**2)
+                # base_demand = 60
+                # elec_demand = (base_demand + morning_peak + evening_peak) * 0.001
+                parameters[f'd_E_nfl_{u}_{t}'] = elec_demand_mwh[t]
                         
             # HEAT DEMAND - NEW: Using Busan data
             if u in configuration['players_with_nfl_heat_demand']:
                 # Use Korean building data instead of synthetic profile
-                heat_demand_mw = heat_generator.get_hourly_heat_load(hour=t, month=11)
-                parameters[f'd_H_nfl_{u}_{t}'] = heat_demand_mw
+                parameters[f'd_H_nfl_{u}_{t}'] = heat_demand_mwh[t]
             else:
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
             # if u in parameters['players_with_nfl_heat_demand']:

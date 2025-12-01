@@ -2,6 +2,133 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Optional
 
+
+class KoreanHeatPriceGenerator:
+    """
+    Korean District Heating Price Generator
+    
+    Data Source: Korea District Heating Corporation (KDHC)
+    Official tariff effective from July 1, 2024
+    https://www.kdhc.co.kr/kdhc/main/contents.do?menuNo=200270
+    
+    Original Prices (KRW/Mcal, VAT excluded):
+    ┌─────────────┬────────────┬──────────────────────────────────┐
+    │ Customer    │ Rate Type  │ Price (KRW/Mcal)                 │
+    ├─────────────┼────────────┼──────────────────────────────────┤
+    │ Residential │ Single     │ 112.32                           │
+    │ (주택용)     │ Seasonal   │ Spring/Fall 110.04               │
+    │             │            │ Summer 99.02                     │
+    │             │            │ Winter 115.59                    │
+    ├─────────────┼────────────┼──────────────────────────────────┤
+    │ Commercial  │ Single     │ 145.82                           │
+    │ (업무용)     │ TOU        │ Peak 167.71 (07:00-10:00)        │
+    │             │            │ Off-peak 138.53                  │
+    ├─────────────┼────────────┼──────────────────────────────────┤
+    │ Public      │ Single     │ 127.34                           │
+    │ (공공용)     │ TOU        │ Peak 146.43 (07:00-10:00)        │
+    │             │            │ Off-peak 120.99                  │
+    └─────────────┴────────────┴──────────────────────────────────┘
+    
+    Conversion Formula:
+    ------------------
+    EUR/MWh = (KRW/Mcal) × 860 / 1,450
+    
+    Where:
+    - 1 MWh = 860 Mcal
+    - 1 EUR = 1,450 KRW (2024 average exchange rate)
+    
+    Examples:
+    ---------
+    Residential single: 112.32 × 860 / 1,450 = 66.62 EUR/MWh
+    Commercial single:  145.82 × 860 / 1,450 = 86.47 EUR/MWh
+    Public single:      127.34 × 860 / 1,450 = 75.52 EUR/MWh
+    """
+    
+    def __init__(self):
+        # Conversion factors
+        self.mcal_per_mwh = 860
+        self.krw_per_eur = 1450
+        
+    def krw_mcal_to_eur_mwh(self, price_krw_mcal: float) -> float:
+        """Convert KRW/Mcal to EUR/MWh"""
+        return price_krw_mcal * self.mcal_per_mwh / self.krw_per_eur
+    
+    def get_profiles(
+        self, 
+        month: int = 1,
+        customer_type: str = 'residential',  # 'residential', 'commercial', 'public'
+        use_seasonal: bool = True,           # Only for residential
+        use_tou: bool = False,               # Only for commercial/public
+    ) -> np.ndarray:
+        """
+        Generate 24-hour heat price profile.
+        
+        Parameters
+        ----------
+        month : int
+            Month (1-12)
+        customer_type : str
+            'residential' (주택용), 'commercial' (업무용), 'public' (공공용)
+        use_seasonal : bool
+            Use seasonal pricing for residential (ignored for other types)
+        use_tou : bool
+            Use time-of-use pricing for commercial/public (ignored for residential)
+        
+        Returns
+        -------
+        prices : np.ndarray (24,)
+            Hourly prices in EUR/MWh
+        """
+        # Get base price based on customer type
+        if customer_type == 'residential':
+            if use_seasonal:
+                # Seasonal rates
+                if month in [12, 1, 2]:  # Winter (동절기)
+                    price_krw = 115.59
+                elif month in [6, 7, 8]:  # Summer (하절기)
+                    price_krw = 99.02
+                else:  # Spring/Fall (춘추절기)
+                    price_krw = 110.04
+            else:
+                # Single rate
+                price_krw = 112.32
+                
+        elif customer_type == 'commercial':
+            price_krw = 145.82  # Base single rate
+            
+        elif customer_type == 'public':
+            price_krw = 127.34  # Base single rate
+            
+        else:
+            raise ValueError(f"Invalid customer_type: {customer_type}")
+        
+        # Convert to EUR/MWh
+        base_price = self.krw_mcal_to_eur_mwh(price_krw)
+        
+        # Generate 24-hour profile (flat by default)
+        prices = np.ones(24) * base_price
+        
+        # Apply TOU for commercial/public if requested
+        if use_tou and customer_type in ['commercial', 'public']:
+            if customer_type == 'commercial':
+                peak_krw = 167.71
+                offpeak_krw = 138.53
+            else:  # public
+                peak_krw = 146.43
+                offpeak_krw = 120.99
+            
+            peak_price = self.krw_mcal_to_eur_mwh(peak_krw)
+            offpeak_price = self.krw_mcal_to_eur_mwh(offpeak_krw)
+            
+            # Apply TOU schedule (demand management: 07:00-10:00)
+            for hour in range(24):
+                if 7 <= hour < 10:  # Peak hours
+                    prices[hour] = peak_price
+                else:  # Off-peak hours
+                    prices[hour] = offpeak_price
+        
+        return prices
+
 class KoreanHeatLoadGenerator:
     """
     Generate realistic heat load profiles based on Korean building data
@@ -9,7 +136,7 @@ class KoreanHeatLoadGenerator:
     Busan Eco-Delta Smart Village Data
     """
     
-    def __init__(self, floor_area_per_household: float = 42.4, num_households: int = 1):
+    def __init__(self, num_households: int = 100, floor_area_per_household: float = 42.4):
         """Initialize with Korean building standards"""
         self.floor_area = floor_area_per_household
         self.num_households = num_households
@@ -39,7 +166,12 @@ class KoreanHeatLoadGenerator:
         # Peak loads (MW for compatibility)
         self.heating_peak = self.peak_heating * self.floor_area / 1e6
         self.cooling_peak = self.peak_cooling * self.floor_area / 1e6
-    
+    def get_profiles(self, month: int = 1) -> np.ndarray:
+        """
+        Get total heat load for all hours and months
+        """
+        profiles = np.array([self.get_hourly_heat_load(hour=t, month=month) for t in range(24)])
+        return profiles * self.num_households
     def get_hourly_heat_load(self, hour: int, month: int = 1) -> float:
         """
         Get total heat load for specific hour and month
@@ -109,7 +241,7 @@ class KoreanHeatLoadGenerator:
         
         # Total (heating/cooling + DHW, never both heating and cooling)
         # Scale by number of households
-        return (max(heating, cooling) + dhw) * self.num_households
+        return (max(heating, cooling) + dhw)
 
     def generate_korean_heat_demand(self, hour: int, month: int = 1) -> float:
         """
