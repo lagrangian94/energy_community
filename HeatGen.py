@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Dict, Tuple, Optional
 
 
-class KoreanHeatPriceGenerator:
+class HeatPriceGenerator:
     """
     Korean District Heating Price Generator
     
@@ -35,20 +35,20 @@ class KoreanHeatPriceGenerator:
     
     Where:
     - 1 MWh = 860 Mcal
-    - 1 EUR = 1,450 KRW (2024 average exchange rate)
+    - 1 EUR = 1,400 KRW (2024 average exchange rate)
     
     Examples:
     ---------
-    Residential single: 112.32 × 860 / 1,450 = 66.62 EUR/MWh
-    Commercial single:  145.82 × 860 / 1,450 = 86.47 EUR/MWh
-    Public single:      127.34 × 860 / 1,450 = 75.52 EUR/MWh
+    Residential single: 112.32 × 860 / 1,400 = 66.62 EUR/MWh
+    Commercial single:  145.82 × 860 / 1,400 = 86.47 EUR/MWh
+    Public single:      127.34 × 860 / 1,400 = 75.52 EUR/MWh
     """
     
-    def __init__(self):
+    def __init__(self, tou: bool = False):
         # Conversion factors
         self.mcal_per_mwh = 860
-        self.krw_per_eur = 1450
-        
+        self.krw_per_eur = 1400
+        self.tou = tou
     def krw_mcal_to_eur_mwh(self, price_krw_mcal: float) -> float:
         """Convert KRW/Mcal to EUR/MWh"""
         return price_krw_mcal * self.mcal_per_mwh / self.krw_per_eur
@@ -58,7 +58,6 @@ class KoreanHeatPriceGenerator:
         month: int = 1,
         customer_type: str = 'residential',  # 'residential', 'commercial', 'public'
         use_seasonal: bool = True,           # Only for residential
-        use_tou: bool = False,               # Only for commercial/public
     ) -> np.ndarray:
         """
         Generate 24-hour heat price profile.
@@ -71,8 +70,6 @@ class KoreanHeatPriceGenerator:
             'residential' (주택용), 'commercial' (업무용), 'public' (공공용)
         use_seasonal : bool
             Use seasonal pricing for residential (ignored for other types)
-        use_tou : bool
-            Use time-of-use pricing for commercial/public (ignored for residential)
         
         Returns
         -------
@@ -109,7 +106,7 @@ class KoreanHeatPriceGenerator:
         prices = np.ones(24) * base_price
         
         # Apply TOU for commercial/public if requested
-        if use_tou and customer_type in ['commercial', 'public']:
+        if self.tou and customer_type in ['commercial', 'public']:
             if customer_type == 'commercial':
                 peak_krw = 167.71
                 offpeak_krw = 138.53
@@ -126,10 +123,10 @@ class KoreanHeatPriceGenerator:
                     prices[hour] = peak_price
                 else:  # Off-peak hours
                     prices[hour] = offpeak_price
-        
-        return prices
+        import_prices = [price*1.001 for price in prices]
+        return {"import": import_prices, "export": prices}
 
-class KoreanHeatLoadGenerator:
+class HeatLoadGenerator:
     """
     Generate realistic heat load profiles based on Korean building data
     Reference: Kim et al. (2021), Energies 14(14), 4284
@@ -243,7 +240,7 @@ class KoreanHeatLoadGenerator:
         # Scale by number of households
         return (max(heating, cooling) + dhw)
 
-    def generate_korean_heat_demand(self, hour: int, month: int = 1) -> float:
+    def generate_heat_demand(self, hour: int, month: int = 1) -> float:
         """
         Simple function to replace existing heat demand calculation
         
@@ -252,9 +249,9 @@ class KoreanHeatLoadGenerator:
             heat_demand = heat_demand_kw * 0.001
         
         Usage:
-            parameters[f'd_H_nfl_{u}_{t}'] = generate_korean_heat_demand(t, month=1)
+            parameters[f'd_H_nfl_{u}_{t}'] = generate_heat_demand(t, month=1)
         """
-        generator = KoreanHeatLoadGenerator()
+        generator = HeatLoadGenerator()
         return generator.get_hourly_heat_load(hour, month)
 
 
@@ -264,7 +261,7 @@ class KoreanHeatLoadGenerator:
 # # =============================================================================
 
 # # 시나리오 1-1: 에너지 효율 20% 개선 (난방/냉방 intensity 감소)
-# generator = KoreanHeatLoadGenerator()
+# generator = HeatLoadGenerator()
 # generator.customize(
 #     heating_intensity=31.0 * 0.8,  # 24.8 kWh/m²·year
 #     cooling_intensity=19.0 * 0.8   # 15.2 kWh/m²·year

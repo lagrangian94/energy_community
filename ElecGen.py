@@ -18,7 +18,230 @@ import matplotlib.pyplot as plt
 from typing import Dict, Optional, Literal
 from scipy import stats
 
-class KoreanElectricityLoadGenerator:
+
+class ElectricityPriceGenerator:
+    """
+    Electricity Price Generator
+    """
+    
+    def __init__(self, use_korean_price: bool = False, tou: bool = False):
+        self.use_korean_price = use_korean_price
+        self.tou = tou
+        if not self.use_korean_price:
+            self.denmark_data = self.load_and_process_denmark_data()
+        else:
+            self.korean_data = self.load_and_process_korean_data()
+    def load_and_process_denmark_data(self):
+        data = pd.read_csv('./data/case_study_2019_DK2.csv')
+        # Convert date into datatime
+        data["Date"] = pd.to_datetime(data["Datetime"], format="%d/%m/%Y %H:%M", errors="coerce")
+        mask = data.Date.isnull()
+        data.loc[mask, 'Date']= pd.to_datetime(data[mask]['Datetime'], format='%d-%m-%Y %H:%M',errors='coerce')
+        # Add comumn with year, month, day, hour
+        data['Year'] = data['Date'].dt.year
+        data['Month'] = data['Date'].dt.month
+        data['Day'] = data['Date'].dt.day
+        data['Hour'] = data['Date'].dt.hour
+        def get_season(date):
+            month = date.month
+            if month in [12, 1, 2]:
+                return 'winter'
+            elif month in [3, 4, 5]:
+                return 'spring'
+            elif month in [6, 7, 8]:
+                return 'summer'
+            else:
+                return 'fall'
+        
+        data['season'] = data['Date'].apply(get_season)
+        # Set datetime column as index
+        data.set_index('Date', inplace = True)
+        return data
+    
+    def generate_price(self, month: int=1, time_horizon: int = 24):
+        if not self.use_korean_price:
+            data = self.denmark_data[self.denmark_data['Month'] == month].reset_index(drop=True)
+            data = data[data['Day'] == 1].reset_index(drop=True)
+            arr = [data[data['Hour']==t]["El_price_EUR_MWh"].values[0] for t in range(time_horizon)]
+            arr = np.array(arr).astype('float64')
+
+            if self.tou:
+                import_prices = self.create_tou_import_prices(arr, month, time_horizon)
+            else:
+                import_prices = arr*1.001
+            return {"import": import_prices, "export": arr}
+        else:
+            data = self.korean_data
+            data = data[data['Month'] == month].reset_index(drop=True)
+            ## time_horizon이 8760이라면, 아래 isin()을 적절히 계산해야.
+            data = data[data['Day'].isin([1])].reset_index(drop=True)
+            price_col = [f"{i:02d}시" for i in range(1,25)]
+            arr = data[price_col].values.flatten()
+            arr = np.array(arr).astype('float64')
+            arr = arr/1.4 ## exchange rate: kor to eur
+
+            if self.tou:
+                import_prices = self.create_tou_import_prices(arr, month, time_horizon)
+            else:
+                import_prices = arr*0.999
+            return {"import": import_prices, "export": arr}
+            return arr
+    def load_and_process_korean_data(self):
+        """한국 전력가격 데이터 로드 및 처리"""
+        
+        # CSV 읽기 (cp949 또는 euc-kr 인코딩 사용)
+        data = pd.read_csv('./data/kor_elec_grid_price.csv', encoding='cp949')
+        
+        # 컬럼명 정리 (한글 깨짐 수정)
+        column_mapping = {
+            data.columns[0]: 'period',  # 기간
+            **{data.columns[i]: f'{i:02d}시' for i in range(1, 25)},  # 01시 ~ 24시
+            data.columns[25]: 'max',     # 최대
+            data.columns[26]: 'min',     # 최소
+            data.columns[27]: 'weighted_avg'  # 가중평균
+        }
+        data = data.rename(columns=column_mapping)
+        data["Date"] = pd.to_datetime(data["period"], format="%Y/%m/%d", errors="coerce")
+        mask = data.Date.isnull()
+        data.loc[mask, 'Date']= pd.to_datetime(data[mask]['period'], format='%Y%m/%d',errors='coerce')
+        # Add comumn with year, month, day, hour
+        data['Year'] = data['Date'].dt.year
+        data['Month'] = data['Date'].dt.month
+        data['Day'] = data['Date'].dt.day
+        data['Hour'] = data['Date'].dt.hour
+        # data.set_index('Date', inplace = True)
+        return data
+    def create_tou_import_prices(self, smp_prices_eur, month, time_horizon):
+        """
+        한국의 TOU 요금제를 기반으로 import 가격 생성
+        
+        한국 전력 산업용(을) 고압A 선택II 요금제 기준:
+        - 경부하: 23:00~09:00 (기본요금 대비 약 60-70%)
+        - 중간부하: 09:00~10:00, 12:00~13:00, 17:00~23:00 (기본요금)
+        - 최대부하: 10:00~12:00, 13:00~17:00 (기본요금 대비 약 140-180%)
+        """
+        def get_season(month):
+            if month in [12, 1, 2]:
+                return 'winter'
+            elif month in [3, 4, 5]:
+                return 'spring'
+            elif month in [6, 7, 8]:
+                return 'summer'
+            else:
+                return 'fall'
+        # SMP 평균가격 계산
+        season = get_season(month)
+        avg_smp = np.mean(smp_prices_eur.reshape(-1, 24),axis=0)
+        is_negative_price = sum(avg_smp <0) >0
+        if is_negative_price:
+            raise Exception("Negative price의 경우 TOU 어떻게 할지 조사 필요")
+        # TOU 기본요금 = SMP 평균 + 15% 안정성 프리미엄
+        tou_base = avg_smp
+        
+        tou_import_prices = []
+        
+        # 시간대별 multiplier 설정
+        if season == 'summer':
+            # 여름철 (7-8월): 86.9 / 146.0 / 163.8
+            multipliers = {
+                'off_peak': 0.595,   # 86.9/146.0
+                'mid_peak': 1.000,   
+                'peak': 1.122        # 163.8/146.0
+            }
+            print("\n[TOU 설정] 여름철 일반용(을) 고압A 선택II")
+        elif season == 'winter':
+            # 겨울철 (11-2월): 92.1 / 144.4 / 163.8
+            multipliers = {
+                'off_peak': 0.638,   # 92.1/144.4
+                'mid_peak': 1.000,   
+                'peak': 1.134        # 163.8/144.4
+            }
+            print("\n[TOU 설정] 겨울철 일반용(을) 고압A 선택II")
+        else:  # spring_fall
+            # 봄/가을 (3-5, 9-10월): 96.6 / 146.0
+            multipliers = {
+                'off_peak': 0.662,   # 96.6/146.0
+                'mid_peak': 1.000,   
+                'peak': 1.000        # 최대부하 없음
+            }
+            print("\n[TOU 설정] 봄/가을 일반용(을) 고압A 선택II")
+    
+        print(f"  - 경부하: {multipliers['off_peak']:.3f}x")
+        print(f"  - 중간부하: {multipliers['mid_peak']:.3f}x")
+        print(f"  - 최대부하: {multipliers['peak']:.3f}x")
+        
+        for t in range(time_horizon):
+            # 계절별 시간대 구분
+            if season == 'summer' or season == 'winter':
+                if t >= 23 or t < 9:
+                    tou_multiplier = multipliers['off_peak']
+                    tou_import_prices.append(tou_base[t]*tou_multiplier)
+                    period_name = "경부하"
+                elif (10 <= t < 12) or (13 <= t < 17):
+                    tou_multiplier = multipliers['peak']
+                    tou_import_prices.append(tou_base[t]*tou_multiplier)
+                    period_name = "최대부하"
+                else:
+                    tou_multiplier = multipliers['mid_peak']
+                    tou_import_prices.append(tou_base[t]*tou_multiplier)
+                    period_name = "중간부하"
+            else:  # spring_fall
+                if 8 <= t < 11:
+                    tou_multiplier = multipliers['mid_peak']
+                    tou_import_prices.append(tou_base[t]*tou_multiplier)
+                    period_name = "중간부하"
+                else:
+                    tou_multiplier = multipliers['off_peak']
+                    tou_import_prices.append(tou_base[t]*tou_multiplier)
+                    period_name = "경부하"
+        return tou_import_prices
+
+class ElectricityProdGenerator:
+    """
+    Electricity Production Generator
+    """
+    
+    def __init__(self, num_units: int =1, wind_el_ratio: float = 2.0,solar_el_ratio: float = 1.0, el_cap_mw:float = 1.0):
+        self.num_units = num_units
+        self.wind_el_ratio = wind_el_ratio
+        self.el_cap_mw = el_cap_mw
+        self.wind_cap_mw = el_cap_mw * wind_el_ratio
+        self.solar_cap_mw = el_cap_mw * solar_el_ratio
+        self.wind_data = self.load_and_process_wind_data()
+    def load_and_process_wind_data(self):
+        data = pd.read_csv('./data/case_study_2019_DK2.csv')
+        # Convert date into datatime
+        data["Date"] = pd.to_datetime(data["Datetime"], format="%d/%m/%Y %H:%M", errors="coerce")
+        mask = data.Date.isnull()
+        data.loc[mask, 'Date']= pd.to_datetime(data[mask]['Datetime'], format='%d-%m-%Y %H:%M',errors='coerce')
+        # Add comumn with year, month, day, hour
+        data['Year'] = data['Date'].dt.year
+        data['Month'] = data['Date'].dt.month
+        data['Day'] = data['Date'].dt.day
+        data['Hour'] = data['Date'].dt.hour
+        def get_season(date):
+            month = date.month
+            if month in [12, 1, 2]:
+                return 'winter'
+            elif month in [3, 4, 5]:
+                return 'spring'
+            elif month in [6, 7, 8]:
+                return 'summer'
+            else:
+                return 'fall'
+        
+        data['season'] = data['Date'].apply(get_season)
+        # Set datetime column as index
+        data.set_index('Date', inplace = True)
+        return data
+    def generate_wind_production(self, month: int = 12, time_horizon: int = 24):
+        data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
+        data = data[data['Day'] == 1].reset_index(drop=True)
+        arr = [data[data['Hour']==t]["CP"].values[0] for t in range(time_horizon)]
+        arr = np.array(arr).astype('float64') * self.wind_el_ratio
+        return arr
+
+class ElectricityLoadGenerator:
     """
     Time-series based load profile generator
     """

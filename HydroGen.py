@@ -1,5 +1,5 @@
 """
-Korean Hydrogen Load Generator
+Hydrogen Load Generator
 
 논문 기반 수소 수요 프로파일 생성 클래스
 출처: 김민수, 전성탁, 정태영 (2023), 
@@ -13,7 +13,27 @@ import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Optional
 
 
-class KoreanHydrogenLoadGenerator:
+def generate_hydrogen_price(base_price_eur: float = 2.1, tou: bool = False, time_horizon: int = 24):
+    """
+    Generate hydrogen price
+    Parameters:
+    ----------
+    base_price_eur: float
+        Base price of hydrogen in EUR/kg
+    tou: bool
+        True if using TOU, False otherwise
+    time_horizon: int
+        Time horizon in hours
+    """
+    time_periods = list(range(time_horizon))
+    if tou:
+        raise Exception("TOU is not supported yet")
+    h2_prices_export = [base_price_eur for _ in time_periods]
+    h2_prices_import = [price*1.001 for price in h2_prices_export]
+    h2_prices = {"import": h2_prices_import, "export": h2_prices_export}
+    return h2_prices
+
+class HydrogenLoadGenerator:
     """
     한국 수소 충전소 데이터 기반 수요 프로파일 생성기
     
@@ -34,7 +54,7 @@ class KoreanHydrogenLoadGenerator:
     Examples:
     --------
     >>> # 기본 사용
-    >>> generator = KoreanHydrogenLoadGenerator()
+    >>> generator = HydrogenLoadGenerator()
     >>> generator.generate_profiles()
     >>> car_prof, bus_prof = generator.get_profiles()
     
@@ -68,7 +88,7 @@ class KoreanHydrogenLoadGenerator:
         self.generation_params = None
         
         if self.verbose:
-            print("KoreanHydrogenLoadGenerator initialized")
+            print("HydrogenLoadGenerator initialized")
             print(f"Data source: {self.metadata['citation']}")
     
     def _load_paper_data(self):
@@ -348,7 +368,7 @@ class KoreanHydrogenLoadGenerator:
         """프로파일 요약 정보 출력"""
         
         print("="*70)
-        print("Korean Hydrogen Load Generator - Summary")
+        print("Hydrogen Load Generator - Summary")
         print("="*70)
         
         # 데이터 출처
@@ -791,7 +811,7 @@ generator.customize(hourly_car_visits=custom_perfect_uniform)
 # results = []
 # 
 # for multiplier in avg_fill_multipliers:
-#     gen = KoreanHydrogenLoadGenerator()
+#     gen = HydrogenLoadGenerator()
 #     car_prof, bus_prof = gen.customize(
 #         avg_fill_car=3.54 * multiplier,
 #         avg_fill_bus=16.93 * multiplier
@@ -814,7 +834,7 @@ generator.customize(hourly_car_visits=custom_perfect_uniform)
 # results = []
 # 
 # for multiplier in demand_multipliers:
-#     gen = KoreanHydrogenLoadGenerator()
+#     gen = HydrogenLoadGenerator()
 #     car_prof, bus_prof = gen.customize(
 #         target_car_daily=59.20 * multiplier,
 #         target_bus_daily=41.81 * multiplier
@@ -849,7 +869,7 @@ generator.customize(hourly_car_visits=custom_perfect_uniform)
 # 
 # results = {}
 # for scenario_name, visits in peak_shift_scenarios.items():
-#     gen = KoreanHydrogenLoadGenerator()
+#     gen = HydrogenLoadGenerator()
 #     car_prof, bus_prof = gen.customize(hourly_car_visits=visits)
 #     
 #     results[scenario_name] = {
