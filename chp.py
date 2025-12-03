@@ -180,7 +180,7 @@ class ColumnGenerationSolver:
             self.players, 
             self.time_periods, 
             self.parameters, 
-            isLP=False, 
+            model_type = 'mip',
             dwr=False
         )
         
@@ -228,7 +228,7 @@ class ColumnGenerationSolver:
                 [player],
                 self.time_periods,
                 individual_params,
-                isLP=False,
+                model_type = 'mip',
                 dwr=False
             )
             lem_individual.model.hideOutput()

@@ -14,7 +14,7 @@ class PlayerSubproblem:
     Individual player's subproblem for column generation
     Reuses LocalEnergyMarket class with single player
     """
-    def __init__(self, player: str, time_periods: List[int], parameters: Dict, isLP: bool = True):
+    def __init__(self, player: str, time_periods: List[int], parameters: Dict, model_type: str):
         """
         Create subproblem for a single player
         
@@ -27,14 +27,16 @@ class PlayerSubproblem:
         self.player = player
         self.time_periods = time_periods
         self.parameters = parameters
-        
+        if model_type not in ('mip', 'lp'):
+            raise ValueError("model_type must be either 'mip' or 'lp', got: {}".format(model_type))
+        self.model_type = model_type
         # Create LocalEnergyMarket with single player and dwr=True
         # dwr=True removes community balance constraints
         self.lem = LocalEnergyMarket(
             players=[player],
             time_periods=time_periods,
             parameters=parameters,
-            isLP=isLP,
+            model_type=model_type,
             dwr=True  # This removes community balance constraints
         )
         

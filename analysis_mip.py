@@ -31,12 +31,12 @@ if __name__ == "__main__":
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
-    lem = LocalEnergyMarket(players, time_periods, parameters, isLP=False)
-    ip, lp, chp = True, True, False #True, True, False
+    ip, chp = True, False #True, True, False
     ## ========================================
     ## Restricted Pricing
     ## ========================================
     if ip:
+        lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip')
         time_start = time.time()
         status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model(analyze_revenue=False)
         time_end = time.time()
@@ -45,6 +45,7 @@ if __name__ == "__main__":
         player_profits, prices = lem.calculate_player_profits_with_community_prices(results_complete, community_prices)
         comparison_results = lem.compare_individual_vs_community_profits(
             players, 
+            lem.model_type,
             time_periods, 
             parameters,
             player_profits
@@ -60,28 +61,6 @@ if __name__ == "__main__":
         print("PLAYER BENEFIT ANALYSIS")
         print("="*80)
     
-    ## ========================================
-    ## Marginal Pricing (Solve LP Relaxation)
-    ## ========================================
-    if lp:
-        lem_lp = LocalEnergyMarket(players, time_periods, parameters, isLP=True)
-        time_start = time.time()
-        status_lp, _, revenue_analysis_lp, community_prices_lp = lem_lp.solve_complete_model(analyze_revenue=False)
-        time_end = time.time()
-        time_lp = time_end - time_start
-        print(f"Time taken: {time_lp:.2f} seconds")
-        ## 실제 실현된 수익은 original "results_complete"를 사용하여 계산
-        results_to_be_compared = results_complete
-        player_profits_lp, prices_lp = lem_lp.calculate_player_profits_with_community_prices(results_to_be_compared, community_prices_lp)
-        profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players} # marginal pricing의 수익
-        ## 커뮤니티 수입을 계산할때도 original "lem" instance를 사용하여 계산 (lp는 relaxation이니까 부정확)
-        comparison_results_lp = lem.compare_individual_vs_community_profits(
-            players, 
-            time_periods, 
-            parameters,
-            player_profits_lp
-        )
-        lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_lp.tex')
     ## ========================================
     ## Convex Hull Pricing
     ## ========================================
@@ -123,7 +102,7 @@ if __name__ == "__main__":
                 print("="*80)
                 synergy_results = cg_solver.analyze_synergy_with_convex_hull_prices(solution, obj_val, chp)
                 profit_chp = {u: synergy_results['community_profits'][u]['net_profit'] for u in players}
-                comparison_results_chp = comparison_results_lp
+                comparison_results_chp = comparison_results
                 for u in players:
                     ### !!!net profit key만 업데이트함에 유의!!!
                     comparison_results_chp["community"]["player_profits"][u]["net_profit"] = player_profits_chp[u]
@@ -141,6 +120,7 @@ if __name__ == "__main__":
     core_comp = CoreComputation(
         players=players,
         time_periods=time_periods,
+        model_type='mip',
         parameters=parameters
     )
 

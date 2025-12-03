@@ -27,6 +27,7 @@ class SeparationProblem(LocalEnergyMarket):
     def __init__(self, 
                  players: List[str],
                  time_periods: List[int],
+                 model_type: str,
                  parameters: Dict,
                  current_payoffs: Dict[str, float]):
         """
@@ -41,7 +42,7 @@ class SeparationProblem(LocalEnergyMarket):
         self.current_payoffs = current_payoffs
         
         # Initialize parent class
-        super().__init__(players, time_periods, parameters, isLP=False, dwr=False)
+        super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False)
         
         # Add binary selection variables and constraints
         self._add_selection_variables()
@@ -352,6 +353,7 @@ class CoreComputation:
     
     def __init__(self, 
                  players: List[str],
+                 model_type: str,
                  time_periods: List[int],
                  parameters: Dict):
         """
@@ -359,10 +361,14 @@ class CoreComputation:
         
         Args:
             players: List of all player IDs
+            model_type: Type of model to use ('mip' or 'lp')
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
         """
         self.players = players
+        if model_type not in ('mip', 'lp'):
+            raise ValueError("model_type must be either 'mip' or 'lp', got: {}".format(model_type))
+        self.model_type = model_type
         self.time_periods = time_periods
         self.params = parameters
         
@@ -409,7 +415,7 @@ class CoreComputation:
             players=list(coalition),
             time_periods=self.time_periods,
             parameters=self.params,
-            isLP=False,
+            model_type=self.model_type,
             dwr=False
         )
         
@@ -558,6 +564,7 @@ class CoreComputation:
         sep_problem = SeparationProblem(
             players=self.players,
             time_periods=self.time_periods,
+            model_type=self.model_type,
             parameters=self.params,
             current_payoffs=payoffs
         )
