@@ -577,8 +577,8 @@ class LocalEnergyMarket:
                 # hydro storage
                 if u in self.players_with_hydro_storage:
                     # 수소는 kg 단위
-                    storage_power_G = self.params.get(f'storage_power_G', -np.inf)
                     storage_capacity_G = self.params.get(f'storage_capacity_G', -np.inf)
+                    storage_power_G = storage_capacity_G * self.params.get(f'storage_power_G', -np.inf)
                     nu_ch_G = self.params.get('nu_ch_G', np.inf)
                     nu_dis_G = self.params.get('nu_dis_G', np.inf)
                     c_sto_G = self.params.get("c_sto_G", np.inf)

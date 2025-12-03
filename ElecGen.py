@@ -204,6 +204,7 @@ class ElectricityProdGenerator:
     def __init__(self, num_units: int =1, wind_el_ratio: float = 2.0,solar_el_ratio: float = 1.0, el_cap_mw:float = 1.0):
         self.num_units = num_units
         self.wind_el_ratio = wind_el_ratio
+        self.solar_el_ratio = solar_el_ratio
         self.el_cap_mw = el_cap_mw
         self.wind_cap_mw = el_cap_mw * wind_el_ratio
         self.solar_cap_mw = el_cap_mw * solar_el_ratio
@@ -239,6 +240,18 @@ class ElectricityProdGenerator:
         data = data[data['Day'] == 1].reset_index(drop=True)
         arr = [data[data['Hour']==t]["CP"].values[0] for t in range(time_horizon)]
         arr = np.array(arr).astype('float64') * self.wind_el_ratio
+        return arr
+    def generate_solar_production(self, month: int=1, time_horizon: int = 24):
+        """
+        이건 추후에 data 수집할 예정. 지금은 단순한 임의 formula로 생성.
+        """
+        arr = []
+        for t in range(time_horizon):
+            if 6 <= t <= 18:
+                solar_factor = np.exp(-((t - 12) / 3.5)**2)
+                arr.append(solar_factor * self.solar_el_ratio)  # MW
+            else:
+                arr.append(0)
         return arr
 
 class ElectricityLoadGenerator:

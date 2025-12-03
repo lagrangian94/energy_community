@@ -11,14 +11,16 @@ sys.path.append('/mnt/project')
 
 
 if __name__ == "__main__":
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6','u7']
     # players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
     time_periods = list(range(24))  # 24 hours
     configuration = {}
-    configuration["players_with_renewables"] = ['u1']
+    configuration["players_with_renewables"] = ['u1', 'u7']
+    configuration["players_with_solar"] = ['u7']
+    configuration["players_with_wind"] = ['u1']
     configuration["players_with_electrolyzers"] = ['u2'] #+ ['u7']
     configuration["players_with_heatpumps"] = ['u3']
-    configuration["players_with_elec_storage"] = ['u1']
+    configuration["players_with_elec_storage"] = ['u1','u7']
     configuration["players_with_hydro_storage"] = ['u2'] #+ ['u7']
     configuration["players_with_heat_storage"] = ['u3']
     configuration["players_with_nfl_elec_demand"] = ['u4']
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     )
 
     # Compute core allocation
-    compute_core = True
+    compute_core = False
     if compute_core:
         time_start = time.time()
         core_allocation = core_comp.compute_core(

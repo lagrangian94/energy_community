@@ -28,7 +28,7 @@ def update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_p
     return parameters
 
 
-def setup_lem_parameters(players, configuration, time_periods):
+def setup_lem_parameters(players, configuration, time_periods, sensitivity_analysis = None):
     """
     Setup parameters for Local Energy Market problem
     
@@ -39,9 +39,22 @@ def setup_lem_parameters(players, configuration, time_periods):
     Returns:
         dict: Complete parameter dictionary
     """
+    if sensitivity_analysis:
+        use_korean_price = sensitivity_analysis['use_korean_price']
+        use_tou = sensitivity_analysis['use_tou']
+        month = sensitivity_analysis['month']
+    else:
+        use_korean_price = True
+        use_tou = True
+        month = 1
+        storage_capacity_E = 1.0
+        storage_capacity_G = 50
+        storage_capacity_heat = 0.40
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
+        'players_with_solar': configuration['players_with_solar'],
+        'players_with_wind': configuration['players_with_wind'],
         'players_with_electrolyzers': configuration['players_with_electrolyzers'],
         'players_with_heatpumps': configuration['players_with_heatpumps'],
         'players_with_elec_storage': configuration['players_with_elec_storage'],
@@ -53,18 +66,18 @@ def setup_lem_parameters(players, configuration, time_periods):
         'players_with_fl_elec_demand': configuration['players_with_fl_elec_demand'],
         'players_with_fl_hydro_demand': configuration['players_with_fl_hydro_demand'],
         'players_with_fl_heat_demand': configuration['players_with_fl_heat_demand'],
-        'pi_peak': 100,
         
         # Storage parameters
-        'storage_power_E': 0.25, #0.25일땐 u2가 이득, 근데 0.5일땐 손해. 왜 그럴까??
-        'storage_capacity_E': 2.0,
-        'storage_power_G': 10, #kg/h
+         #capacity_E=2이고, power_E_가0.25일땐 u2가 이득, 근데 power_E_가 0.5일땐 손해. 왜 그럴까??
+        'storage_capacity_E': 1.0,
         'storage_capacity_G': 50, #kg
+        'storage_capacity_heat': 0.40,
+        'storage_power_E': 0.5,
+        'storage_power_G': 0.25,
+        'storage_power_heat': 0.5,
         'initial_soc_E': 0.5*1,
         'initial_soc_G': 25,
         'initial_soc_H': 0.2,
-        'storage_power_heat': 0.5, #ratio
-        'storage_capacity_heat': 0.40,
         'nu_ch_E': 0.95,
         'nu_dis_E': 0.95,        
         'nu_ch_G': 0.95,
@@ -103,7 +116,6 @@ def setup_lem_parameters(players, configuration, time_periods):
         'c_sto_G': 0.01,
         'c_sto_H': 0.01,
     }
-    
     parameters['players_with_fl_elec_demand'] = list(set(
         parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']
     ))
@@ -111,12 +123,17 @@ def setup_lem_parameters(players, configuration, time_periods):
 
     electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
     wind_production = electricity_prod_generator.generate_wind_production()
+    pv_production = electricity_prod_generator.generate_solar_production()
     # Add cost parameters
-    for u in parameters['players_with_renewables']:
+    for u in parameters['players_with_solar']:
         parameters[f'c_res_{u}'] = parameters['c_res']
-        # RENEWABLE AVAILABILITY - Natural solar curve
+        for t in time_periods:
+            parameters[f'renewable_cap_{u}_{t}'] = pv_production[t]  # MW
+    for u in parameters['players_with_wind']:
+        parameters[f'c_res_{u}'] = parameters['c_res']
         for t in time_periods:
             parameters[f'renewable_cap_{u}_{t}'] = wind_production[t]  # MW
+
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_hp_{u}'] = parameters['c_hp']
         parameters[f'nu_COP_{u}'] = parameters['nu_COP']
@@ -132,9 +149,13 @@ def setup_lem_parameters(players, configuration, time_periods):
         parameters[f'c_sto_H_{u}'] = parameters['c_sto_H']
     
     # Add grid prices
-    elec_prices = ElectricityPriceGenerator(use_korean_price=True, tou=True).generate_price(month=1, time_horizon=24)
-    h2_prices = generate_hydrogen_price(base_price_eur=4.1, tou=False, time_horizon=24)
-    heat_prices = HeatPriceGenerator().get_profiles(1, 'residential', False)
+    elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou).generate_price(month=month, time_horizon=24)
+    base_price_eur = 4.1 if use_korean_price else 2.1
+    """
+    hydrogen, heat price의 tou는 차후 구현
+    """
+    h2_prices = generate_hydrogen_price(base_price_eur=base_price_eur, time_horizon=24)
+    heat_prices = HeatPriceGenerator().get_profiles(month=month, customer_type='residential', use_seasonal=False)
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
     
     
