@@ -33,7 +33,8 @@ if __name__ == "__main__":
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
-    ip, chp = True, False #True, True, False
+    ip, chp = True, True #True, True, False
+    compute_core = False
     ## ========================================
     ## Restricted Pricing
     ## ========================================
@@ -70,7 +71,7 @@ if __name__ == "__main__":
         print("COLUMN GENERATION FOR LOCAL ENERGY MARKET")
         print("Dantzig-Wolfe Decomposition Implementation")
         print("="*80)
-        cg_solver = ColumnGenerationSolver(players, time_periods, parameters)
+        cg_solver = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=results_complete)
         time_start = time.time()
         status, solution, obj_val = cg_solver.solve()
         time_end = time.time()
@@ -88,15 +89,6 @@ if __name__ == "__main__":
                 print("CONVEX HULL PRICES (Community Balance Shadow Prices)")
                 print("="*80)
                 chp = solution['convex_hull_prices']
-                print("\nElectricity Prices (EUR/MWh):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['electricity'][t]:8.4f}")
-                print("\nHeat Prices (EUR/MWh):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['heat'][t]:8.4f}")
-                print("\nHydrogen Prices (EUR/kg):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['hydrogen'][t]:8.4f}")
 
                 # Perform synergy analysis
                 print("\n" + "="*80)
@@ -107,7 +99,7 @@ if __name__ == "__main__":
                 comparison_results_chp = comparison_results
                 for u in players:
                     ### !!!net profit key만 업데이트함에 유의!!!
-                    comparison_results_chp["community"]["player_profits"][u]["net_profit"] = player_profits_chp[u]
+                    comparison_results_chp["community"]["player_profits"][u]["net_profit"] = profit_chp[u]
                 lem.generate_beamer_synergy_table(comparison_results_chp, players, filename='synergy_analysis_chp.tex')
             print("\n" + "="*80)
             print("COMPLETED SUCCESSFULLY")
@@ -127,7 +119,6 @@ if __name__ == "__main__":
     )
 
     # Compute core allocation
-    compute_core = True
     if compute_core:
         time_start = time.time()
         core_allocation = core_comp.compute_core(
@@ -145,7 +136,7 @@ if __name__ == "__main__":
                 print("SUCCESS: Core allocation found")
                 print("="*70)
 
-                comparison_results_core = comparison_results_lp
+                comparison_results_core = comparison_results
                 for u in players:
                     ### !!!net profit key만 업데이트함에 유의!!!
                     comparison_results_core["community"]["player_profits"][u]["net_profit"] = -1*core_allocation[u]
@@ -160,10 +151,6 @@ if __name__ == "__main__":
         cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
         violation_ip = core_comp.measure_stability_violation(cost_ip)
         print(f"Violation IP: {violation_ip:.4f}")
-    if lp:
-        cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-        violation_lp = core_comp.measure_stability_violation(cost_lp)
-        print(f"Violation LP: {violation_lp:.4f}")
     if chp:
         cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
         violation_chp = core_comp.measure_stability_violation(cost_chp)

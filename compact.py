@@ -281,7 +281,7 @@ def solve_and_extract_results(model):
     # 최적화 상태 확인
     status = model.getStatus()
     time = model.getSolvingTime()
-    print(f"model status: {status}, time: {time}")
+    # print(f"model status: {status}, time: {time}")
     if status in ["optimal", "gaplimit"]:            
         # 결과 저장할 딕셔너리 초기화
         results = {}
@@ -564,8 +564,8 @@ class LocalEnergyMarket:
                 if u in self.players_with_elec_storage:
                     storage_capacity = self.params.get(f'storage_capacity_E', -np.inf)  # kWh capacity
                     storage_power = storage_capacity * self.params.get(f'storage_power_E', -np.inf)
-                    nu_ch = self.params.get('nu_ch_E', 0.9)
-                    nu_dis = self.params.get('nu_dis_E', 0.9)
+                    nu_ch = self.params.get('nu_ch_E', np.inf)
+                    nu_dis = self.params.get('nu_dis_E', np.inf)
                     c_sto_E = self.params.get("c_sto_E", 0.0)
                     self.b_dis_E[u,t] = self.model.addVar(vtype="C", name=f"b_dis_E_{u}_{t}", 
                                                         lb=0, ub=storage_power, obj=c_sto_E*(1/nu_dis))
@@ -770,11 +770,7 @@ class LocalEnergyMarket:
                 community_balance = quicksum(self.i_E_com.get((u,t),0) - self.e_E_com.get((u,t),0) for u in self.players)
                 cons = self.model.addCons(community_balance == 0, name=f"community_elec_balance_{t}")
                 self.community_elec_balance_cons[f"community_elec_balance_{t}"] = cons
-                # # Constraint (10): Peak power constraint
-                # for t in self.time_periods:
-                #     grid_import = quicksum(self.i_E_gri.get((u,t),0) - self.e_E_gri.get((u,t),0) for u in self.players)
-                #     cons = self.model.addCons(grid_import <= self.chi_peak, name=f"peak_power_{t}")
-                #     self.peak_power_cons[f"peak_power_{t}"] = cons
+
         
     def _add_heat_constraints(self):
         """Add heat-related constraints from slide 12"""
@@ -840,8 +836,8 @@ class LocalEnergyMarket:
         if not self.dwr:
             # Community heat balance
             for t in self.time_periods:
-                community_heat_balance = quicksum(self.i_H_com.get((u,t),0) - self.e_H_com.get((u,t),0) for u in self.players)
-                cons = self.model.addCons(community_heat_balance == 0, name=f"community_heat_balance_{t}")
+                community_balance = quicksum(self.i_H_com.get((u,t),0) - self.e_H_com.get((u,t),0) for u in self.players)
+                cons = self.model.addCons(community_balance == 0, name=f"community_heat_balance_{t}")
                 self.community_heat_balance_cons[f"community_heat_balance_{t}"] = cons
         
     def _add_hydro_constraints(self):
@@ -897,8 +893,8 @@ class LocalEnergyMarket:
         if not self.dwr:
         # Community hydro balance
             for t in self.time_periods:
-                community_hydro_balance = quicksum(self.e_G_com.get((u,t),0) - self.i_G_com.get((u,t),0) for u in self.players)
-                cons = self.model.addCons(community_hydro_balance == 0, name=f"community_hydro_balance_{t}")
+                community_balance = quicksum(self.e_G_com.get((u,t),0) - self.i_G_com.get((u,t),0) for u in self.players)
+                cons = self.model.addCons(community_balance == 0, name=f"community_hydro_balance_{t}")
                 self.community_hydro_balance_cons[f"community_hydro_balance_{t}"] = cons
     
     def _add_hydro_nonconvex_cons_mip(self):
@@ -1147,12 +1143,22 @@ class LocalEnergyMarket:
                 prices['hydro'][t] = np.abs(pi)#np.round(np.abs(pi), 2)        
         else:
             raise ValueError("a function <solve_complete_model> has a model_type must be either 'mip' or 'lp', got: {}".format(self.model_type))
-        energy = ['electricity', 'heat', 'hydro']
-        for e in energy:
-            print(f"{e} price:")
-            for t in self.time_periods:
-                print(f"  {t}: {prices[e][t]}")
-            print(f"--------------------------------")
+        
+        import pandas as pd
+        # 시간별 가격들을 리스트로 만들면서 동시에 print
+        price_records = []
+        for t in self.time_periods:
+            row = {
+                "time": t,
+                "electricity": prices["electricity"][t],
+                "heat": prices["heat"][t],
+                "hydro": prices["hydro"][t]
+            }
+            price_records.append(row)
+            print(f"{t:6d} {row['electricity']:12.4f} {row['heat']:12.4f} {row['hydro']:12.4f}")
+        price_df = pd.DataFrame(price_records)
+        price_df.to_csv(f"community_prices_{self.model_type}.csv", index=False)
+        print(f"✓ Community prices by time exported to 'community_prices_{self.model_type}.csv'")
         e_import_prices = [self.params[f'pi_E_gri_import_{t}'] for t in self.time_periods]
         e_export_prices = [self.params[f'pi_E_gri_export_{t}'] for t in self.time_periods]
         g_import_prices = [self.params[f'pi_G_gri_import_{t}'] for t in self.time_periods]
@@ -2511,15 +2517,6 @@ class LocalEnergyMarket:
         print("\n" + "="*80)
         print("RESTRICTED PRICING COMPLETED SUCCESSFULLY!")
         print("="*80)
-        print(f"Electricity price")
-        for t in self.time_periods:
-            print(f"  {t:2d}: {prices['electricity'][t]}")
-        print(f"Heat price")
-        for t in self.time_periods:
-            print(f"  {t:2d}: {prices['heat'][t]}")
-        print(f"Hydro price")
-        for t in self.time_periods:
-            print(f"  {t:2d}: {prices['hydro'][t]}")
         print("\n" + "="*80)
         print("RESTRICTED PRICING COMPLETED SUCCESSFULLY!")
 

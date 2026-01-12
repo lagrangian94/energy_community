@@ -20,7 +20,7 @@ class ColumnGenerationSolver:
     Main column generation solver for Local Energy Market
     Implements Dantzig-Wolfe decomposition to compute convex hull prices
     """
-    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict):
+    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict, model_type: str, init_sol: Dict = None):
         """
         Initialize column generation solver
         
@@ -32,7 +32,7 @@ class ColumnGenerationSolver:
         self.players = players
         self.time_periods = time_periods
         self.parameters = parameters
-        
+        self.init_sol = init_sol
         # Create subproblems for each player
         print("=== Creating Subproblems ===")
         self.subproblems = {}
@@ -42,7 +42,7 @@ class ColumnGenerationSolver:
                 player=player,
                 time_periods=time_periods,
                 parameters=parameters,
-                isLP=True
+                model_type=model_type
             )
         
         # Create master problem
@@ -68,7 +68,7 @@ class ColumnGenerationSolver:
                 
         # Generate initial columns for each player
         print("\n=== Generating Initial Columns ===")
-        self.master._add_initial_columns(self.subproblems)
+        self.master._add_initial_columns(self.subproblems, self.init_sol)
         # Create master constraints
         self.master._create_master_constraints()
         # Disable presolving to allow pricer to work properly
@@ -78,7 +78,6 @@ class ColumnGenerationSolver:
         self.master.model.disablePropagation()
         # Create pricer
         pricer = LEMPricer(
-            master_model=self.master.model,
             subproblems=self.subproblems,
             time_periods=self.time_periods,
             players=self.players
@@ -98,7 +97,7 @@ class ColumnGenerationSolver:
         
         if status == "optimal":
             obj_val = self.master.get_objective_value()
-            solution = self.master.get_solution()
+            solution, solution_by_player = self.master.get_solution()
             
             print("\n" + "="*80)
             print("COLUMN GENERATION - COMPLETED")
@@ -129,14 +128,14 @@ class ColumnGenerationSolver:
                     t_elec_cons = self.master.model.getTransformedCons(elec_cons)
                     t_heat_cons = self.master.model.getTransformedCons(heat_cons)
                     t_hydro_cons = self.master.model.getTransformedCons(hydro_cons)
-                    chp_elec[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_elec_cons)), 2)
-                    chp_heat[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_heat_cons)), 2)
-                    chp_hydro[t] = np.round(np.abs(self.master.model.getDualsolLinear(t_hydro_cons)), 2)
+                    chp_elec[t] = np.abs(self.master.model.getDualsolLinear(t_elec_cons))
+                    chp_heat[t] = np.abs(self.master.model.getDualsolLinear(t_heat_cons))
+                    chp_hydro[t] = np.abs(self.master.model.getDualsolLinear(t_hydro_cons))
                 except:
                     raise Exception("Error getting dual multipliers")
             
-            # Print sample of convex hull prices
-            print("\nSample Convex Hull Prices (EUR/MWh or EUR/kg):")
+            # Print convex hull prices
+            print("\nConvex Hull Prices (EUR/MWh or EUR/kg):")
             sample_times = self.time_periods
             print(f"{'Time':>6} {'Electricity':>12} {'Heat':>12} {'Hydrogen':>12}")
             print("-" * 48)
@@ -489,7 +488,7 @@ def main():
     print("="*80)
     
     try:
-        cg_solver = ColumnGenerationSolver(players, time_periods, parameters)
+        cg_solver = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip')
         status, solution, obj_val = cg_solver.solve()
         
         if status == "optimal":
@@ -504,16 +503,6 @@ def main():
                 print("CONVEX HULL PRICES (Community Balance Shadow Prices)")
                 print("="*80)
                 chp = solution['convex_hull_prices']
-                print("\nElectricity Prices (EUR/MWh):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['electricity'][t]:8.4f}")
-                print("\nHeat Prices (EUR/MWh):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['heat'][t]:8.4f}")
-                print("\nHydrogen Prices (EUR/kg):")
-                for t in time_periods:
-                    print(f"  t={t:2d}: {chp['hydrogen'][t]:8.4f}")
-
                 # Perform synergy analysis
                 print("\n" + "="*80)
                 print("PERFORMING SYNERGY ANALYSIS")

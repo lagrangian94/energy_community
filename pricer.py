@@ -9,13 +9,12 @@ class LEMPricer(Pricer):
     """
     Pricer for Local Energy Market column generation
     """
-    def __init__(self, master_model, subproblems: Dict[str, 'PlayerSubproblem'], 
+    def __init__(self, subproblems: Dict[str, 'PlayerSubproblem'], 
                  time_periods: List[int], players: List[str], *args, **kwargs):
         """
         Initialize pricer
         
         Args:
-            master_model: Master problem SCIP model
             subproblems: Dictionary of player subproblems
             time_periods: List of time periods
             players: List of player IDs
@@ -36,10 +35,8 @@ class LEMPricer(Pricer):
         """
         # Get current LP objective (only for regular pricing)
         if not farkas:
-            try:
-                lp_obj = self.model.getLPObjVal()
-            except:
-                lp_obj = 0.0
+            lp_obj = self.model.getLPObjVal()
+
                 
         # Get dual values or Farkas multipliers from master problem
         dual_elec = {}
@@ -79,24 +76,22 @@ class LEMPricer(Pricer):
                 dual_convexity[player] = self.model.getDualsolLinear(t_conv_cons)
                 
         # DEBUG: Print dual prices for first few iterations
-        if not farkas and self.iteration <= 3:
-            print(f"\n  [Iter {self.iteration}] Dual Prices Sample:")
-            sample_times = [0, 6, 12, 18] if len(self.time_periods) >= 24 else self.time_periods[:4]
-            print(f"    Time  Elec      Heat      Hydro")
-            for t in sample_times:
-                print(f"    {t:4d}  {dual_elec[t]:8.4f}  {dual_heat[t]:8.4f}  {dual_hydro[t]:8.4f}")
-            print(f"    Convexity duals: {dual_convexity}")
+        # if not farkas and self.iteration <= 3:
+        #     print(f"\n  [Iter {self.iteration}] Dual Prices Sample:")
+        #     sample_times = [0, 6, 12, 18] if len(self.time_periods) >= 24 else self.time_periods[:4]
+        #     print(f"    Time  Elec      Heat      Hydro")
+        #     for t in sample_times:
+        #         print(f"    {t:4d}  {dual_elec[t]:8.4f}  {dual_heat[t]:8.4f}  {dual_hydro[t]:8.4f}")
+        #     print(f"    Convexity duals: {dual_convexity}")
                     
         # Solve pricing problems for each player
         columns_added = 0
         min_reduced_cost = float('inf')
         
-        print(f"iteration {self.iteration}, dual_elec: {dual_elec}")
-        print(f"iteration {self.iteration}, dual_heat: {dual_heat}")
-        print(f"iteration {self.iteration}, dual_hydro: {dual_hydro}")
-        print(f"iteration {self.iteration}, dual_convexity: {dual_convexity}")
-        if self.iteration > 5000:
-            print('stop')
+        # print(f"iteration {self.iteration}, dual_elec: {dual_elec}")
+        # print(f"iteration {self.iteration}, dual_heat: {dual_heat}")
+        # print(f"iteration {self.iteration}, dual_hydro: {dual_hydro}")
+        # print(f"iteration {self.iteration}, dual_convexity: {dual_convexity}")
         debug_sol = {}
         for player in self.players:
             reduced_cost, solution = self.subproblems[player].solve_pricing(
@@ -112,12 +107,14 @@ class LEMPricer(Pricer):
                 min_reduced_cost = min(min_reduced_cost, reduced_cost)
                 # break ## column은 한 player만 넣어도 수렴에 충분.
         
+        if columns_added == 0:
+            min_reduced_cost = 0.0
         # Print iteration summary
         if not farkas:
             print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | Min RC: {min_reduced_cost:10.4f} | Columns added: {columns_added}")
 
-        else:
-            print(f"  Total Farkas columns added: {columns_added}")
+        # else:
+        #     print(f"  Total Farkas columns added: {columns_added}")
         
         # Check convergence
         if columns_added == 0:
@@ -152,7 +149,7 @@ class LEMPricer(Pricer):
             solution: Solution dictionary from subproblem
         """
         # Create new variable in master problem
-        col_idx = len([k for k in self.model.data['vars'].keys() if k[0] == player])
+        col_idx = len(self.model.data['vars'][player])
         var_name = f"lambda_{player}_{col_idx}"
         
         # Variable is continuous in [0, 1] (for RMP)
@@ -165,11 +162,11 @@ class LEMPricer(Pricer):
         )
         
         # Store variable and solution
-        self.model.data['vars'][player, col_idx] = {
+        self.model.data['vars'][player][col_idx] = {
             'var': new_var,
             'solution': solution
         }
-        
+
         # Add variable to convexity constraint
         self.model.addConsCoeff(
             self.model.getTransformedCons(self.model.data['cons']['convexity'][player]),
