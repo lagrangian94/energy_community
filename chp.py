@@ -68,6 +68,7 @@ class ColumnGenerationSolver:
                 
         # Generate initial columns for each player
         print("\n=== Generating Initial Columns ===")
+        self.init_sol=None
         self.master._add_initial_columns(self.subproblems, self.init_sol)
         # Create master constraints
         self.master._create_master_constraints()
