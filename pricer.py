@@ -4,7 +4,7 @@ Pricer for Local Energy Market column generation
 from pyscipopt import Pricer, SCIP_RESULT, quicksum
 from typing import Dict, List
 import numpy as np
-
+from solver import calculate_column_cost
 class LEMPricer(Pricer):
     """
     Pricer for Local Energy Market column generation
@@ -99,15 +99,15 @@ class LEMPricer(Pricer):
             )
             debug_sol[player] = solution            
             # Add column if reduced cost is negative
-            if reduced_cost < -1e-6:
+            if reduced_cost < -1e-8:
                 columns_added += 1
                 self._add_column(player, solution)
                 if farkas:
                     print(f"  {player}: Farkas column added (RC={reduced_cost:.4f})")
                 min_reduced_cost = min(min_reduced_cost, reduced_cost)
                 # break ## column은 한 player만 넣어도 수렴에 충분.
-        
         if columns_added == 0:
+            print(f"Reduced cost: {reduced_cost:.4f}")
             min_reduced_cost = 0.0
         # Print iteration summary
         if not farkas:
@@ -157,7 +157,7 @@ class LEMPricer(Pricer):
             name=var_name,
             vtype="C",
             lb=0.0,
-            obj=self._calculate_column_cost(player, solution),
+            obj=calculate_column_cost(player, solution, self.subproblems[player].parameters, self.time_periods),
             pricedVar=True
         )
         
@@ -209,60 +209,4 @@ class LEMPricer(Pricer):
                 coeff_hydro
             )
             
-    def _calculate_column_cost(self, player: str, solution: Dict) -> float:
-        """
-        Calculate the cost coefficient for a column (extreme point)
-        This is the objective value of the subproblem with original costs
-        """
-        cost = 0.0
-        params = self.subproblems[player].parameters
-        
-        # Grid trading costs
-        for t in self.time_periods:
-            # Electricity grid
-            e_E_gri = solution.get('e_E_gri', {}).get((player, t), 0)
-            i_E_gri = solution.get('i_E_gri', {}).get((player, t), 0)
-            cost += i_E_gri * params.get(f'pi_E_gri_import_{t}', 0)
-            cost -= e_E_gri * params.get(f'pi_E_gri_export_{t}', 0)
-            
-            # Heat grid
-            e_H_gri = solution.get('e_H_gri', {}).get((player, t), 0)
-            i_H_gri = solution.get('i_H_gri', {}).get((player, t), 0)
-            cost += i_H_gri * params.get(f'pi_H_gri_import_{t}', 0)
-            cost -= e_H_gri * params.get(f'pi_H_gri_export_{t}', 0)
-            
-            # Hydrogen grid
-            e_G_gri = solution.get('e_G_gri', {}).get((player, t), 0)
-            i_G_gri = solution.get('i_G_gri', {}).get((player, t), 0)
-            cost += i_G_gri * params.get(f'pi_G_gri_import_{t}', 0)
-            cost -= e_G_gri * params.get(f'pi_G_gri_export_{t}', 0)
-            
-            # Production costs
-            p_res = solution.get('p', {}).get((player, 'res', t), 0)
-            p_hp = solution.get('p', {}).get((player, 'hp', t), 0)
-            p_els = solution.get('p', {}).get((player, 'els', t), 0)
-            
-            cost += p_res * params.get(f'c_res_{player}', 0)
-            cost += p_hp * params.get(f'c_hp_{player}', 0)
-            cost += p_els * params.get(f'c_els_{player}', 0)
-            
-            # Startup costs
-            z_su = solution.get('z_su', {}).get((player, t), 0)
-            cost += z_su * params.get(f'c_su_{player}', 0)
-
-            # Storage costs
-            b_ch_E = solution.get('b_ch_E', {}).get((player, t), 0)
-            b_dis_E = solution.get('b_dis_E', {}).get((player, t), 0)
-            b_ch_G = solution.get('b_ch_G', {}).get((player, t), 0)
-            b_dis_G = solution.get('b_dis_G', {}).get((player, t), 0)
-            b_ch_H = solution.get('b_ch_H', {}).get((player, t), 0)
-            b_dis_H = solution.get('b_dis_H', {}).get((player, t), 0)
-
-            cost += b_ch_E * params.get(f'c_E_sto_{player}', 0)
-            cost += b_dis_E * params.get(f'c_E_sto_{player}', 0)
-            cost += b_ch_G * params.get(f'c_G_sto_{player}', 0)
-            cost += b_dis_G * params.get(f'c_G_sto_{player}', 0)
-            cost += b_ch_H * params.get(f'c_H_sto_{player}', 0)
-            cost += b_dis_H * params.get(f'c_H_sto_{player}', 0)
-        
-        return cost
+    

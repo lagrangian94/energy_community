@@ -71,7 +71,9 @@ if __name__ == "__main__":
         print("COLUMN GENERATION FOR LOCAL ENERGY MARKET")
         print("Dantzig-Wolfe Decomposition Implementation")
         print("="*80)
-        cg_solver = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=results_complete)
+        init_sol = results_complete
+        # init_sol = None
+        cg_solver = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=init_sol)
         time_start = time.time()
         status, solution, obj_val = cg_solver.solve()
         time_end = time.time()

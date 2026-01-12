@@ -300,7 +300,7 @@ class MasterProblem:
             var_name = f"lambda_{player}_{col_idx}"
         
             # Calculate column cost (original objective value)
-            cost = self._calculate_column_cost(player, solution, subproblems[player].parameters)
+            cost = calculate_column_cost(player, solution, subproblems[player].parameters, self.time_periods)
             
             # Create variable
             new_var = self.model.addVar(
@@ -316,59 +316,6 @@ class MasterProblem:
                 'solution': solution
             }
             print(f"  {player}: Initial column added (cost={cost:.4f})")
-
-    def _calculate_column_cost(self, player: str, solution: Dict, params: Dict) -> float:
-        """Calculate cost for a column"""
-        cost = 0.0
-        
-        for t in self.time_periods:
-            # Grid costs
-            """
-            solution에서 get하는건 없을 경우 0.0 (player type별로 없을수도 있으니)
-            """
-            e_E_gri = solution.get('e_E_gri', {}).get((player, t), 0.0)
-            i_E_gri = solution.get('i_E_gri', {}).get((player, t), 0.0)
-            cost += i_E_gri * params.get(f'pi_E_gri_import_{t}', np.inf)
-            cost -= e_E_gri * params.get(f'pi_E_gri_export_{t}', np.inf)
-            
-            e_H_gri = solution.get('e_H_gri', {}).get((player, t), 0.0)
-            i_H_gri = solution.get('i_H_gri', {}).get((player, t), 0.0)
-            cost += i_H_gri * params.get(f'pi_H_gri_import_{t}', np.inf)
-            cost -= e_H_gri * params.get(f'pi_H_gri_export_{t}', np.inf)
-            
-            e_G_gri = solution.get('e_G_gri', {}).get((player, t), 0.0)
-            i_G_gri = solution.get('i_G_gri', {}).get((player, t), 0.0)
-            cost += i_G_gri * params.get(f'pi_G_gri_import_{t}', np.inf)
-            cost -= e_G_gri * params.get(f'pi_G_gri_export_{t}', np.inf)
-            
-            # Production and startup costs
-            p_res = solution.get('p', {}).get((player, 'res', t), 0.0)
-            p_hp = solution.get('p', {}).get((player, 'hp', t), 0.0)
-            p_els = solution.get('p', {}).get((player, 'els', t), 0.0)
-            z_su = solution.get('z_su', {}).get((player, t), 0.0)
-
-            cost += p_res * params.get(f'c_res_{player}', 0.0)
-            cost += p_hp * params.get(f'c_hp_{player}', 0.0)
-            cost += p_els * params.get(f'c_els_{player}', 0.0)
-            cost += z_su * params.get(f'c_su_G_{player}', 0.0)
-            # Storage costs
-            b_dis_E, b_ch_E = solution.get('b_dis_E', {}).get((player, t), 0.0), solution.get('b_ch_E', {}).get((player, t), 0.0)
-            b_dis_G, b_ch_G = solution.get('b_dis_G', {}).get((player, t), 0.0), solution.get('b_ch_G', {}).get((player, t), 0.0)
-            b_dis_H, b_ch_H = solution.get('b_dis_H', {}).get((player, t), 0.0), solution.get('b_ch_H', {}).get((player, t), 0.0)
-            nu_ch_E, nu_dis_E = params.get(f'nu_ch_E', np.inf), params.get(f'nu_dis_E', np.inf)
-            nu_ch_G, nu_dis_G = params.get(f'nu_ch_G', np.inf), params.get(f'nu_dis_G', np.inf)
-            nu_ch_H, nu_dis_H = params.get(f'nu_ch_H', np.inf), params.get(f'nu_dis_H', np.inf)
-
-            cost += b_dis_E * params.get(f'c_E_sto_{player}', 0.0) * (1/nu_dis_E)
-            cost += b_ch_E * params.get(f'c_E_sto_{player}', 0.0) * nu_ch_E
-            cost += b_dis_G * params.get(f'c_G_sto_{player}', 0.0) * (1/nu_dis_G)
-            cost += b_ch_G * params.get(f'c_G_sto_{player}', 0.0) * nu_ch_G
-            cost += b_dis_H * params.get(f'c_H_sto_{player}', 0.0) * (1/nu_dis_H)
-            cost += b_ch_H * params.get(f'c_H_sto_{player}', 0.0) * nu_ch_H
-        
-        if (cost == np.inf) or (cost == -np.inf) or (np.isnan(cost)):
-            raise Exception(f"Cost is infinite for player {player} at time {t}")
-        return cost
     
     def solve(self):
         """Solve the restricted master problem"""
@@ -406,3 +353,56 @@ class MasterProblem:
                     solution_by_player[player][idx] = (lambda_val, col_solution)
         
         return solution, solution_by_player
+
+def calculate_column_cost(player: str, solution: Dict, params: Dict, time_periods: List[int]) -> float:
+    """Calculate cost for a column"""
+    cost = 0.0
+
+    for t in time_periods:
+        # Grid costs
+        """
+        solution에서 get하는건 없을 경우 0.0 (player type별로 없을수도 있으니)
+        """
+        e_E_gri = solution.get('e_E_gri', {}).get((player, t), 0.0)
+        i_E_gri = solution.get('i_E_gri', {}).get((player, t), 0.0)
+        cost += i_E_gri * params.get(f'pi_E_gri_import_{t}', np.inf)
+        cost -= e_E_gri * params.get(f'pi_E_gri_export_{t}', np.inf)
+        
+        e_H_gri = solution.get('e_H_gri', {}).get((player, t), 0.0)
+        i_H_gri = solution.get('i_H_gri', {}).get((player, t), 0.0)
+        cost += i_H_gri * params.get(f'pi_H_gri_import_{t}', np.inf)
+        cost -= e_H_gri * params.get(f'pi_H_gri_export_{t}', np.inf)
+        
+        e_G_gri = solution.get('e_G_gri', {}).get((player, t), 0.0)
+        i_G_gri = solution.get('i_G_gri', {}).get((player, t), 0.0)
+        cost += i_G_gri * params.get(f'pi_G_gri_import_{t}', np.inf)
+        cost -= e_G_gri * params.get(f'pi_G_gri_export_{t}', np.inf)
+        
+        # Production and startup costs
+        p_res = solution.get('p', {}).get((player, 'res', t), 0.0)
+        p_hp = solution.get('p', {}).get((player, 'hp', t), 0.0)
+        p_els = solution.get('p', {}).get((player, 'els', t), 0.0)
+        z_su = solution.get('z_su', {}).get((player, t), 0.0)
+
+        cost += p_res * params.get(f'c_res_{player}', 0.0)
+        cost += p_hp * params.get(f'c_hp_{player}', 0.0)
+        cost += p_els * params.get(f'c_els_{player}', 0.0)
+        cost += z_su * params.get(f'c_su_G_{player}', 0.0)
+        # Storage costs
+        b_dis_E, b_ch_E = solution.get('b_dis_E', {}).get((player, t), 0.0), solution.get('b_ch_E', {}).get((player, t), 0.0)
+        b_dis_G, b_ch_G = solution.get('b_dis_G', {}).get((player, t), 0.0), solution.get('b_ch_G', {}).get((player, t), 0.0)
+        b_dis_H, b_ch_H = solution.get('b_dis_H', {}).get((player, t), 0.0), solution.get('b_ch_H', {}).get((player, t), 0.0)
+        nu_ch_E, nu_dis_E = params.get(f'nu_ch_E', np.inf), params.get(f'nu_dis_E', np.inf)
+        nu_ch_G, nu_dis_G = params.get(f'nu_ch_G', np.inf), params.get(f'nu_dis_G', np.inf)
+        nu_ch_H, nu_dis_H = params.get(f'nu_ch_H', np.inf), params.get(f'nu_dis_H', np.inf)
+
+        cost += b_dis_E * params.get(f'c_sto_E_{player}', 0.0) * (1/nu_dis_E)
+        cost += b_ch_E * params.get(f'c_sto_E_{player}', 0.0) * nu_ch_E
+        cost += b_dis_G * params.get(f'c_sto_G_{player}', 0.0) * (1/nu_dis_G)
+        cost += b_ch_G * params.get(f'c_sto_G_{player}', 0.0) * nu_ch_G
+        cost += b_dis_H * params.get(f'c_sto_H_{player}', 0.0) * (1/nu_dis_H)
+        cost += b_ch_H * params.get(f'c_sto_H_{player}', 0.0) * nu_ch_H
+
+    if (cost == np.inf) or (cost == -np.inf) or (np.isnan(cost)):
+        raise Exception(f"Cost is infinite for player {player} at time {t}")
+    return cost

@@ -68,7 +68,6 @@ class ColumnGenerationSolver:
                 
         # Generate initial columns for each player
         print("\n=== Generating Initial Columns ===")
-        self.init_sol=None
         self.master._add_initial_columns(self.subproblems, self.init_sol)
         # Create master constraints
         self.master._create_master_constraints()
@@ -108,8 +107,8 @@ class ColumnGenerationSolver:
             # Count columns per player
             print("\nColumns per player:")
             for player in self.players:
-                player_cols = [k for k in self.master.model.data['vars'].keys() if k[0] == player]
-                print(f"  {player}: {len(player_cols)} columns")
+                player_cols = len(self.master.model.data['vars'][player].keys())
+                print(f"  {player}: {player_cols} columns")
             
             # Extract and print convex hull prices (dual prices of community balance constraints)
             print("\n" + "="*80)

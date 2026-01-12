@@ -1326,11 +1326,15 @@ class LocalEnergyMarket:
             'net_profit': 0.0
         }
         
-        c_E_sto = self.params.get('c_E_sto', 0.01)
-        c_G_sto = self.params.get('c_G_sto', 0.01)
-        c_H_sto = self.params.get('c_H_sto', 0.01)
-        nu_ch = self.params.get('nu_ch', 0.9)
-        nu_dis = self.params.get('nu_dis', 0.9)
+        c_E_sto = self.params.get('c_sto_E', np.inf)
+        c_G_sto = self.params.get('c_sto_G', np.inf)
+        c_H_sto = self.params.get('c_sto_H', np.inf)
+        nu_ch_E = self.params.get('nu_ch_E', np.inf)
+        nu_dis_E = self.params.get('nu_dis_E', np.inf)
+        nu_ch_G = self.params.get('nu_ch_G', np.inf)
+        nu_dis_G = self.params.get('nu_dis_G', np.inf)
+        nu_ch_H = self.params.get('nu_ch_H', np.inf)
+        nu_dis_H = self.params.get('nu_dis_H', np.inf)
         
         # ========== ELECTRICITY ==========
         # Export revenue
@@ -1358,12 +1362,12 @@ class LocalEnergyMarket:
         if 'b_ch_E' in results:
             for (u, t), val in results['b_ch_E'].items():
                 if val > 0:
-                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * nu_ch
+                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * nu_ch_E
         
         if 'b_dis_E' in results:
             for (u, t), val in results['b_dis_E'].items():
                 if val > 0:
-                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * (1/nu_dis)
+                    revenue_analysis['electricity']['storage_cost'] += val * c_E_sto * (1/nu_dis_E)
         
         # ========== HYDROGEN ==========
         # Export revenue
@@ -1391,12 +1395,12 @@ class LocalEnergyMarket:
         if 'b_ch_G' in results:
             for (u, t), val in results['b_ch_G'].items():
                 if val > 0:
-                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * nu_ch
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * nu_ch_G
         
         if 'b_dis_G' in results:
             for (u, t), val in results['b_dis_G'].items():
                 if val > 0:
-                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * (1/nu_dis)
+                    revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * (1/nu_dis_G)
         
         # Electrolyzer startup cost
         if 'z_su' in results:
@@ -1431,12 +1435,12 @@ class LocalEnergyMarket:
         if 'b_ch_H' in results:
             for (u, t), val in results['b_ch_H'].items():
                 if val > 0:
-                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * nu_ch
+                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * nu_ch_H
         
         if 'b_dis_H' in results:
             for (u, t), val in results['b_dis_H'].items():
                 if val > 0:
-                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * (1/nu_dis)
+                    revenue_analysis['heat']['storage_cost'] += val * c_H_sto * (1/nu_dis_H)
         
         
         # ========== CALCULATE NET VALUES ==========
