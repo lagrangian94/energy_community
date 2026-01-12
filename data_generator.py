@@ -43,13 +43,36 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         use_korean_price = sensitivity_analysis['use_korean_price']
         use_tou = sensitivity_analysis['use_tou']
         month = sensitivity_analysis['month']
+        storage_capacity_E = sensitivity_analysis['storage_capacity_E']
+        storage_capacity_G = sensitivity_analysis['storage_capacity_G']
+        storage_capacity_heat = sensitivity_analysis['storage_capacity_heat']
+        hp_cap = sensitivity_analysis['hp_cap']
+        els_cap = sensitivity_analysis['els_cap']
+        res_cap = sensitivity_analysis['res_cap']
+        num_households = sensitivity_analysis['num_households']
+        nu_cop = sensitivity_analysis['nu_cop']
+        c_su_G = sensitivity_analysis['c_su_G']
+        c_su_H = sensitivity_analysis['c_su_H']
+        base_h2_price_eur = sensitivity_analysis['base_h2_price_eur']
+        e_E_cap = res_cap * sensitivity_analysis['e_E_cap']
+        e_H_cap = hp_cap * sensitivity_analysis['e_H_cap']
     else:
         use_korean_price = True
         use_tou = True
         month = 1
-        storage_capacity_E = 1.0
+        storage_capacity_E = 1.0 # [0.5, 1.0, 1.5]
         storage_capacity_G = 50
         storage_capacity_heat = 0.40
+        hp_cap = 0.8 # [0.6, 0.8, 1.0]
+        els_cap = 1 # [0.5, 1.0, 1.5]
+        res_cap = 2
+        num_households = 52 # [50, 75, 100]
+        nu_cop = 3.28 # [3.0, 3.28, 3.5]
+        c_su_G = 50 # [50, 75, 100]
+        c_su_H = 10 # [5, 10, 15]
+        base_h2_price_eur = 2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
+        e_E_cap = res_cap * 2 # [0.5, 1.0, 1.5, 2.0]
+        e_H_cap = hp_cap * 2 # [0.5, 1.0, 1.5, 2.0]
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -69,9 +92,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         
         # Storage parameters
          #capacity_E=2이고, power_E_가0.25일땐 u2가 이득, 근데 power_E_가 0.5일땐 손해. 왜 그럴까??
-        'storage_capacity_E': 1.0,
-        'storage_capacity_G': 50, #kg
-        'storage_capacity_heat': 0.40,
+        'storage_capacity_E': storage_capacity_E,
+        'storage_capacity_G': storage_capacity_G, #kg
+        'storage_capacity_heat': storage_capacity_heat,
         'storage_power_E': 0.5,
         'storage_power_G': 0.25,
         'storage_power_heat': 0.5,
@@ -86,8 +109,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'nu_dis_H': 0.9,
         'nu_loss_H':0.002,
         # Equipment capacities
-        'hp_cap': 0.8,
-        'els_cap': 1,
+        'res_cap': res_cap,
+        'hp_cap': hp_cap,
+        'els_cap': els_cap,
         'C_min': 0.15,
         'C_sb': 0.01,
         'phi1_1': 21.12266316,
@@ -101,12 +125,12 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_su_H': 10,
         'max_up_time': 3,
         'min_down_time': 2,
-        'nu_COP': 3.28,
+        'nu_cop': nu_cop,
         # Grid connection limits
         'res_capacity': 2,
-        'e_E_cap': 0.5*2,
-        'i_E_cap': 0.5*2,
-        'e_H_cap': 500, #0.06,
+        'e_E_cap': e_E_cap,
+        'i_E_cap': 500,
+        'e_H_cap': e_H_cap, #0.06,
         'i_H_cap': 500, #0.08,
         'e_G_cap': 50,
         'i_G_cap': 100 , #30,
@@ -136,7 +160,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
 
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_hp_{u}'] = parameters['c_hp']
-        parameters[f'nu_COP_{u}'] = parameters['nu_COP']
+        parameters[f'nu_cop_{u}'] = parameters['nu_cop']
         parameters[f'c_su_H_{u}'] = parameters['c_su_H']
     for i,u in enumerate(parameters['players_with_electrolyzers']):
         parameters[f'c_els_{u}'] = parameters['c_els']
@@ -150,49 +174,30 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     
     # Add grid prices
     elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou).generate_price(month=month, time_horizon=24)
-    base_price_eur = 4.1 if use_korean_price else 2.1
     """
     hydrogen, heat price의 tou는 차후 구현
     """
-    h2_prices = generate_hydrogen_price(base_price_eur=base_price_eur, time_horizon=24)
+    h2_prices = generate_hydrogen_price(base_price_eur=base_h2_price_eur, time_horizon=24)
     heat_prices = HeatPriceGenerator().get_profiles(month=month, customer_type='residential', use_seasonal=False)
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
     
     
     # DEMANDS
-    num_households = 100
+    num_households = 52
     elec_generator = ElectricityLoadGenerator(num_households=num_households)
     heat_generator = HeatLoadGenerator(num_households=num_households)
     hydro_generator = HydrogenLoadGenerator()
     # hydro_generator.generate_profiles()
-    elec_demand_mwh = elec_generator.generate_community_load(monthly_base_load_mwh_per_household=0.036*3, season='summer', num_days=1, variability='normal', method='empirical')
-    hydro_demand_kg = hydro_generator.get_profiles()
-    heat_demand_mwh = heat_generator.get_profiles(month=11)
+    elec_demand_mwh = elec_generator.generate_community_load(monthly_base_load_mwh_per_household=0.363, season='winter', num_days=10, variability='normal', method='empirical')
+    hydro_demand_kg = hydro_generator.get_profiles()*0.5
+    heat_demand_mwh = heat_generator.get_profiles(month=1)
     for u in players:
         for t in time_periods:
             # HYDROGEN DEMAND
             if u in parameters['players_with_nfl_hydro_demand']:
-                parameters[f'd_G_nfl_{u}_{t}'] = hydro_demand_kg[t]
-            #     if 6 <= t <= 11:
-            #         h2_demand = 6 + 4 * np.exp(-((t-9)/2)**2)
-            #     elif 14 <= t <= 20:
-            #         h2_demand = 4 + 3 * np.exp(-((t-17)/2)**2)
-            #     elif 12 <= t <= 13:
-            #         h2_demand = 3.0
-            #     elif 21 <= t <= 23:
-            #         h2_demand = 2.0
-            #     else:
-            #         h2_demand = 1.0
-            #     parameters[f'd_G_nfl_{u}_{t}'] = h2_demand
-            # else:
-            #     parameters[f'd_G_nfl_{u}_{t}'] = 0
-            
+                parameters[f'd_G_nfl_{u}_{t}'] = hydro_demand_kg[t]           
             # ELEC DEMAND
             if u in parameters['players_with_nfl_elec_demand']:
-                # morning_peak = 20 * np.exp(-((t - 8) / 2)**2)
-                # evening_peak = 40 * np.exp(-((t - 19.5) / 2)**2)
-                # base_demand = 60
-                # elec_demand = (base_demand + morning_peak + evening_peak) * 0.001
                 parameters[f'd_E_nfl_{u}_{t}'] = elec_demand_mwh[t]
                         
             # HEAT DEMAND - NEW: Using Busan data
@@ -201,11 +206,5 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
                 parameters[f'd_H_nfl_{u}_{t}'] = heat_demand_mwh[t]
             else:
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
-            # if u in parameters['players_with_nfl_heat_demand']:
-            #     heat_demand_kw = 60 + 30 * np.cos(2 * np.pi * (t - 3) / 24)
-            #     heat_demand = heat_demand_kw * 0.001
-            #     parameters[f'd_H_nfl_{u}_{t}'] = heat_demand
-            # else:
-            #     parameters[f'd_H_nfl_{u}_{t}'] = 0
     
     return parameters

@@ -615,6 +615,8 @@ class LocalEnergyMarket:
         
         # hydro flow balance constraints (slide 13-14)
         self._add_hydro_constraints()
+
+        # Non-convex Operation Constraints
         if self.model_type == 'mip':
             self._add_hydro_nonconvex_cons_mip()
         elif self.model_type == 'lp':
@@ -800,9 +802,9 @@ class LocalEnergyMarket:
         for u in self.players:
             if u in self.players_with_heatpumps:
                 for t in self.time_periods:
-                    nu_COP = self.params.get(f'nu_COP_{u}', np.inf)
+                    nu_cop = self.params.get(f'nu_cop_{u}', np.inf)
                     cons = self.model.addCons(
-                        nu_COP * self.fl_d.get((u,'elec',t),0) == self.p.get((u,'hp',t),0),
+                        nu_cop * self.fl_d.get((u,'elec',t),0) == self.p.get((u,'hp',t),0),
                         name=f"heatpump_coupling_{u}_{t}"
                     )
                     self.heatpump_cons[f"heatpump_coupling_{u}_{t}"] = cons
@@ -1138,11 +1140,11 @@ class LocalEnergyMarket:
                 hydro_cons = self.community_hydro_balance_cons[f"community_hydro_balance_{t}"]
                 
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(elec_cons))
-                prices['electricity'][t] = np.round(np.abs(pi), 2)
+                prices['electricity'][t] = np.abs(pi)#np.round(np.abs(pi), 2)
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(heat_cons))
-                prices['heat'][t] = np.round(np.abs(pi), 2)
+                prices['heat'][t] = np.abs(pi)#np.round(np.abs(pi), 2)
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(hydro_cons))
-                prices['hydro'][t] = np.round(np.abs(pi), 2)        
+                prices['hydro'][t] = np.abs(pi)#np.round(np.abs(pi), 2)        
         else:
             raise ValueError("a function <solve_complete_model> has a model_type must be either 'mip' or 'lp', got: {}".format(self.model_type))
         energy = ['electricity', 'heat', 'hydro']
@@ -2497,11 +2499,11 @@ class LocalEnergyMarket:
             hydro_cons = lp_model.community_hydro_balance_cons[f"community_hydro_balance_{t}"]
             
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(elec_cons))
-            prices['electricity'][t] = np.round(np.abs(pi), 2)
+            prices['electricity'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(heat_cons))
-            prices['heat'][t] = np.round(np.abs(pi), 2)
+            prices['heat'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(hydro_cons))
-            prices['hydro'][t] = np.round(np.abs(pi), 2)
+            prices['hydro'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
         
         print("✓ Shadow prices extracted")
         
