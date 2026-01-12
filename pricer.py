@@ -25,7 +25,7 @@ class LEMPricer(Pricer):
         self.players = players
         self.iteration = 0
         self.farkas_iteration = 0
-    
+        self.lb= -np.inf
     def price(self, farkas=False):
         """
         Common pricing logic for both regular and Farkas pricing
@@ -93,11 +93,13 @@ class LEMPricer(Pricer):
         # print(f"iteration {self.iteration}, dual_hydro: {dual_hydro}")
         # print(f"iteration {self.iteration}, dual_convexity: {dual_convexity}")
         debug_sol = {}
+        obj_val_list = []
         for player in self.players:
-            reduced_cost, solution = self.subproblems[player].solve_pricing(
+            reduced_cost, solution, obj_val = self.subproblems[player].solve_pricing(
                 dual_elec, dual_heat, dual_hydro, dual_convexity[player], farkas=farkas
             )
-            debug_sol[player] = solution            
+            debug_sol[player] = solution  
+            obj_val_list.append(obj_val)
             # Add column if reduced cost is negative
             if reduced_cost < -1e-8:
                 columns_added += 1
@@ -106,12 +108,16 @@ class LEMPricer(Pricer):
                     print(f"  {player}: Farkas column added (RC={reduced_cost:.4f})")
                 min_reduced_cost = min(min_reduced_cost, reduced_cost)
                 # break ## column은 한 player만 넣어도 수렴에 충분.
+        if len(obj_val_list) == len(self.players):
+            self._update_lagrangian_bound(obj_val_list, farkas=farkas)
+            lagrangian_gap = (self.model.getLPObjVal() - self.lb)/np.abs(self.lb) if self.lb != -1*np.inf else np.inf
+            ## 사실 이걸 먼저 체크하고 termination 조건 체크한 뒤, 그 다음에 column을 넣어줘야 pricing이 제대로 끝날것임.
         if columns_added == 0:
             print(f"Reduced cost: {reduced_cost:.4f}")
             min_reduced_cost = 0.0
         # Print iteration summary
         if not farkas:
-            print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | Min RC: {min_reduced_cost:10.4f} | Columns added: {columns_added}")
+            print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | LB: {self.lb:12.2f} | Min RC: {min_reduced_cost:10.4f} | Columns added: {columns_added}")
 
         # else:
         #     print(f"  Total Farkas columns added: {columns_added}")
@@ -208,5 +214,12 @@ class LEMPricer(Pricer):
                 new_var,
                 coeff_hydro
             )
-            
-    
+    def _update_lagrangian_bound(self, obj_val_list: List[float], farkas: bool):
+        """
+        Update Lagrangian bound
+        이 문제에서 linking constraint의 right-hand-side는 전부 zero이기 때문에, subproblem들의 objective value만 합하면 됨.
+        """
+        if farkas:
+            return
+        self.lb = max(self.lb, np.sum(obj_val_list))
+        return

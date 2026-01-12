@@ -159,9 +159,9 @@ class PlayerSubproblem:
             # Extract solution
             _, results = solve_and_extract_results(self.model)
             
-            return reduced_cost, results
+            return reduced_cost, results, self.model.getObjVal()
         else:
-            return float('inf'), None
+            return float('inf'), None, None
 
 
 class MasterProblem:
@@ -286,7 +286,7 @@ class MasterProblem:
             
             if not init_sol:
                 # Solve subproblem with zero dual prices
-                reduced_cost, solution = subproblems[player].solve_pricing(
+                reduced_cost, solution, obj_val = subproblems[player].solve_pricing(
                     zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player]
                 )
             else:
