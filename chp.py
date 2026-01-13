@@ -10,6 +10,7 @@ from pyscipopt import SCIP_PARAMSETTING
 from typing import Dict, List, Tuple
 
 from data_generator import setup_lem_parameters
+from compact import LocalEnergyMarket, solve_and_extract_results
 from solver import PlayerSubproblem, MasterProblem
 from pricer import LEMPricer
 import numpy as np
@@ -161,7 +162,6 @@ class ColumnGenerationSolver:
             solution: Solution from column generation including convex hull prices
             obj_val: Objective value from column generation
         """
-        from compact import LocalEnergyMarket, solve_and_extract_results
         
         print("\n" + "="*80)
         print("SYNERGY ANALYSIS WITH CONVEX HULL PRICING")
@@ -444,8 +444,8 @@ class ColumnGenerationSolver:
                     profit['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
                 
                 # 5. Startup costs
-                if 'z_su' in results and (u,t) in results['z_su']:
-                    profit['startup_cost'] += results['z_su'][u,t] * self.parameters.get(f'c_su_{u}', 50)
+                if 'z_su_G' in results and (u,t) in results['z_su_G']:
+                    profit['startup_cost'] += results['z_su_G'][u,t] * self.parameters.get(f'c_su_G_{u}', np.inf)
             
             # Calculate net profit
             profit['net_profit'] = (

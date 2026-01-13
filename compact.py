@@ -307,7 +307,9 @@ def solve_and_extract_results(model):
             vars_name = ["e_E_gri", "i_E_gri", "e_E_com", "i_E_com", "e_H_gri", "i_H_gri", 
                         "e_H_com", "i_H_com", "e_G_gri", "i_G_gri", "e_G_com", "i_G_com",
                         "p", "d", "b_dis_E", "b_ch_E", "s_E", "b_dis_G", "b_ch_G", "s_G",
-                        "b_dis_H", "b_ch_H", "s_H", "z_su", "z_on", "z_off", "z_sb"]
+                        "b_dis_H", "b_ch_H", "s_H", 
+                        "z_su_G", "z_on_G", "z_off_G", "z_sb_G", "z_sd_G",
+                        "z_su_H", "z_on_H", "z_sd_H"]
                         # "chi_peak"]
             raise Exception(f"Model data is None. Cannot extract results for {vars_name}")
             
@@ -461,11 +463,15 @@ class LocalEnergyMarket:
         self.s_H = {}      # Heat storage SOC level
         
         # Electrolyzer commitment variables
-        self.z_su = {}   # Start-up decision
-        self.z_on = {}   # Turn on decision
-        self.z_off = {}  # Turn off decision
-        self.z_sb = {}   # Stand-by decision
-        
+        self.z_su_G = {}   # Start-up decision
+        self.z_sd_G = {}   # Shutdown decision
+        self.z_on_G = {}   # Turn on decision
+        self.z_off_G = {}  # Turn off decision
+        self.z_sb_G = {}   # Stand-by decision
+        # Heat pump commitment variables
+        self.z_su_H = {}   # Start-up decision
+        self.z_sd_H = {}   # Shutdown decision
+        self.z_on_H = {}   # Turn on decision
         # Peak power variable
         # self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0, obj=self.params.get('pi_peak', 0))
         
@@ -493,9 +499,16 @@ class LocalEnergyMarket:
                                                         lb=0, ub=renewable_cap, obj=c_res)
                 if u in self.players_with_heatpumps:  # Heat pumps
                     hp_cap = self.params.get(f'hp_cap', -np.inf)  # Default 100 kW thermal
-                    c_hp = self.params.get(f'c_hp_{u}', 0)
+                    c_hp = self.params.get(f'c_hp_{u}', np.inf)
                     self.p[u,'hp',t] = self.model.addVar(vtype="C", name=f"p_hp_{u}_{t}", 
                                                        lb=0, ub=hp_cap, obj=c_hp)
+                    # Heat pump commitment variables
+                    c_su_H = self.params.get(f'c_su_H_{u}', np.inf)
+                    if self.model_type in ['mip', 'mip_fix_binaries']:
+                        vartype = "C" if (self.model_type == 'mip_fix_binaries') else "B"
+                        self.z_su_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_H_{u}_{t}", obj=c_su_H)
+                        self.z_sd_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_sd_H_{u}_{t}")
+                        self.z_on_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_H_{u}_{t}")
 
                 if u in self.players_with_electrolyzers:  # Electrolyzers
                     els_cap = self.params.get(f'els_cap', -np.inf)  # Default 1 MW
@@ -508,10 +521,11 @@ class LocalEnergyMarket:
                     c_su_G = self.params.get(f'c_su_G_{u}', 0)
                     if self.model_type in ['mip', 'mip_fix_binaries']:
                         vartype = "C" if (self.model_type == 'mip_fix_binaries') else "B"
-                        self.z_su[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_{u}_{t}", obj=c_su_G)
-                        self.z_on[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_{u}_{t}")
-                        self.z_off[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_{u}_{t}")
-                        self.z_sb[u,t] = self.model.addVar(vtype=vartype, name=f"z_sb_{u}_{t}")
+                        self.z_su_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_G_{u}_{t}", obj=c_su_G)
+                        self.z_sd_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_sd_G_{u}_{t}")
+                        self.z_on_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_G_{u}_{t}")
+                        self.z_off_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_G_{u}_{t}")
+                        self.z_sb_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_sb_G_{u}_{t}")
             
 
                 # Non-flexible demand variables
@@ -628,33 +642,53 @@ class LocalEnergyMarket:
         # If binary_values are provided, add constraints to fix binary variables
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
-                if ('z_su', u, t) in self.binary_values:
+                if ('z_su_G', u, t) in self.binary_values:
                     cons = self.model.addCons(
-                        self.z_su[u,t] == self.binary_values[('z_su', u, t)],
-                        name=f"fix_z_su_{u}_{t}"
+                        self.z_su_G[u,t] == self.binary_values[('z_su_G', u, t)],
+                        name=f"fix_z_su_G_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"fix_z_su_{u}_{t}"] = cons
+                    self.electrolyzer_cons[f"fix_z_su_G_{u}_{t}"] = cons
                 
-                if ('z_on', u, t) in self.binary_values:
+                if ('z_on_G', u, t) in self.binary_values:
                     cons = self.model.addCons(
-                        self.z_on[u,t] == self.binary_values[('z_on', u, t)],
-                        name=f"fix_z_on_{u}_{t}"
+                        self.z_on_G[u,t] == self.binary_values[('z_on_G', u, t)],
+                        name=f"fix_z_on_G_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"fix_z_on_{u}_{t}"] = cons
+                    self.electrolyzer_cons[f"fix_z_on_G_{u}_{t}"] = cons
                 
-                if ('z_off', u, t) in self.binary_values:
+                if ('z_off_G', u, t) in self.binary_values:
                     cons = self.model.addCons(
-                        self.z_off[u,t] == self.binary_values[('z_off', u, t)],
-                        name=f"fix_z_off_{u}_{t}"
+                        self.z_off_G[u,t] == self.binary_values[('z_off_G', u, t)],
+                        name=f"fix_z_off_G_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"fix_z_off_{u}_{t}"] = cons
+                    self.electrolyzer_cons[f"fix_z_off_G_{u}_{t}"] = cons
                 
-                if ('z_sb', u, t) in self.binary_values:
+                if ('z_sb_G', u, t) in self.binary_values:
                     cons = self.model.addCons(
-                        self.z_sb[u,t] == self.binary_values[('z_sb', u, t)],
-                        name=f"fix_z_sb_{u}_{t}"
+                        self.z_sb_G[u,t] == self.binary_values[('z_sb_G', u, t)],
+                        name=f"fix_z_sb_G_{u}_{t}"
                     )
-                    self.electrolyzer_cons[f"fix_z_sb_{u}_{t}"] = cons
+                    self.electrolyzer_cons[f"fix_z_sb_G_{u}_{t}"] = cons
+        for u in self.players_with_heatpumps:
+            for t in self.time_periods:
+                if ('z_su_H', u, t) in self.binary_values:
+                    cons = self.model.addCons(
+                        self.z_su_H[u,t] == self.binary_values[('z_su_H', u, t)],
+                        name=f"fix_z_su_H_{u}_{t}"
+                    )
+                    self.heatpump_cons[f"fix_z_su_H_{u}_{t}"] = cons
+                if ('z_on_H', u, t) in self.binary_values:
+                    cons = self.model.addCons(
+                        self.z_on_H[u,t] == self.binary_values[('z_on_H', u, t)],
+                        name=f"fix_z_on_H_{u}_{t}"
+                    )
+                    self.heatpump_cons[f"fix_z_on_H_{u}_{t}"] = cons
+                if ('z_sd_H', u, t) in self.binary_values:
+                    cons = self.model.addCons(
+                        self.z_sd_H[u,t] == self.binary_values[('z_sd_H', u, t)],
+                        name=f"fix_z_sd_H_{u}_{t}"
+                    )
+                    self.heatpump_cons[f"fix_z_sd_H_{u}_{t}"] = cons
     def _store_model_data(self):
         """Store all variables and constraints in model.data dictionary"""
         
@@ -690,10 +724,14 @@ class LocalEnergyMarket:
         self.model.data["vars"]["b_ch_H"] = self.b_ch_H
         self.model.data["vars"]["s_H"] = self.s_H
         
-        self.model.data["vars"]["z_su"] = self.z_su
-        self.model.data["vars"]["z_on"] = self.z_on
-        self.model.data["vars"]["z_off"] = self.z_off
-        self.model.data["vars"]["z_sb"] = self.z_sb
+        self.model.data["vars"]["z_su_G"] = self.z_su_G
+        self.model.data["vars"]["z_on_G"] = self.z_on_G
+        self.model.data["vars"]["z_off_G"] = self.z_off_G
+        self.model.data["vars"]["z_sb_G"] = self.z_sb_G
+
+        self.model.data["vars"]["z_su_H"] = self.z_su_H
+        self.model.data["vars"]["z_on_H"] = self.z_on_H
+        self.model.data["vars"]["z_sd_H"] = self.z_sd_H
         
         # self.model.data["vars"]["chi_peak"] = self.chi_peak
         
@@ -901,8 +939,9 @@ class LocalEnergyMarket:
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
             els_cap = self.params.get(f'els_cap', -np.inf)
-            C_sb = self.params.get(f'C_sb', -np.inf)
-            C_min = self.params.get(f'C_min', -np.inf)
+            c_sb = self.params.get(f'c_sb_G', -np.inf)
+            c_min = self.params.get(f'c_min_G', -np.inf)
+            c_max = self.params.get(f'c_max_G', -np.inf)
             for t in self.time_periods:
                 phi1_1 = self.params.get(f'phi1_1', -np.inf)
                 phi0_1 = self.params.get(f'phi0_1', -np.inf)
@@ -910,30 +949,30 @@ class LocalEnergyMarket:
                 phi0_2 = self.params.get(f'phi0_2', -np.inf)
             
                 cons = self.model.addCons(
-                    self.p.get((u,'els',t),0) <= phi1_1 * self.els_d.get((u,t),0) + phi0_1 * self.z_on[u,t],
+                    self.p.get((u,'els',t),0) <= phi1_1 * self.els_d.get((u,t),0) + phi0_1 * self.z_on_G[u,t],
                     name=f"electrolyzer_production_curve_1_{u}_{t}"
                 )
                 self.electrolyzer_cons['production_curve_1', u, t] = cons
                 cons = self.model.addCons(
-                    self.p.get((u,'els',t),0) <= phi1_2 * self.els_d.get((u,t),0) + phi0_2 * self.z_on[u,t],
+                    self.p.get((u,'els',t),0) <= phi1_2 * self.els_d.get((u,t),0) + phi0_2 * self.z_on_G[u,t],
                     name=f"electrolyzer_production_curve_2_{u}_{t}"
                 )
                 self.electrolyzer_cons['production_curve_2', u, t] = cons
 
                 cons = self.model.addCons(
-                    self.els_d.get((u,t),0) - C_min * els_cap * self.z_on[u,t] >= 0.0,
+                    self.els_d.get((u,t),0) - c_min * els_cap * self.z_on_G[u,t] >= 0.0,
                     name=f"electrolyzer_min_power_consumption_{u}_{t}"
                 )
                 self.electrolyzer_cons[f"electrolyzer_min_power_consumption_{u}_{t}"] = cons
                 cons = self.model.addCons(
-                    self.els_d.get((u,t),0) - els_cap * self.z_on[u,t] <= 0.0,
+                    self.els_d.get((u,t),0) - c_max * els_cap * self.z_on_G[u,t] <= 0.0,
                     name=f"electrolyzer_max_power_consumption_{u}_{t}"
                 )
                 self.electrolyzer_cons[f"electrolyzer_max_power_consumption_{u}_{t}"] = cons
                 
                 # Constraint   : Power consumption coupling
                 cons = self.model.addCons(
-                    self.fl_d[u,'elec',t] == self.els_d[u,t] + C_sb * els_cap * self.z_sb[u,t],
+                    self.fl_d[u,'elec',t] == self.els_d[u,t] + c_sb * els_cap * self.z_sb_G[u,t],
                     name=f"electrolyzer_power_consumption_{u}_{t}"
                 )
                 self.electrolyzer_cons[f"electrolyzer_power_consumption_{u}_{t}"] = cons
@@ -941,56 +980,63 @@ class LocalEnergyMarket:
             for t in self.time_periods:
                 # Constraint 17: exactly one state
                 cons = self.model.addCons(
-                    self.z_on[u,t] + self.z_off[u,t] + self.z_sb[u,t] == 1,
+                    self.z_on_G[u,t] + self.z_off_G[u,t] + self.z_sb_G[u,t] == 1,
                     name=f"electrolyzer_state_{u}_{t}"
                 )
                 self.electrolyzer_cons['state', u, t] = cons
-                
-                # Constraints 18-19: production bounds
-                els_cap = self.params.get(f'els_cap', -np.inf)
-                C_sb = self.params.get(f'C_sb', -np.inf)
-                C_min = self.params.get(f'C_min', -np.inf)
-                
-                cons = self.model.addCons(
-                        self.fl_d[u,'elec',t] <= els_cap * self.z_on[u,t] + C_sb * els_cap * self.z_sb[u,t],
-                    name=f"electrolyzer_max_{u}_{t}"
-                )
-                self.electrolyzer_cons[f"electrolyzer_max_{u}_{t}"] = cons
-                
-                cons = self.model.addCons(
-                        self.fl_d[u,'elec',t] >= C_min * els_cap * self.z_on[u,t] + C_sb * els_cap * self.z_sb[u,t],
-                    name=f"electrolyzer_min_{u}_{t}"
-                )
-                self.electrolyzer_cons[f"electrolyzer_min_{u}_{t}"] = cons
-                
+                DT_G = self.params.get('min_down_time_G', -1)
                 # Constraint 20: startup logic
                 if t != 6:
                     if t != 0:
                         cons = self.model.addCons(
-                            self.z_su[u,t] >= self.z_on[u,t] - self.z_on[u,t-1] - self.z_sb[u,t],
+                            self.z_su_G[u,t] >= self.z_on_G[u,t] + self.z_off_G[u,t-1] + self.z_sb_G[u,t] - 1.0,
                             name=f"electrolyzer_startup_{u}_{t}"
                         )
                         self.electrolyzer_cons[f"electrolyzer_startup_{u}_{t}"] = cons
+                        # shut-down
+                        cons = self.model.addCons(
+                            self.z_sd_G[u,t] >= self.z_on_G[u,t-1] + self.z_off_G[u,t] + self.z_sb_G[u,t-1] - 1.0,
+                            name=f"electrolyzer_shut_down_{u}_{t}"
+                        )
+                        # not shut-up and shut-down at the same time
+                        cons = self.model.addCons(
+                            self.z_su_G[u,t] + self.z_sd_G[u,t] <= 1.0,
+                            name=f"electrolyzer_forbid_shut_up_down_conflict_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"electrolyzer_forbid_shut_up_down_conflict_{u}_{t}"] = cons
                         # off to standby is not allowed
                         cons = self.model.addCons(
-                            self.z_off[u,t-1] + self.z_sb[u,t] <= 1.0,
+                            self.z_off_G[u,t-1] + self.z_sb_G[u,t] <= 1.0,
                             name=f"electrolyzer_forbid_off_to_sb_{u}_{t}"
                         )
                         self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_{u}_{t}"] = cons
                     else:
                         cons = self.model.addCons(
-                                self.z_su[u,t] >= self.z_on[u,t] - self.z_on[u,23] - self.z_sb[u,t],
+                                self.z_su_G[u,t] >= self.z_on_G[u,23] + self.z_off_G[u,t] + self.z_sb_G[u,23] - 1.0,
                                 name=f"electrolyzer_startup_23_to_0_{u}_{t}"
                             )
                         self.electrolyzer_cons[f"electrolyzer_startup_23_to_0_{u}_{t}"] = cons
+                        # shut-down
                         cons = self.model.addCons(
-                                self.z_off[u,23] + self.z_sb[u,t] <= 1.0,
+                            self.z_sd_G[u,t] >= self.z_on_G[u,23] + self.z_off_G[u,t] + self.z_sb_G[u,23] - 1.0,
+                            name=f"electrolyzer_shut_down_23_to_0_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"electrolyzer_shut_down_23_to_0_{u}_{t}"] = cons
+                        # not shut-up and shut-down at the same time
+                        cons = self.model.addCons(
+                            self.z_su_G[u,t] + self.z_sd_G[u,t] <= 1.0,
+                            name=f"electrolyzer_forbid_shut_up_down_conflict_23_to_0_{u}_{t}"
+                        )
+                        self.electrolyzer_cons[f"electrolyzer_forbid_shut_up_down_conflict_23_to_0_{u}_{t}"] = cons
+                        # off to standby is not allowed
+                        cons = self.model.addCons(
+                                self.z_off_G[u,23] + self.z_sb_G[u,t] <= 1.0,
                                 name=f"electrolyzer_forbid_off_to_sb_23_to_0_{u}_{t}"
                             )
                         self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_23_to_0_{u}_{t}"] = cons
                 else:
                     cons = self.model.addCons(
-                        self.z_off[u,t] >= 1.0,
+                        self.z_off_G[u,t] >= 1.0,
                         name=f"electrolyzer_initial_state_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
@@ -1000,41 +1046,88 @@ class LocalEnergyMarket:
                     #     name=f"electrolyzer_initial_su_{u}_{t}"
                     # )
                     self.electrolyzer_cons[f"electrolyzer_initial_su_{u}_{t}"] = cons
-        # # Maximum up time constraints (최대 연속 운전 시간)
-        # for u in self.players_with_electrolyzers:
-        #     max_up = self.params.get('max_up_time', 4)
-            
-        #     for t in range(max_up, len(self.time_periods)):
-        #         # Cannot be ON for more than max_up consecutive periods
-        #         cons = self.model.addCons(
-        #             quicksum(self.z_on[u, tau] for tau in range(t - max_up + 1, t + 1)) <= max_up,
-        #             name=f"max_up_time_{u}_{t}"
-        #         )
-        #         self.electrolyzer_cons[f"max_up_time_{u}_{t}"] = cons
-            
-        # Minimum down time constraints (최소 정지 시간)
-            min_down = self.params.get('min_down_time', -1)
-            # for t in range(1, len(self.time_periods)):  # t ∈ T \ {1}
-            for t in [tau for tau in self.time_periods if tau != 6]:
-            # t시점에 off로 전환되었는지 확인 (z_off_t - z_off_{t-1})
-            # 만약 전환되었다면, 다음 min_down 기간 동안 off 유지
-                down_time_idx = [tau for tau in range(t+1, t + min_down+1)]
-                down_time_idx = [tau if tau < 24 else tau - 24 for tau in down_time_idx]
-                # for n in range(t, min(t + min_down, len(self.time_periods))):
-                if t != 0:
-                    for n in down_time_idx:
-                        cons = self.model.addCons(
-                        self.z_off[u,t] - self.z_off[u,t-1] <= self.z_off[u,n],
-                        name=f"min_downtime_{u}_{t}_{n}"
-                        )
-                        self.electrolyzer_cons[f"min_downtime_{u}_{t}_{n}"] = cons
+            # minimum down time
+            for t in self.time_periods:
+                if t == 23:
+                    cons = self.model.addCons(
+                        self.z_off_G[u,23] +quicksum(self.z_off_G[u,i] for i in range(0, DT_G-1)) >= DT_G*self.z_sd_G[u,t],
+                        name=f"electrolyzer_minimum_down_time_23_to_0_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_minimum_down_time_23_to_0_{u}_{t}"] = cons
                 else:
-                    for n in down_time_idx:
-                        cons = self.model.addCons(
-                                self.z_off[u,t] - self.z_off[u,23] <= self.z_off[u,n],
-                                name=f"min_downtime_{u}_{t}_{n}"
-                            )
-                    self.electrolyzer_cons[f"min_downtime_{u}_{t}_{n}"] = cons
+                    cons = self.model.addCons(
+                        quicksum(self.z_off_G[u,i] for i in range(t, t+DT_G)) >= DT_G*self.z_sd_G[u,t],
+                        name=f"electrolyzer_minimum_down_time_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_minimum_down_time_{u}_{t}"] = cons
+        for u in self.players_with_heatpumps:
+            hp_cap = self.params.get(f'hp_cap', -np.inf)
+            c_min = self.params.get(f'c_min_H', -np.inf)
+            c_max = self.params.get(f'c_max_H', -np.inf)
+            c_RU_H = self.params.get(f'c_RU_H', -np.inf)
+            c_RD_H = self.params.get(f'c_RD_H', -np.inf)
+            c_RSU_H = self.params.get(f'c_RSU_H', -np.inf)
+            c_RSD_H = self.params.get(f'c_RSD_H', -np.inf)
+            for t in self.time_periods:
+                if t != 0:
+                    # sos-1
+                    cons = self.model.addCons(
+                        self.z_su_H[u,t] - self.z_sd_H[u,t] - self.z_on_H[u,t] + self.z_on_H[u,t-1] == 0.0,
+                        name=f"heatpump_state_{u}_{t}"
+                    )
+                    # forbid shut-up and shut-down at the same time
+                    cons = self.model.addCons(
+                        self.z_su_H[u,t] + self.z_sd_H[u,t] <= 1.0,
+                        name=f"heatpump_forbid_shut_up_down_conflict_{u}_{t}"
+                    )
+                    # minimum, maximum power rate
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) >= c_min * hp_cap * self.z_on_H[u,t],
+                        name=f"heatpump_min_power_rate_{u}_{t}"
+                    )
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) <= c_max * hp_cap * self.z_on_H[u,t],
+                        name=f"heatpump_max_power_rate_{u}_{t}"
+                    )
+                    # ramping up rate
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) - self.p.get((u,'hp',t-1),0) <= c_RU_H * hp_cap * self.z_on_H[u,t] + c_RSU_H * hp_cap * self.z_su_H[u,t],
+                        name=f"heatpump_ramping_up_rate_{u}_{t}"
+                    )
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t-1),0) - self.p.get((u,'hp',t),0) <= c_RD_H * hp_cap * self.z_on_H[u,t] + c_RSD_H * hp_cap * self.z_sd_H[u,t],
+                        name=f"heatpump_ramping_down_rate_{u}_{t}"
+                    )
+                else:
+                    # sos-1
+                    cons = self.model.addCons(
+                        self.z_su_H[u,t] - self.z_sd_H[u,t] - self.z_on_H[u,t] + self.z_on_H[u,23] == 0.0,
+                        name=f"heatpump_state_{u}_{t}"
+                    )
+                    # forbid shut-up and shut-down at the same time
+                    cons = self.model.addCons(
+                        self.z_su_H[u,t] + self.z_sd_H[u,t] <= 1.0,
+                        name=f"heatpump_forbid_shut_up_down_conflict_{u}_{t}"
+                    )
+                    # minimum, maximum power rate
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) >= c_min * hp_cap * self.z_on_H[u,t],
+                        name=f"heatpump_min_power_rate_{u}_{t}"
+                    )
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) <= c_max * hp_cap * self.z_on_H[u,t],
+                        name=f"heatpump_max_power_rate_{u}_{t}"
+                    )
+                    # ramping up rate
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',t),0) - self.p.get((u,'hp',23),0) <= c_RU_H * hp_cap * self.z_on_H[u,t] + c_RSU_H * hp_cap * self.z_su_H[u,t],
+                        name=f"heatpump_ramping_up_rate_{u}_{t}"
+                    )
+                    cons = self.model.addCons(
+                        self.p.get((u,'hp',23),0) - self.p.get((u,'hp',t),0) <= c_RD_H * hp_cap * self.z_on_H[u,t] + c_RSD_H * hp_cap * self.z_sd_H[u,t],
+                        name=f"heatpump_ramping_down_rate_{u}_{t}"
+                    )
+
     def _add_hydro_nonconvex_cons_lp_relax(self):
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
@@ -1403,8 +1496,8 @@ class LocalEnergyMarket:
                     revenue_analysis['hydrogen']['storage_cost'] += val * c_G_sto * (1/nu_dis_G)
         
         # Electrolyzer startup cost
-        if 'z_su' in results:
-            for (u, t), val in results['z_su'].items():
+        if 'z_su_G' in results:
+            for (u, t), val in results['z_su_G'].items():
                 if val > 0:
                     startup_cost = self.params.get(f'c_su_G_{u}', np.inf)
                     revenue_analysis['hydrogen']['startup_cost'] += val * startup_cost
@@ -1442,7 +1535,11 @@ class LocalEnergyMarket:
                 if val > 0:
                     revenue_analysis['heat']['storage_cost'] += val * c_H_sto * (1/nu_dis_H)
         
-        
+        if 'z_su_H' in results:
+            for (u, t), val in results['z_su_H'].items():
+                if val > 0:
+                    startup_cost = self.params.get(f'c_su_H_{u}', np.inf)
+                    revenue_analysis['heat']['startup_cost'] += val * startup_cost
         # ========== CALCULATE NET VALUES ==========
         # Electricity net
         revenue_analysis['electricity']['net'] = (
@@ -2256,25 +2353,25 @@ class LocalEnergyMarket:
                 }
                 
                 # Get state information
-                if 'z_on' in results and (u, t) in results['z_on']:
-                    z_on = results['z_on'][u, t]
-                    z_off = results['z_off'].get((u, t), 0)
-                    z_sb = results['z_sb'].get((u, t), 0)
-                    z_su = results['z_su'].get((u, t), 0)
+                if 'z_on_G' in results and (u, t) in results['z_on_G']:
+                    z_on_G = results['z_on_G'][u, t]
+                    z_off_G = results['z_off_G'].get((u, t), 0)
+                    z_sb_G = results['z_sb_G'].get((u, t), 0)
+                    z_su_G = results['z_su_G'].get((u, t), 0)
                     
                     # Determine state
-                    if z_on > 0.5:
+                    if z_on_G > 0.5:
                         hour_data['state'] = 'ON'
                         hours_on += 1
-                    elif z_sb > 0.5:
+                    elif z_sb_G > 0.5:
                         hour_data['state'] = 'STANDBY'
                         hours_sb += 1
-                    elif z_off > 0.5:
+                    elif z_off_G > 0.5:
                         hour_data['state'] = 'OFF'
                         hours_off += 1
                     
-                    hour_data['startup'] = z_su
-                    total_startups += z_su
+                    hour_data['startup'] = z_su_G
+                    total_startups += z_su_G
                 
                 # Get production data
                 if 'p' in results and (u, 'els', t) in results['p']:
@@ -2291,7 +2388,7 @@ class LocalEnergyMarket:
                     total_electricity += hour_data['electricity_consumption']
                 
                 # Calculate capacity utilization
-                max_capacity = self.params.get(f'C_max_{u}', 100)
+                max_capacity = self.params.get(f'c_max_G_{u}', 100)
                 if max_capacity > 0:
                     hour_data['capacity_utilization'] = (hour_data['electricity_consumption'] / max_capacity) * 100
                 
@@ -2311,7 +2408,7 @@ class LocalEnergyMarket:
             if total_electricity > 0:
                 summary['conversion_efficiency'] = total_hydrogen / total_electricity
             
-            max_capacity = self.params.get(f'C_max_{u}', 100)
+            max_capacity = self.params.get(f'c_max_G_{u}', 100)
             if max_capacity > 0 and len(self.time_periods) > 0:
                 summary['capacity_utilization'] = (total_electricity / (max_capacity * len(self.time_periods))) * 100
             
@@ -2448,15 +2545,22 @@ class LocalEnergyMarket:
         binary_values = {}
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
-                if (u,t) in self.z_su:
-                    binary_values[('z_su', u, t)] = self.model.getVal(self.z_su[u,t])
-                if (u,t) in self.z_on:
-                    binary_values[('z_on', u, t)] = self.model.getVal(self.z_on[u,t])
-                if (u,t) in self.z_off:
-                    binary_values[('z_off', u, t)] = self.model.getVal(self.z_off[u,t])
-                if (u,t) in self.z_sb:
-                    binary_values[('z_sb', u, t)] = self.model.getVal(self.z_sb[u,t])
-        
+                if (u,t) in self.z_su_G:
+                    binary_values[('z_su_G', u, t)] = self.model.getVal(self.z_su_G[u,t])
+                if (u,t) in self.z_on_G:
+                    binary_values[('z_on_G', u, t)] = self.model.getVal(self.z_on_G[u,t])
+                if (u,t) in self.z_off_G:
+                    binary_values[('z_off_G', u, t)] = self.model.getVal(self.z_off_G[u,t])
+                if (u,t) in self.z_sb_G:
+                    binary_values[('z_sb_G', u, t)] = self.model.getVal(self.z_sb_G[u,t])
+        for u in self.players_with_heatpumps:
+            for t in self.time_periods:
+                if (u,t) in self.z_su_H:
+                    binary_values[('z_su_H', u, t)] = self.model.getVal(self.z_su_H[u,t])
+                if (u,t) in self.z_on_H:
+                    binary_values[('z_on_H', u, t)] = self.model.getVal(self.z_on_H[u,t])
+                if (u,t) in self.z_sd_H:
+                    binary_values[('z_sd_H', u, t)] = self.model.getVal(self.z_sd_H[u,t])
         print(f"✓ Extracted {len(binary_values)} binary variable values")
         
         # Step 3: Create new LP model with fixed binary variables
@@ -3246,8 +3350,10 @@ class LocalEnergyMarket:
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
                     profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
                 # 5. 시작 비용
-                if 'z_su' in results and (u,t) in results['z_su']:
-                    profit_breakdown['startup_cost'] += results['z_su'][u,t] * self.params.get(f'c_su_G_{u}', 50)
+                if 'z_su_G' in results and (u,t) in results['z_su_G']:
+                    profit_breakdown['startup_cost'] += results['z_su_G'][u,t] * self.params.get(f'c_su_G_{u}', 50)
+                if 'z_su_H' in results and (u,t) in results['z_su_H']:
+                    profit_breakdown['startup_cost'] += results['z_su_H'][u,t] * self.params.get(f'c_su_H_{u}', 10)
             
             # 순이익 계산
             profit_breakdown['net_profit'] = (
@@ -3334,19 +3440,19 @@ if __name__ == "__main__":
             price = parameters[f'pi_E_gri_import_{t}']
             
             # Get states
-            z_on = results_complete.get('z_on', {}).get(('u2', t), 0)
-            z_sb = results_complete.get('z_sb', {}).get(('u2', t), 0)
-            z_off = results_complete.get('z_off', {}).get(('u2', t), 0)
+            z_on_G = results_complete.get('z_on_G', {}).get(('u2', t), 0)
+            z_sb_G = results_complete.get('z_sb_G', {}).get(('u2', t), 0)
+            z_off_G = results_complete.get('z_off_G', {}).get(('u2', t), 0)
             
             # Get operation values
             elec_use = results_complete.get('fl_d', {}).get(('u2', 'elec', t), 0)
             h2_prod = results_complete.get('p', {}).get(('u2', 'els', t), 0)
             
             # Determine state
-            if z_on > 0.5:
+            if z_on_G > 0.5:
                 state = "ON"
                 hours_on += 1
-            elif z_sb > 0.5:
+            elif z_sb_G > 0.5:
                 state = "STANDBY"
                 hours_standby += 1
             else:

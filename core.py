@@ -229,19 +229,18 @@ class SeparationProblem(LocalEnergyMarket):
                                       name=f"bigm_b_dis_H_{u}_{t}")
                 
                 # Electrolyzer binary commitment variables
-                if (u, t) in self.z_su:
-                    self.model.addCons(self.z_su[u,t] <= z_u,
-                                      name=f"bigm_z_su_{u}_{t}")
-                
-                if (u, t) in self.z_on:
-                    self.model.addCons(self.z_on[u,t] <= z_u,
-                                      name=f"bigm_z_on_{u}_{t}")
+                if (u, t) in self.z_su_G:
+                    self.model.addCons(self.z_su_G[u,t] <= z_u,
+                                      name=f"bigm_z_su_G_{u}_{t}")
+                if (u, t) in self.z_on_G:
+                    self.model.addCons(self.z_on_G[u,t] <= z_u,
+                                      name=f"bigm_z_on_G_{u}_{t}")
                 """
                 z_on + z_off + z_sb == 1 이기 때문에 z_off는 bigm으로 가두면 안됨.
                 """
-                if (u, t) in self.z_sb:
-                    self.model.addCons(self.z_sb[u,t] <= z_u,
-                                      name=f"bigm_z_sb_{u}_{t}")
+                if (u, t) in self.z_sb_G:
+                    self.model.addCons(self.z_sb_G[u,t] <= z_u,
+                                      name=f"bigm_z_sb_G_{u}_{t}")
         
         print(f"Added Big-M constraints for all variables")
     

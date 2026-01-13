@@ -112,8 +112,6 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'res_cap': res_cap,
         'hp_cap': hp_cap,
         'els_cap': els_cap,
-        'C_min': 0.15,
-        'C_sb': 0.01,
         'phi1_1': 21.12266316,
         'phi0_1': -0.37924094,
         'phi1_2': 16.66883134,
@@ -121,10 +119,6 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_res': 0.05,
         'c_hp': 2.69,
         'c_els': 0.05,
-        'c_su_G': 50,
-        'c_su_H': 10,
-        'max_up_time': 3,
-        'min_down_time': 2,
         'nu_cop': nu_cop,
         # Grid connection limits
         'res_capacity': 2,
@@ -139,6 +133,20 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_sto_E': 0.01,
         'c_sto_G': 0.01,
         'c_sto_H': 0.01,
+
+        # Unit commitment parameters
+        'min_down_time_G': 2,
+        'c_RU_H': 0.9,
+        'c_RD_H': 0.9,
+        'c_RSU_H': 0.9,
+        'c_RSD_H': 0.9,
+        'c_su_G': 50,
+        'c_su_H': 10,
+        'c_min_G': 0.15, #0.15MW
+        'c_sb_G': 0.01, #0.01MW
+        'c_max_G': 1.0, #1.0MW,
+        'c_min_H': 0.2,
+        'c_max_H': 0.8
     }
     parameters['players_with_fl_elec_demand'] = list(set(
         parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']
@@ -165,6 +173,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     for i,u in enumerate(parameters['players_with_electrolyzers']):
         parameters[f'c_els_{u}'] = parameters['c_els']
         parameters[f'c_su_G_{u}'] = parameters['c_su_G']
+    for u in parameters['players_with_heatpumps']:
+        parameters[f'c_su_H_{u}'] = parameters['c_su_H']
     for u in parameters['players_with_elec_storage']:
         parameters[f'c_sto_E_{u}'] = parameters['c_sto_E']
     for u in parameters['players_with_hydro_storage']:

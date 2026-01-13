@@ -6,6 +6,7 @@ import sys
 sys.path.append('/mnt/project')
 import numpy as np
 from compact import LocalEnergyMarket, solve_and_extract_results
+# from compact_debug import LocalEnergyMarket, solve_and_extract_results
 from typing import Dict, List, Tuple
 
 
@@ -107,9 +108,9 @@ class PlayerSubproblem:
                     new_obj += c_els * self.lem.p[u, 'els', t]
                 
                 # Startup costs
-                if (u, t) in self.lem.z_su:
+                if (u, t) in self.lem.z_su_G:
                     c_su = self.parameters.get(f'c_su_G_{u}', np.inf)
-                    new_obj += c_su * self.lem.z_su[u, t]
+                    new_obj += c_su * self.lem.z_su_G[u, t]
                 # Storage costs
                 if u in self.lem.params["players_with_elec_storage"]:
                     c_E_sto = self.parameters.get(f'c_sto_E_{u}', np.inf)
@@ -382,12 +383,14 @@ def calculate_column_cost(player: str, solution: Dict, params: Dict, time_period
         p_res = solution.get('p', {}).get((player, 'res', t), 0.0)
         p_hp = solution.get('p', {}).get((player, 'hp', t), 0.0)
         p_els = solution.get('p', {}).get((player, 'els', t), 0.0)
-        z_su = solution.get('z_su', {}).get((player, t), 0.0)
+        z_su_G = solution.get('z_su_G', {}).get((player, t), 0.0)
+        z_su_H = solution.get('z_su_H', {}).get((player, t), 0.0)
 
         cost += p_res * params.get(f'c_res_{player}', 0.0)
         cost += p_hp * params.get(f'c_hp_{player}', 0.0)
         cost += p_els * params.get(f'c_els_{player}', 0.0)
-        cost += z_su * params.get(f'c_su_G_{player}', 0.0)
+        cost += z_su_G * params.get(f'c_su_G_{player}', 0.0)
+        cost += z_su_H * params.get(f'c_su_H_{player}', 0.0)
         # Storage costs
         b_dis_E, b_ch_E = solution.get('b_dis_E', {}).get((player, t), 0.0), solution.get('b_ch_E', {}).get((player, t), 0.0)
         b_dis_G, b_ch_G = solution.get('b_dis_G', {}).get((player, t), 0.0), solution.get('b_ch_G', {}).get((player, t), 0.0)
