@@ -1052,17 +1052,14 @@ class LocalEnergyMarket:
                             )
                         self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_23_to_0_{u}_{t}"] = cons
                 else:
+                    """
+                    어느 시점에 els가 꺼져있어야 한다는 initial state 조건을 안주면, start-up cost를 최소화하기위해 모든 시간대에 z_off = 0이 되어버림.
+                    """
                     cons = self.model.addCons(
                         self.z_off_G[u,t] >= 1.0,
                         name=f"electrolyzer_initial_state_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_initial_state_{u}_{t}"] = cons
-                    ## 아래는 왜 필요? 어차피 z_off + z_on + z_sb = 1 인데
-                    # cons = self.model.addCons(
-                    #     self.z_su[u,t] <= 0.0,
-                    #     name=f"electrolyzer_initial_su_{u}_{t}"
-                    # )
-                    self.electrolyzer_cons[f"electrolyzer_initial_su_{u}_{t}"] = cons
             # minimum down time
             for t in self.time_periods:
                 if t == 23:
