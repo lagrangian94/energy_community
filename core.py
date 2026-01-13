@@ -241,7 +241,17 @@ class SeparationProblem(LocalEnergyMarket):
                 if (u, t) in self.z_sb_G:
                     self.model.addCons(self.z_sb_G[u,t] <= z_u,
                                       name=f"bigm_z_sb_G_{u}_{t}")
-        
+
+                # Heat pump binary commitment variables
+                if (u, t) in self.z_su_H:
+                    self.model.addCons(self.z_su_H[u,t] <= z_u,
+                                      name=f"bigm_z_su_H_{u}_{t}")
+                if (u, t) in self.z_on_H:
+                    self.model.addCons(self.z_on_H[u,t] <= z_u,
+                                      name=f"bigm_z_on_H_{u}_{t}")
+                if (u, t) in self.z_ru_H:
+                    self.model.addCons(self.z_ru_H[u,t] <= z_u,
+                                      name=f"bigm_z_ru_H_{u}_{t}")
         print(f"Added Big-M constraints for all variables")
     
     def _modify_constraints(self):

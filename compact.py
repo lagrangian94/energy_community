@@ -309,7 +309,8 @@ def solve_and_extract_results(model):
                         "p", "d", "b_dis_E", "b_ch_E", "s_E", "b_dis_G", "b_ch_G", "s_G",
                         "b_dis_H", "b_ch_H", "s_H", 
                         "z_su_G", "z_on_G", "z_off_G", "z_sb_G", "z_sd_G",
-                        "z_su_H", "z_on_H", "z_sd_H"]
+                        "z_su_H", "z_on_H", "z_sd_H"
+                        ,"z_ru_H"]
                         # "chi_peak"]
             raise Exception(f"Model data is None. Cannot extract results for {vars_name}")
             
@@ -472,6 +473,12 @@ class LocalEnergyMarket:
         self.z_su_H = {}   # Start-up decision
         self.z_sd_H = {}   # Shutdown decision
         self.z_on_H = {}   # Turn on decision
+        """
+        Siddique, M. B., Keles, D., Scheller, F., & Nielsen, P. S. (2024).
+         Dispatch strategies for large-scale heat pump based district heating under high renewable share and risk-aversion:
+          A multistage stochastic optimization approach. Energy Economics, 136, 107764.
+        """
+        self.z_ru_H = {}   # Ramp-up decision
         # Peak power variable
         # self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0, obj=self.params.get('pi_peak', 0))
         
@@ -509,6 +516,8 @@ class LocalEnergyMarket:
                         self.z_su_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_H_{u}_{t}", obj=c_su_H)
                         self.z_sd_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_sd_H_{u}_{t}")
                         self.z_on_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_H_{u}_{t}")
+
+                        # self.z_ru_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_ru_H_{u}_{t}")
 
                 if u in self.players_with_electrolyzers:  # Electrolyzers
                     els_cap = self.params.get(f'els_cap', -np.inf)  # Default 1 MW
@@ -689,6 +698,13 @@ class LocalEnergyMarket:
                         name=f"fix_z_sd_H_{u}_{t}"
                     )
                     self.heatpump_cons[f"fix_z_sd_H_{u}_{t}"] = cons
+                
+                if ('z_ru_H', u, t) in self.binary_values:
+                    cons = self.model.addCons(
+                        self.z_ru_H[u,t] == self.binary_values[('z_ru_H', u, t)],
+                        name=f"fix_z_ru_H_{u}_{t}"
+                    )
+                    self.heatpump_cons[f"fix_z_ru_H_{u}_{t}"] = cons
     def _store_model_data(self):
         """Store all variables and constraints in model.data dictionary"""
         
@@ -732,6 +748,8 @@ class LocalEnergyMarket:
         self.model.data["vars"]["z_su_H"] = self.z_su_H
         self.model.data["vars"]["z_on_H"] = self.z_on_H
         self.model.data["vars"]["z_sd_H"] = self.z_sd_H
+
+        # self.model.data["vars"]["z_ru_H"] = self.z_ru_H
         
         # self.model.data["vars"]["chi_peak"] = self.chi_peak
         
@@ -926,7 +944,6 @@ class LocalEnergyMarket:
                         name=f"soc_transition_G_{u}_23_to_0"
                     )
                     self.storage_cons[f"soc_transition_G_{u}_23_to_0"] = cons
-        
 
         if not self.dwr:
         # Community hydro balance
@@ -2561,6 +2578,9 @@ class LocalEnergyMarket:
                     binary_values[('z_on_H', u, t)] = self.model.getVal(self.z_on_H[u,t])
                 if (u,t) in self.z_sd_H:
                     binary_values[('z_sd_H', u, t)] = self.model.getVal(self.z_sd_H[u,t])
+                
+                if (u,t) in self.z_ru_H:
+                    binary_values[('z_ru_H', u, t)] = self.model.getVal(self.z_ru_H[u,t])
         print(f"✓ Extracted {len(binary_values)} binary variable values")
         
         # Step 3: Create new LP model with fixed binary variables
