@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
     ip, chp = True, True #True, True, False
-    compute_core = False
+    compute_core = True
     ## ========================================
     ## Restricted Pricing
     ## ========================================
