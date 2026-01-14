@@ -361,6 +361,7 @@ class LocalEnergyMarket:
             players: List of player IDs
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
+            model_type: 'mip': Mixed-integer Community Games, 'lp': Linear Community Games, 'mip_fix_binaries': MIP game with fixed binary variables
         """
         self.players = players
         self.time_periods = time_periods
@@ -655,10 +656,12 @@ class LocalEnergyMarket:
         # Non-convex Operation Constraints
         if self.model_type == 'mip':
             self._add_hydro_nonconvex_cons_mip()
+            self._add_heat_nonconvex_cons_mip()
         elif self.model_type == 'lp':
             self._add_hydro_nonconvex_cons_lp_relax()
         elif self.model_type == 'mip_fix_binaries':
             self._add_hydro_nonconvex_cons_mip()
+            self._add_heat_nonconvex_cons_mip()
             self._fix_binaries()
     def _fix_binaries(self):
         # If binary_values are provided, add constraints to fix binary variables
@@ -887,7 +890,7 @@ class LocalEnergyMarket:
             if u in self.players_with_heat_storage:
                 nu_ch = self.params.get('nu_ch_H', np.inf)
                 nu_dis = self.params.get('nu_dis_H', np.inf)
-                nu_loss = self.params.get('nu_loss_H', np.inf)
+                # nu_loss = self.params.get('nu_loss_H', np.inf)
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_H:
                     initial_soc = self.params.get(f'initial_soc_H', np.inf)
@@ -898,7 +901,7 @@ class LocalEnergyMarket:
                 for t in range(1, 24):
                     if (u,t) in self.s_H and (u,t-1) in self.s_H:
                         cons = self.model.addCons(
-                            self.s_H[u,t] == (1-nu_loss)*self.s_H[u,t-1] + nu_ch * self.b_ch_H[u,t] - (1/nu_dis) * self.b_dis_H[u,t],
+                            self.s_H[u,t] == self.s_H[u,t-1] + nu_ch * self.b_ch_H[u,t] - (1/nu_dis) * self.b_dis_H[u,t],
                             name=f"soc_transition_H_{u}_{t}"
                         )
                     self.storage_cons[f"soc_transition_H_{u}_{t}"] = cons
@@ -1138,6 +1141,7 @@ class LocalEnergyMarket:
                         name=f"electrolyzer_minimum_down_time_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_minimum_down_time_{u}_{t}"] = cons
+    def _add_heat_nonconvex_cons_mip(self):
         for u in self.players_with_heatpumps:
             hp_cap = self.params.get(f'hp_cap', -np.inf)
             c_min = self.params.get(f'c_min_H', -np.inf)
@@ -1210,27 +1214,20 @@ class LocalEnergyMarket:
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
             els_cap = self.params.get(f'els_cap', -np.inf)
+            El = self.params.get("El", None)
+            c_max = self.params.get(f'c_max_G', -np.inf)
             for t in self.time_periods:
-                phi1_1 = self.params.get(f'phi1_1', -np.inf)
-                phi0_1 = self.params.get(f'phi0_1', -np.inf)
-                phi1_2 = self.params.get(f'phi1_2', -np.inf)
-                phi0_2 = self.params.get(f'phi0_2', -np.inf)
                 try:
-                    cons = self.model.addCons(
-                        self.p.get((u,'els',t),0) <= phi1_1 * self.els_d.get((u,t),0) + phi0_1,
-                        name=f"electrolyzer_production_curve_1_{u}_{t}"
-                    )
+                    for s in range(El['N_s']):
+                        cons = self.model.addCons(
+                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d[(u,t)] + El['b'][s],
+                            name=f"electrolyzer_production_curve_{u}_{t}"
+                        )
                 except:
-                    print(f"Error adding constraint: electrolyzer_production_curve_1_{u}_{t}")
-                    continue
-                self.electrolyzer_cons['production_curve_1', u, t] = cons
+                    raise Exception(f"If to solve Linear Community Games, must choose the eff type 2 for electrolyzer.")
+                self.electrolyzer_cons['production_curve', u, t] = cons
                 cons = self.model.addCons(
-                    self.p.get((u,'els',t),0) <= phi1_2 * self.els_d.get((u,t),0) + phi0_2,
-                    name=f"electrolyzer_production_curve_2_{u}_{t}"
-                )
-                self.electrolyzer_cons['production_curve_2', u, t] = cons
-                cons = self.model.addCons(
-                    self.els_d.get((u,t),0) - els_cap  <= 0.0,
+                    self.els_d.get((u,t),0) - c_max * els_cap  <= 0.0,
                     name=f"electrolyzer_max_power_consumption_{u}_{t}"
                 )
                 self.electrolyzer_cons[f"electrolyzer_max_power_consumption_{u}_{t}"] = cons
@@ -1266,6 +1263,10 @@ class LocalEnergyMarket:
             self.model.disablePropagation()
             self.model.setSeparating(SCIP_PARAMSETTING.OFF)
         # Solve the model
+        # self.model.setPresolve(SCIP_PARAMSETTING.OFF)
+        # self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
+        # self.model.disablePropagation()
+        # self.model.setSeparating(SCIP_PARAMSETTING.OFF)
         status = self.solve()
         
         if status != "optimal":
@@ -3291,7 +3292,7 @@ class LocalEnergyMarket:
         print("CONSUMER ANALYSIS (u4, u5, u6)")
         print("="*80)
         
-        consumers = ['u4', 'u5', 'u6']
+        consumers = self.params.get('players_with_nfl_elec_demand', []) + self.params.get('players_with_nfl_hydro_demand', []) + self.params.get('players_with_nfl_heat_demand', [])
         for player in consumers:
             ind_profit = results_comparison['individual'].get(player, {}).get('profit', 0)
             comm_profit = results_comparison['community']['player_profits'][player]['net_profit']

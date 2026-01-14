@@ -110,7 +110,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'nu_dis_G': 0.95,
         'nu_ch_H': 0.9,
         'nu_dis_H': 0.9,
-        'nu_loss_H':0.002,
+        # 'nu_loss_H':0.002,
         # Equipment capacities
         'res_cap': res_cap,
         'hp_cap': hp_cap,
@@ -155,7 +155,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
     wind_production = electricity_prod_generator.generate_wind_production()
     pv_production = electricity_prod_generator.generate_solar_production()
-    El = generate_electrolyzer(1, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"], segments=segments)
+    El = generate_electrolyzer(eff_type=eff_type, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"], segments=segments)
     parameters['El'] = El
     # Add cost parameters
     for u in parameters['players_with_solar']:

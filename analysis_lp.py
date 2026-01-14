@@ -30,6 +30,7 @@ if __name__ == "__main__":
     configuration["players_with_fl_hydro_demand"] = []
     configuration["players_with_fl_heat_demand"] = []
     parameters = setup_lem_parameters(players, configuration, time_periods)
+    parameters['eff_type'], parameters['El']['eff_type'] = 2, 2
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing    
@@ -54,7 +55,7 @@ if __name__ == "__main__":
         parameters,
         player_profits_lp
     )
-    lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_lp.tex')
+    lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_linear_games.tex')
 
     ## ========================================
     ## Computational Stability Analysis
@@ -92,7 +93,7 @@ if __name__ == "__main__":
                 for u in players:
                     ### !!!net profit key만 업데이트함에 유의!!!
                     comparison_results_core["community"]["player_profits"][u]["net_profit"] = -1*core_allocation[u]
-                lem_lp.generate_beamer_synergy_table(comparison_results_core, players, filename='synergy_analysis_core_lp.tex')
+                lem_lp.generate_beamer_synergy_table(comparison_results_core, players, filename='synergy_analysis_core_linear_games.tex')
             else:
                 raise RuntimeError("Row generation algorithm has bug")
         else:

@@ -158,11 +158,12 @@ class SeparationProblem(LocalEnergyMarket):
                     self.model.addCons(self.p[u,'els',t] <= M * z_u,
                                       name=f"bigm_p_els_{u}_{t}")
                 
-                # Electrolyzer demand
-                if (u, t) in self.els_d:
-                    M = self.params.get(f'els_cap_{u}', M_default)
-                    self.model.addCons(self.els_d[u,t] <= M * z_u,
-                                      name=f"bigm_els_d_{u}_{t}")
+                # # Electrolyzer demand
+                ## z_u=0 -> els_d=0. therefore, useless
+                # if (u, t) in self.els_d:
+                #     M = self.params.get(f'els_cap_{u}', M_default)
+                #     self.model.addCons(self.els_d[u,t] <= M * z_u,
+                #                       name=f"bigm_els_d_{u}_{t}")
                 
                 # Flexible demand
                 if (u, 'elec', t) in self.fl_d:
@@ -427,7 +428,7 @@ class CoreComputation:
             model_type=self.model_type,
             dwr=False
         )
-        
+        lem.model.hideOutput()
         status = lem.solve()
         
         if status != "optimal":
@@ -529,7 +530,7 @@ class CoreComputation:
         """
         print("\n" + "="*60)
         print("Solving Master Problem...")
-        
+        self.master_model.hideOutput()
         self.master_model.optimize()
         
         status = self.master_model.getStatus()
@@ -578,6 +579,7 @@ class CoreComputation:
             current_payoffs=payoffs
         )
         model = sep_problem.model
+        # model.hideOutput()
         coalition, violation = sep_problem.solve_separation()
         # Compute actual violation for verification
         if len(coalition) > 0:

@@ -11,14 +11,13 @@ sys.path.append('/mnt/project')
 
 
 if __name__ == "__main__":
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']#,'u7']
-    # players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6','u7']
     time_periods = list(range(24))  # 24 hours
     configuration = {}
     configuration["players_with_renewables"] = ['u1']
     configuration["players_with_solar"] = []
     configuration["players_with_wind"] = ['u1']
-    configuration["players_with_electrolyzers"] = ['u2'] #+ ['u7']
+    configuration["players_with_electrolyzers"] = ['u2'] + ['u7']
     configuration["players_with_heatpumps"] = ['u3']
     configuration["players_with_elec_storage"] = ['u1'] #,'u7']
     configuration["players_with_hydro_storage"] = ['u2'] #+ ['u7']
@@ -33,7 +32,8 @@ if __name__ == "__main__":
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
-    ip, chp = True, True #True, True, False
+    ip, chp = True, True
+    lp_relax = True
     compute_core = True
     ## ========================================
     ## Restricted Pricing
@@ -63,7 +63,28 @@ if __name__ == "__main__":
         print("\n" + "="*80)
         print("PLAYER BENEFIT ANALYSIS")
         print("="*80)
-    
+    if lp_relax:
+        lem.model.freeTransform()
+        lem.model.relax()
+        status_complete_lp, results_complete_lp, revenue_analysis_lp, community_prices_lp = lem.solve_complete_model(analyze_revenue=False)
+        player_profits_lp, prices_lp = lem.calculate_player_profits_with_community_prices(results_complete_lp, community_prices_lp)
+        comparison_results_lp = lem.compare_individual_vs_community_profits(
+            players, 
+            lem.model_type,
+            time_periods, 
+            parameters,
+            player_profits_lp
+        )
+        profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players} # restricted pricing의 또 다른 이름인 integer programming pricing의 수익
+        # 음의 시너지 분석
+        if comparison_results_lp['synergy']['absolute_gain'] < 0:
+            lem.analyze_negative_synergy(comparison_results_lp, players)
+        lem.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_lp_relax.tex')
+
+        # 추가 분석: 어떤 플레이어가 가장 큰 이익을 보는지
+        print("\n" + "="*80)
+        print("PLAYER BENEFIT ANALYSIS")
+        print("="*80)
     ## ========================================
     ## Convex Hull Pricing
     ## ========================================
