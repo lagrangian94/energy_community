@@ -289,7 +289,8 @@ def plot_el_curves(El, config_dict):
             plt.figure(fig_eff)
             plt.plot(p_vec, (El["a"][jj]+El["b"][jj]/(p_vec)), color='red', linewidth=2, label='Piecewise linearization', linestyle='--', dashes=(1, 1)) 
         plt.legend(['Nonlinear curve', 'Approximated curve'])
-        
+        plt.savefig(f'electrolyzer_curves_HYP-MIL.png', dpi=300, bbox_inches='tight')
+        plt.close()
     if config_dict["eff_type"]==2: #HYP_L  
         N_pw=len(El["p_val"]) # Number of piecewise discretization points
         N_s = N_pw - 1 # Number of discretization segments
@@ -309,7 +310,8 @@ def plot_el_curves(El, config_dict):
             plt.figure(fig_eff)
             plt.plot(p_vec, (El["a"][jj]+El["b"][jj]/(p_vec)), color='red', linewidth=1, label='Approximated curve', linestyle='--', dashes=(1, 1)) 
         plt.legend(['Nonlinear curve', 'Approximated curve'])
-    
+        plt.savefig(f'electrolyzer_curves_HYP-L.png', dpi=300, bbox_inches='tight')
+        plt.close()
     if config_dict["eff_type"]== 3: #HYP-SOC
             
         p_val = np.concatenate((El["p_val"][:1], [El["p_val"][-1]])) # new p_val vector with only relevant points 
@@ -329,7 +331,8 @@ def plot_el_curves(El, config_dict):
             plt.figure(fig_eff)
             plt.plot(p_vec, (El["D_0"]/p_vec+El["D_1"]+El["D_2"]*p_vec),":", color='blue', linewidth=2, label='Quadratic', markersize=10)
         plt.legend()
-        plt.show()
+        plt.savefig(f'electrolyzer_curves_{config_dict["eff_type"]}.png', dpi=300, bbox_inches='tight')
+        plt.close()
         
     if config_dict["eff_type"]== 4: # HYP-MISOC
    
@@ -355,7 +358,8 @@ def plot_el_curves(El, config_dict):
             else:
                 plt.plot(p_vec, (El["E_0"]/p_vec+El["E_1"]+El["E_2"]*p_vec),":", color='blue', linewidth=2, label='Right', markersize=10)
         plt.legend()
-        plt.show()
+        plt.savefig(f'electrolyzer_curves_{config_dict["eff_type"]}.png', dpi=300, bbox_inches='tight')
+        plt.close()
             
 
 ################ Ex post ##################

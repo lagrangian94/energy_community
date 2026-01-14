@@ -71,11 +71,12 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         nu_cop = 3.28 # [3.0, 3.28, 3.5]
         c_su_G = 50 # [50, 75, 100]
         c_su_H = 10 # [5, 10, 15]
-        base_h2_price_eur = 2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
-        e_E_cap = res_cap * 2 # [0.5, 1.0, 1.5, 2.0]
-        e_H_cap = hp_cap * 2 # [0.5, 1.0, 1.5, 2.0]
+        base_h2_price_eur = 5000/1500 #2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
+        e_E_cap_ratio = 1.0
+        e_H_cap_ratio = 1.0
+        e_G_cap_ratio = 1.0
         eff_type = 1
-        segments = 5
+        segments = 6
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -115,19 +116,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'res_cap': res_cap,
         'hp_cap': hp_cap,
         'els_cap': els_cap,
+        'e_E_cap_ratio': e_E_cap_ratio,
+        'e_H_cap_ratio': e_H_cap_ratio,
+        'e_G_cap_ratio': e_G_cap_ratio,
         'c_res': 0.05,
         'c_hp': 2.69,
         'c_els': 0.05,
         'nu_cop': nu_cop,
         # Grid connection limits
-        'res_capacity': 2,
-        'e_E_cap': e_E_cap,
-        'i_E_cap': 500,
-        'e_H_cap': e_H_cap, #0.06,
-        'i_H_cap': 500, #0.08,
-        'e_G_cap': 50,
-        'i_G_cap': 100 , #30,
-        
+        'res_capacity': 2,        
         # Cost parameters
         'c_sto_E': 0.01,
         'c_sto_G': 0.01,
@@ -194,7 +191,6 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     
     
     # DEMANDS
-    num_households = 52
     elec_generator = ElectricityLoadGenerator(num_households=num_households)
     heat_generator = HeatLoadGenerator(num_households=num_households)
     hydro_generator = HydrogenLoadGenerator()
@@ -217,5 +213,10 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
                 parameters[f'd_H_nfl_{u}_{t}'] = heat_demand_mwh[t]
             else:
                 parameters[f'd_H_nfl_{u}_{t}'] = 0
-    
+    parameters["i_E_cap"] = np.max(elec_demand_mwh)
+    parameters["i_H_cap"] = np.max(heat_demand_mwh)
+    parameters["i_G_cap"] = np.max(hydro_demand_kg)
+    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
+    parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
+    parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
     return parameters

@@ -111,19 +111,25 @@ class PlayerSubproblem:
                 if (u, t) in self.lem.z_su_G:
                     c_su = self.parameters.get(f'c_su_G_{u}', np.inf)
                     new_obj += c_su * self.lem.z_su_G[u, t]
+                if (u, t) in self.lem.z_su_H:
+                    c_su = self.parameters.get(f'c_su_H_{u}', np.inf)
+                    new_obj += c_su * self.lem.z_su_H[u, t]
                 # Storage costs
                 if u in self.lem.params["players_with_elec_storage"]:
                     c_E_sto = self.parameters.get(f'c_sto_E_{u}', np.inf)
-                    new_obj += c_E_sto * self.lem.b_ch_E[u, t]
-                    new_obj += c_E_sto * self.lem.b_dis_E[u, t]
+                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_E', np.inf), self.parameters.get(f'nu_dis_E', np.inf)
+                    new_obj += c_E_sto * self.lem.b_ch_E[u, t] * nu_ch
+                    new_obj += c_E_sto * self.lem.b_dis_E[u, t] * (1/nu_dis)
                 if u in self.lem.params["players_with_hydro_storage"]:
                     c_G_sto = self.parameters.get(f'c_sto_G_{u}', np.inf)
-                    new_obj += c_G_sto * self.lem.b_ch_G[u, t]
-                    new_obj += c_G_sto * self.lem.b_dis_G[u, t]
+                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_G', np.inf), self.parameters.get(f'nu_dis_G', np.inf)
+                    new_obj += c_G_sto * self.lem.b_ch_G[u, t] * nu_ch
+                    new_obj += c_G_sto * self.lem.b_dis_G[u, t] * (1/nu_dis)
                 if u in self.lem.params["players_with_heat_storage"]:
                     c_H_sto = self.parameters.get(f'c_sto_H_{u}', np.inf)
-                    new_obj += c_H_sto * self.lem.b_ch_H[u, t]
-                    new_obj += c_H_sto * self.lem.b_dis_H[u, t]
+                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_H', np.inf), self.parameters.get(f'nu_dis_H', np.inf)
+                    new_obj += c_H_sto * self.lem.b_ch_H[u, t] * nu_ch
+                    new_obj += c_H_sto * self.lem.b_dis_H[u, t] * (1/nu_dis)
             # Community trading with dual prices
             # For reduced cost: original_cost - dual_price * coefficient
             # Electricity
@@ -284,7 +290,7 @@ class MasterProblem:
         
         for player in self.players:
             print(f"Generating initial column for player {player}...")
-            
+
             if not init_sol:
                 # Solve subproblem with zero dual prices
                 reduced_cost, solution, obj_val = subproblems[player].solve_pricing(

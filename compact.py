@@ -988,10 +988,6 @@ class LocalEnergyMarket:
             cons_pwl_lb = np.zeros(El['N_s'], dtype=object)
             cons_pwl_ub = np.zeros(El['N_s'], dtype=object)
             for t in self.time_periods:
-                # phi1_1 = self.params.get(f'phi1_1', -np.inf)
-                # phi0_1 = self.params.get(f'phi0_1', -np.inf)
-                # phi1_2 = self.params.get(f'phi1_2', -np.inf)
-                # phi0_2 = self.params.get(f'phi0_2', -np.inf)
                 if El['eff_type'] == 1:
                     for s in range(El['N_s']):
                         cons = self.model.addCons(
@@ -1491,6 +1487,7 @@ class LocalEnergyMarket:
                 'grid_import_cost': 0.0,
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
+                'startup_cost': 0.0,
                 'net': 0.0
             },
             'total_revenue': 0.0,
