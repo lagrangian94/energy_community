@@ -48,7 +48,9 @@ if __name__ == "__main__":
         'c_su_H': [40, 50, 60],
         'base_h2_price_eur': [2.1*0.75, 2.1, 2.1*2],
         'e_E_cap': [0.5, 1.0, 1.5, 2.0],
-        'e_H_cap': [0.5, 1.0, 1.5, 2.0]
+        'e_H_cap': [0.5, 1.0, 1.5, 2.0],
+        'eff_type': [1,2], # 1: HYP-MIL, 2: HYP-L,
+        'segments': [2] # number of piecewise segments for HYP-MIL and HYP-L
     }
 
 

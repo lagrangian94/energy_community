@@ -293,7 +293,10 @@ def solve_and_extract_results(model):
                     result_dict = {}
                     for key, var in var_dict.items():
                         try:
-                            result_dict[key] = model.getVal(var)
+                            if not isinstance(var, list):
+                                result_dict[key] = model.getVal(var)
+                            else:
+                                result_dict[key] = [model.getVal(v) for v in var]
                         except:
                             print(f"Could not get value for {var_name}_{key}")
                     results[var_name] = result_dict
@@ -469,6 +472,7 @@ class LocalEnergyMarket:
         self.z_on_G = {}   # Turn on decision
         self.z_off_G = {}  # Turn off decision
         self.z_sb_G = {}   # Stand-by decision
+        self.z_els_d_G = {}  # Electrolyzer piecewise linear segment
         # Heat pump commitment variables
         self.z_su_H = {}   # Start-up decision
         self.z_sd_H = {}   # Shutdown decision
@@ -522,10 +526,17 @@ class LocalEnergyMarket:
                 if u in self.players_with_electrolyzers:  # Electrolyzers
                     els_cap = self.params.get(f'els_cap', -np.inf)  # Default 1 MW
                     c_els = self.params.get(f'c_els_{u}', 0)
+                    El = self.params.get("El", None)
+                    eff_type = El['eff_type']
                     self.p[u,'els',t] = self.model.addVar(vtype="C", name=f"p_els_{u}_{t}", 
                                                         lb=0, obj=c_els)
-                    self.els_d[u,t] = self.model.addVar(vtype="C", name=f"els_d_{u}_{t}", 
-                                                        lb=0, ub=els_cap)                    
+                    if eff_type == 1:
+                        self.els_d[u,t] = [self.model.addVar(vtype="C", name=f"els_d_{u}_{t}_{s}", lb=0) for s in range(El['N_s'])]
+                    elif eff_type == 2:
+                        self.els_d[u,t] = self.model.addVar(vtype="C", name=f"els_d_{u}_{t}", 
+                                                            lb=0)
+                    else:
+                        raise Exception(f"Invalid electrolyzer efficiency type: {eff_type}")
                     # Electrolyzer commitment variables
                     c_su_G = self.params.get(f'c_su_G_{u}', 0)
                     if self.model_type in ['mip', 'mip_fix_binaries']:
@@ -535,6 +546,8 @@ class LocalEnergyMarket:
                         self.z_on_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_on_G_{u}_{t}")
                         self.z_off_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_off_G_{u}_{t}")
                         self.z_sb_G[u,t] = self.model.addVar(vtype=vartype, name=f"z_sb_G_{u}_{t}")
+                        if eff_type == 1:
+                            self.z_els_d_G[u,t] = [self.model.addVar(vtype=vartype, name=f"z_els_d_G_{u}_{t}_{s}") for s in range(El['N_s'])]
             
 
                 # Non-flexible demand variables
@@ -678,6 +691,14 @@ class LocalEnergyMarket:
                         name=f"fix_z_sb_G_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"fix_z_sb_G_{u}_{t}"] = cons
+                if ('z_els_d_G', u, t) in self.binary_values:
+                    El = self.params["El"]
+                    for s in range(El['N_s']):
+                        cons = self.model.addCons(
+                            self.z_els_d_G[u,t][s] == self.binary_values[('z_els_d_G', u, t)][s],
+                            name=f"fix_z_els_d_G_{u}_{t}_{s}"
+                        )
+                        self.electrolyzer_cons[f"fix_z_els_d_G_{u}_{t}_{s}"] = cons
         for u in self.players_with_heatpumps:
             for t in self.time_periods:
                 if ('z_su_H', u, t) in self.binary_values:
@@ -744,7 +765,7 @@ class LocalEnergyMarket:
         self.model.data["vars"]["z_on_G"] = self.z_on_G
         self.model.data["vars"]["z_off_G"] = self.z_off_G
         self.model.data["vars"]["z_sb_G"] = self.z_sb_G
-
+        self.model.data["vars"]["z_els_d_G"] = self.z_els_d_G
         self.model.data["vars"]["z_su_H"] = self.z_su_H
         self.model.data["vars"]["z_on_H"] = self.z_on_H
         self.model.data["vars"]["z_sd_H"] = self.z_sd_H
@@ -953,46 +974,89 @@ class LocalEnergyMarket:
                 self.community_hydro_balance_cons[f"community_hydro_balance_{t}"] = cons
     
     def _add_hydro_nonconvex_cons_mip(self):
+        El = self.params.get("El", None)
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
             els_cap = self.params.get(f'els_cap', -np.inf)
             c_sb = self.params.get(f'c_sb_G', -np.inf)
             c_min = self.params.get(f'c_min_G', -np.inf)
             c_max = self.params.get(f'c_max_G', -np.inf)
+            cons_production_curve = np.zeros(El['N_s'], dtype=object)
+            cons_pwl_lb = np.zeros(El['N_s'], dtype=object)
+            cons_pwl_ub = np.zeros(El['N_s'], dtype=object)
             for t in self.time_periods:
-                phi1_1 = self.params.get(f'phi1_1', -np.inf)
-                phi0_1 = self.params.get(f'phi0_1', -np.inf)
-                phi1_2 = self.params.get(f'phi1_2', -np.inf)
-                phi0_2 = self.params.get(f'phi0_2', -np.inf)
-            
-                cons = self.model.addCons(
-                    self.p.get((u,'els',t),0) <= phi1_1 * self.els_d.get((u,t),0) + phi0_1 * self.z_on_G[u,t],
-                    name=f"electrolyzer_production_curve_1_{u}_{t}"
-                )
-                self.electrolyzer_cons['production_curve_1', u, t] = cons
-                cons = self.model.addCons(
-                    self.p.get((u,'els',t),0) <= phi1_2 * self.els_d.get((u,t),0) + phi0_2 * self.z_on_G[u,t],
-                    name=f"electrolyzer_production_curve_2_{u}_{t}"
-                )
-                self.electrolyzer_cons['production_curve_2', u, t] = cons
+                # phi1_1 = self.params.get(f'phi1_1', -np.inf)
+                # phi0_1 = self.params.get(f'phi0_1', -np.inf)
+                # phi1_2 = self.params.get(f'phi1_2', -np.inf)
+                # phi0_2 = self.params.get(f'phi0_2', -np.inf)
+                if El['eff_type'] == 1:
+                    for s in range(El['N_s']):
+                        cons = self.model.addCons(
+                            self.p[(u,'els',t)] - quicksum(El['a'][s] * self.els_d[(u,t)][s] + El['b'][s] * self.z_els_d_G[u,t][s] for s in range(El['N_s'])) == 0.0,
+                            name=f"electrolyzer_production_curve_{u}_{t}_{s}"
+                        )
+                        cons_production_curve[s] = cons
 
-                cons = self.model.addCons(
+                        cons = self.model.addCons(
+                            self.els_d[(u,t)][s] >=El['p_val'][s] * self.z_els_d_G[u,t][s],
+                            name=f"electrolyzer_pwl_lb_{u}_{t}_{s}"
+                        )
+                        cons_pwl_lb[s] = cons
+
+                        cons = self.model.addCons(
+                            self.els_d[(u,t)][s] <=El['p_val'][s+1] * self.z_els_d_G[u,t][s],
+                            name=f"electrolyzer_pwl_ub_{u}_{t}_{s}"
+                        )
+                        cons_pwl_ub[s] = cons
+                    self.electrolyzer_cons['production_curve', u, t] = cons_production_curve
+                    # Constraint   : PWL segment selection
+                    cons = self.model.addCons(
+                        self.z_on_G[u,t] - quicksum(self.z_els_d_G[u,t][s] for s in range(El['N_s'])) == 0.0,
+                        name=f"electrolyzer_pwl_segment_selection_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_pwl_segment_selection_{u}_{t}"] = cons
+                    # Constraint   : Power consumption coupling
+                    cons = self.model.addCons(
+                        self.fl_d[u,'elec',t] == quicksum(self.els_d[(u,t)][s] for s in range(El['N_s'])) + c_sb * els_cap * self.z_sb_G[u,t],
+                        name=f"electrolyzer_power_consumption_coupling_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_power_consumption_coupling_{u}_{t}"] = cons
+                elif El['eff_type'] == 2:
+                    for s in range(El['N_s']):    
+                        cons = self.model.addCons(
+                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d.get((u,t),0) + El['b'][s] * self.z_on_G[u,t],
+                            name=f"electrolyzer_production_curve_{u}_{t}"
+                        )
+                        cons_production_curve[s] = cons
+                    self.electrolyzer_cons['production_curve', u, t] = cons_production_curve
+                    # Constraint   : Power consumption coupling
+                    cons = self.model.addCons(
+                        self.fl_d[u,'elec',t] == self.els_d[u,t] + c_sb * els_cap * self.z_sb_G[u,t],
+                        name=f"electrolyzer_power_consumption_{u}_{t}"
+                    )
+                    self.electrolyzer_cons[f"electrolyzer_power_consumption_{u}_{t}"] = cons
+                    cons = self.model.addCons(
                     self.els_d.get((u,t),0) - c_min * els_cap * self.z_on_G[u,t] >= 0.0,
+                    name=f"electrolyzer_min_power_consumption_{u}_{t}")
+                    self.electrolyzer_cons[f"electrolyzer_min_power_consumption_{u}_{t}"] = cons
+                    cons = self.model.addCons(
+                        self.els_d.get((u,t),0) - c_max * els_cap * self.z_on_G[u,t] <= 0.0,
+                        name=f"electrolyzer_max_power_consumption_{u}_{t}")
+                    self.electrolyzer_cons[f"electrolyzer_max_power_consumption_{u}_{t}"] = cons
+                else:
+                    raise Exception(f"Invalid electrolyzer efficiency type: {El['eff_type']}")
+
+                # Constraint: Min, Max power consumption
+                cons = self.model.addCons(
+                    self.fl_d[u,'elec',t] - c_min*els_cap*self.z_on_G[u,t] - c_sb*els_cap*self.z_sb_G[u,t] >= 0.0,
                     name=f"electrolyzer_min_power_consumption_{u}_{t}"
                 )
-                self.electrolyzer_cons[f"electrolyzer_min_power_consumption_{u}_{t}"] = cons
+                self.electrolyzer_cons[f"electrolyzer_min_total_power_consumption_{u}_{t}"] = cons
                 cons = self.model.addCons(
-                    self.els_d.get((u,t),0) - c_max * els_cap * self.z_on_G[u,t] <= 0.0,
+                    self.fl_d[u,'elec',t] - c_max*els_cap*self.z_on_G[u,t] - c_sb*els_cap*self.z_sb_G[u,t] <= 0.0,
                     name=f"electrolyzer_max_power_consumption_{u}_{t}"
                 )
-                self.electrolyzer_cons[f"electrolyzer_max_power_consumption_{u}_{t}"] = cons
-                
-                # Constraint   : Power consumption coupling
-                cons = self.model.addCons(
-                    self.fl_d[u,'elec',t] == self.els_d[u,t] + c_sb * els_cap * self.z_sb_G[u,t],
-                    name=f"electrolyzer_power_consumption_{u}_{t}"
-                )
-                self.electrolyzer_cons[f"electrolyzer_power_consumption_{u}_{t}"] = cons
+                self.electrolyzer_cons[f"electrolyzer_max_total_power_consumption_{u}_{t}"] = cons
         # Electrolyzer commitment constraints (constraints 17-21)
             for t in self.time_periods:
                 # Constraint 17: exactly one state
@@ -3457,6 +3521,7 @@ if __name__ == "__main__":
             price = parameters[f'pi_E_gri_import_{t}']
             
             # Get states
+            raise Exception(f"u2를 직접 넣어주면 안됨.")
             z_on_G = results_complete.get('z_on_G', {}).get(('u2', t), 0)
             z_sb_G = results_complete.get('z_sb_G', {}).get(('u2', t), 0)
             z_off_G = results_complete.get('z_off_G', {}).get(('u2', t), 0)

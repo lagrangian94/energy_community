@@ -8,7 +8,7 @@ import pandas as pd
 from HeatGen import HeatLoadGenerator, HeatPriceGenerator
 from HydroGen import HydrogenLoadGenerator, generate_hydrogen_price
 from ElecGen import ElectricityLoadGenerator, ElectricityProdGenerator, ElectricityPriceGenerator
-
+from ElsGen import generate_electrolyzer
 
 
 
@@ -56,6 +56,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         base_h2_price_eur = sensitivity_analysis['base_h2_price_eur']
         e_E_cap = res_cap * sensitivity_analysis['e_E_cap']
         e_H_cap = hp_cap * sensitivity_analysis['e_H_cap']
+        eff_type = sensitivity_analysis['eff_type']
     else:
         use_korean_price = True
         use_tou = True
@@ -73,6 +74,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         base_h2_price_eur = 2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
         e_E_cap = res_cap * 2 # [0.5, 1.0, 1.5, 2.0]
         e_H_cap = hp_cap * 2 # [0.5, 1.0, 1.5, 2.0]
+        eff_type = 1
+        segments = 5
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -112,10 +115,6 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'res_cap': res_cap,
         'hp_cap': hp_cap,
         'els_cap': els_cap,
-        'phi1_1': 21.12266316,
-        'phi0_1': -0.37924094,
-        'phi1_2': 16.66883134,
-        'phi0_2': 0.87814262,
         'c_res': 0.05,
         'c_hp': 2.69,
         'c_els': 0.05,
@@ -156,6 +155,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
     wind_production = electricity_prod_generator.generate_wind_production()
     pv_production = electricity_prod_generator.generate_solar_production()
+    El = generate_electrolyzer(1, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"], segments=segments)
+    parameters['El'] = El
     # Add cost parameters
     for u in parameters['players_with_solar']:
         parameters[f'c_res_{u}'] = parameters['c_res']
