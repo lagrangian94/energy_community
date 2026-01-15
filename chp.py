@@ -150,10 +150,10 @@ class ColumnGenerationSolver:
                 'hydrogen': chp_hydro
             }
             
-            return status, solution, obj_val
+            return status, solution, obj_val, solution_by_player
         else:
             print(f"\nColumn generation failed with status: {status}")
-            return status, None, None
+            return status, None, None, None
     def analyze_synergy_with_convex_hull_prices(self, solution: Dict, obj_val: float, community_prices: Dict):
         """
         Analyze individual vs community profits using convex hull prices
@@ -446,7 +446,8 @@ class ColumnGenerationSolver:
                 # 5. Startup costs
                 if 'z_su_G' in results and (u,t) in results['z_su_G']:
                     profit['startup_cost'] += results['z_su_G'][u,t] * self.parameters.get(f'c_su_G_{u}', np.inf)
-            
+                if 'z_su_H' in results and (u,t) in results['z_su_H']:
+                    profit['startup_cost'] += results['z_su_H'][u,t] * self.parameters.get(f'c_su_H_{u}', np.inf)
             # Calculate net profit
             profit['net_profit'] = (
                 profit['grid_revenue'] + 

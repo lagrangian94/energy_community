@@ -42,18 +42,22 @@ if __name__ == "__main__":
     status_lp, results_complete_lp, revenue_analysis_lp, community_prices_lp = lem_lp.solve_complete_model(analyze_revenue=False)
     time_end = time.time()
     time_lp = time_end - time_start
+    welfare_lp = lem_lp.model.getObjVal()
     print(f"Time taken: {time_lp:.2f} seconds")
     ## 실제 실현된 수익은 original "results_complete"를 사용하여 계산
     results_to_be_compared = results_complete_lp
     player_profits_lp, prices_lp = lem_lp.calculate_player_profits_with_community_prices(results_to_be_compared, community_prices_lp)
+
     profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players} # marginal pricing의 수익
     ## 커뮤니티 수입을 계산할때도 original "lem" instance를 사용하여 계산 (lp는 relaxation이니까 부정확)
     comparison_results_lp = lem_lp.compare_individual_vs_community_profits(
+        results_to_be_compared,
         players, 
         lem_lp.model_type,
         time_periods, 
         parameters,
-        player_profits_lp
+        player_profits_lp,
+        welfare_lp
     )
     lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_linear_games.tex')
 

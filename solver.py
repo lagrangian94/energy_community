@@ -358,11 +358,11 @@ class MasterProblem:
                                 if not isinstance(value, list):
                                     solution[var_name][key] = 0.0
                                 else:
-                                    solution[var_name][key] = [0.0 for _ in range(len(value))]
+                                    solution[var_name][key] = np.zeros(len(value))
                             if not isinstance(value, list):
                                 solution[var_name][key] += lambda_val * value
                             else:
-                                solution[var_name][key] = [lambda_val * value[i] for i in range(len(value))]
+                                solution[var_name][key] += lambda_val * np.asarray(value)
                     solution_by_player[player][idx] = (lambda_val, col_solution)
         
         return solution, solution_by_player

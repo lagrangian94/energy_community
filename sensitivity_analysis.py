@@ -42,15 +42,15 @@ if __name__ == "__main__":
         'hp_cap': [0.8],
         'els_cap': [1],
         'res_cap': [2],
-        'num_households': [52],
+        'num_households': [700, 500, 1000], #적정, oversupply, undersupply
         'nu_cop': [3.28],
         'c_su_G': [50],
         'c_su_H': [10],
-        'base_h2_price_eur': [6000/1500, 3000/1500],
-        'e_E_cap': [0.5, 1.0, 1.5, 2.0],
-        'e_H_cap': [0.5, 1.0, 1.5, 2.0],
+        'base_h2_price_eur': [6000/1500, 3000/1500], #AS-IS, TO-BE
+        'e_E_cap': [0.5, 1.0, 2.0],
+        'e_H_cap': [0.5, 1.0, 2.0],
         'eff_type': [1,2], # 1: HYP-MIL, 2: HYP-L,
-        'segments': [2] # number of piecewise segments for HYP-MIL and HYP-L
+        'segments': [6,2] # 정교한 근사, 간략한 근사
     }
 
 

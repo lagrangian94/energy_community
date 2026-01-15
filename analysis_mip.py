@@ -1,6 +1,7 @@
 from data_generator import setup_lem_parameters
 from core import CoreComputation
-from compact import LocalEnergyMarket
+# from compact import LocalEnergyMarket
+from compact_utility import LocalEnergyMarket
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Set
 from chp import ColumnGenerationSolver
@@ -11,13 +12,13 @@ sys.path.append('/mnt/project')
 
 
 if __name__ == "__main__":
-    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6','u7']
+    players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
     time_periods = list(range(24))  # 24 hours
     configuration = {}
     configuration["players_with_renewables"] = ['u1']
     configuration["players_with_solar"] = []
     configuration["players_with_wind"] = ['u1']
-    configuration["players_with_electrolyzers"] = ['u2'] + ['u7']
+    configuration["players_with_electrolyzers"] = ['u2']# + ['u7']
     configuration["players_with_heatpumps"] = ['u3']
     configuration["players_with_elec_storage"] = ['u1'] #,'u7']
     configuration["players_with_hydro_storage"] = ['u2'] #+ ['u7']
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     # Create and solve model with Restricted Pricing
     ip, chp = True, True
     lp_relax = True
-    compute_core = True
+    compute_core = False
     ## ========================================
     ## Restricted Pricing
     ## ========================================
@@ -42,16 +43,19 @@ if __name__ == "__main__":
         lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip')
         time_start = time.time()
         status_complete, results_complete, revenue_analysis, community_prices = lem.solve_complete_model(analyze_revenue=False)
+        welfare = lem.model.getObjVal()
         time_end = time.time()
         time_ip = time_end - time_start
         print(f"Time taken: {time_ip:.2f} seconds")
         player_profits, prices = lem.calculate_player_profits_with_community_prices(results_complete, community_prices)
         comparison_results = lem.compare_individual_vs_community_profits(
+            results_complete,
             players, 
             lem.model_type,
             time_periods, 
             parameters,
-            player_profits
+            player_profits,
+            welfare
         )
         profit_ip = {u: player_profits[u]["net_profit"] for u in players} # restricted pricing의 또 다른 이름인 integer programming pricing의 수익
         # 음의 시너지 분석
@@ -67,15 +71,18 @@ if __name__ == "__main__":
         lem.model.freeTransform()
         lem.model.relax()
         status_complete_lp, results_complete_lp, revenue_analysis_lp, community_prices_lp = lem.solve_complete_model(analyze_revenue=False)
-        player_profits_lp, prices_lp = lem.calculate_player_profits_with_community_prices(results_complete_lp, community_prices_lp)
+        welfare_lp = lem.model.getObjVal()
+        player_profits_lp, prices_lp = lem.calculate_player_profits_with_community_prices(results_complete, community_prices_lp)
         comparison_results_lp = lem.compare_individual_vs_community_profits(
+            results_complete_lp,
             players, 
             lem.model_type,
             time_periods, 
             parameters,
-            player_profits_lp
+            player_profits_lp,
+            welfare_lp
         )
-        profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players} # restricted pricing의 또 다른 이름인 integer programming pricing의 수익
+        profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players}
         # 음의 시너지 분석
         if comparison_results_lp['synergy']['absolute_gain'] < 0:
             lem.analyze_negative_synergy(comparison_results_lp, players)
@@ -96,7 +103,8 @@ if __name__ == "__main__":
         # init_sol = None
         cg_solver = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=init_sol)
         time_start = time.time()
-        status, solution, obj_val = cg_solver.solve()
+        status, solution, obj_val, solution_by_player = cg_solver.solve()
+        welfare_chp = cg_solver.master.model.getObjVal()
         time_end = time.time()
         time_chp = time_end - time_start
         print(f"Time taken: {time_chp:.2f} seconds")
@@ -174,6 +182,10 @@ if __name__ == "__main__":
         cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
         violation_ip = core_comp.measure_stability_violation(cost_ip)
         print(f"Violation IP: {violation_ip:.4f}")
+    if lp_relax:
+        cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
+        violation_lp = core_comp.measure_stability_violation(cost_lp)
+        print(f"Violation LP: {violation_lp:.4f}")
     if chp:
         cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
         violation_chp = core_comp.measure_stability_violation(cost_chp)

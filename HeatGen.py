@@ -141,7 +141,7 @@ class HeatLoadGenerator:
         # From Busan Smart Village paper (kWh/m²·year)
         self.heating_intensity = 31.0
         self.cooling_intensity = 19.0
-        self.dhw_annual = 2839.0  # kWh/year per household
+        self.dhw_annual = 2839.0  # kWh/year per household #클로드는 한국평균 1500-2000 보다 너무 높다고 함.
         
         # Peak loads (W/m²)
         self.peak_heating = 25.0
@@ -184,7 +184,7 @@ class HeatLoadGenerator:
         if month in [11, 12, 1, 2, 3, 4]:
             # Seasonal factor
             if month in [1, 2]:
-                seasonal = 1.3
+                seasonal = 2.0 #클로드가 1.3에서 더 높이라 함.
             elif month in [12, 3]:
                 seasonal = 1.0
             else:

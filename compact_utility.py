@@ -554,7 +554,7 @@ class LocalEnergyMarket:
                 # Non-flexible demand variables
                 if u in self.players_with_nfl_elec_demand:
                     nfl_elec_demand_t = self.params.get(f'd_E_nfl_{u}_{t}', 0)
-                    self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_nfl_{u}_{t}")
+                    self.nfl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_nfl_{u}_{t}", obj=-1*self.params.get(f'u_E_{u}_{t}', -np.inf))
                     cons = self.model.addCons(self.nfl_d[u,'elec',t] == nfl_elec_demand_t, name=f"fix_nfl_d_elec_{u}_{t}")
                     self.elec_nfl_demand_cons[f"elec_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
@@ -562,7 +562,7 @@ class LocalEnergyMarket:
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap', -np.inf))
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
-                    self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}")
+                    self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}", obj=-1*self.params.get(f'u_G_{u}_{t}', -np.inf))
                     cons = self.model.addCons(self.nfl_d[u,'hydro',t] == nfl_hydro_demand_t, name=f"fix_nfl_d_hydro_{u}_{t}")
                     self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
@@ -570,7 +570,7 @@ class LocalEnergyMarket:
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
-                    self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}")
+                    self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}", obj=-1*self.params.get(f'u_H_{u}_{t}', -np.inf))
                     cons = self.model.addCons(self.nfl_d[u,'heat',t] == nfl_heat_demand_t, name=f"fix_nfl_d_heat_{u}_{t}")
                     self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
@@ -1483,6 +1483,7 @@ class LocalEnergyMarket:
             'electricity': {
                 'grid_export_revenue': 0.0,
                 'grid_import_cost': 0.0,
+                'nfl_demand_utility': 0.0,
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'net': 0.0
@@ -1490,6 +1491,7 @@ class LocalEnergyMarket:
             'hydrogen': {
                 'grid_export_revenue': 0.0,
                 'grid_import_cost': 0.0,
+                'nfl_demand_utility': 0.0,
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
@@ -1498,6 +1500,7 @@ class LocalEnergyMarket:
             'heat': {
                 'grid_export_revenue': 0.0,
                 'grid_import_cost': 0.0,
+                'nfl_demand_utility': 0.0,
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
@@ -1532,7 +1535,12 @@ class LocalEnergyMarket:
                 if val > 0:
                     price = self.params.get(f'pi_E_gri_import_{t}', 0)
                     revenue_analysis['electricity']['grid_import_cost'] += val * price
-        
+        # Non-flexible demand utility
+        if 'nfl_d' in results:
+            for (u, resource_type, t), val in results['nfl_d'].items():
+                if val > 0 and resource_type == 'elec':
+                    utility = self.params.get(f'u_E_{u}_{t}', 0)
+                    revenue_analysis['electricity']['nfl_demand_utility'] += val * utility
         # Renewable production cost
         if 'p' in results:
             for (u, resource_type, t), val in results['p'].items():
@@ -1565,7 +1573,12 @@ class LocalEnergyMarket:
                 if val > 0:
                     price = self.params.get(f'pi_G_gri_import_{t}', 0)
                     revenue_analysis['hydrogen']['grid_import_cost'] += val * price
-        
+        # Non-flexible demand utility
+        if 'nfl_d' in results:
+            for (u, resource_type, t), val in results['nfl_d'].items():
+                if val > 0 and resource_type == 'hydro':
+                    utility = self.params.get(f'u_G_{u}_{t}', 0)
+                    revenue_analysis['hydrogen']['nfl_demand_utility'] += val * utility
         # Electrolyzer production cost
         if 'p' in results:
             for (u, resource_type, t), val in results['p'].items():
@@ -1605,7 +1618,12 @@ class LocalEnergyMarket:
                 if val > 0:
                     price = self.params.get(f'pi_H_gri_import_{t}', 0)
                     revenue_analysis['heat']['grid_import_cost'] += val * price
-        
+        # Non-flexible demand utility
+        if 'nfl_d' in results:
+            for (u, resource_type, t), val in results['nfl_d'].items():
+                if val > 0 and resource_type == 'heat':
+                    utility = self.params.get(f'u_H_{u}_{t}', 0)
+                    revenue_analysis['heat']['nfl_demand_utility'] += val * utility
         # Heat pump production cost
         if 'p' in results:
             for (u, resource_type, t), val in results['p'].items():
@@ -1634,7 +1652,8 @@ class LocalEnergyMarket:
         revenue_analysis['electricity']['net'] = (
             revenue_analysis['electricity']['grid_export_revenue'] -
             revenue_analysis['electricity']['grid_import_cost'] -
-            revenue_analysis['electricity']['production_cost'] -
+            revenue_analysis['electricity']['production_cost'] +
+            revenue_analysis['electricity']['nfl_demand_utility'] -
             revenue_analysis['electricity']['storage_cost']
         )
         
@@ -1642,7 +1661,8 @@ class LocalEnergyMarket:
         revenue_analysis['hydrogen']['net'] = (
             revenue_analysis['hydrogen']['grid_export_revenue'] -
             revenue_analysis['hydrogen']['grid_import_cost'] -
-            revenue_analysis['hydrogen']['production_cost'] -
+            revenue_analysis['hydrogen']['production_cost'] +
+            revenue_analysis['hydrogen']['nfl_demand_utility'] -
             revenue_analysis['hydrogen']['storage_cost'] -
             revenue_analysis['hydrogen']['startup_cost']
         )
@@ -1652,6 +1672,7 @@ class LocalEnergyMarket:
             revenue_analysis['heat']['grid_export_revenue'] -
             revenue_analysis['heat']['grid_import_cost'] -
             revenue_analysis['heat']['production_cost'] -
+            revenue_analysis['heat']['nfl_demand_utility'] -
             revenue_analysis['heat']['storage_cost'] -
             revenue_analysis['heat']['startup_cost']
         )
@@ -1662,7 +1683,11 @@ class LocalEnergyMarket:
             revenue_analysis['hydrogen']['grid_export_revenue'] +
             revenue_analysis['heat']['grid_export_revenue']
         )
-        
+        revenue_analysis['total_consumption_utility'] = (
+            revenue_analysis['electricity']['nfl_demand_utility'] +
+            revenue_analysis['hydrogen']['nfl_demand_utility'] +
+            revenue_analysis['heat']['nfl_demand_utility']
+        )
         revenue_analysis['total_cost'] = (
             revenue_analysis['electricity']['grid_import_cost'] +
             revenue_analysis['electricity']['production_cost'] +
@@ -1677,7 +1702,7 @@ class LocalEnergyMarket:
             revenue_analysis['heat']['startup_cost']
         )
         
-        revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost']
+        revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost'] + revenue_analysis['total_consumption_utility']
         
         # # ========== PRINT SUMMARY ==========
         # print("\n=== OBJECTIVE FUNCTION ANALYSIS BY ENERGY TYPE ===")

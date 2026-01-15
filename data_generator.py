@@ -11,7 +11,15 @@ from ElecGen import ElectricityLoadGenerator, ElectricityProdGenerator, Electric
 from ElsGen import generate_electrolyzer
 
 
-
+def epsilon_log(n_consumers, scale=0.1):
+    """
+    Logarithmic growth: ε(N) = scale * log(N)
+    
+    Slower growth, more conservative
+    """
+    if n_consumers == 1:
+        return 0.0
+    return scale * np.log(n_consumers)
 
 
 def update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices):
@@ -67,7 +75,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         hp_cap = 0.8 # [0.6, 0.8, 1.0]
         els_cap = 1 # [0.5, 1.0, 1.5]
         res_cap = 2
-        num_households = 52 # [50, 75, 100]
+        num_households = 700
         nu_cop = 3.28 # [3.0, 3.28, 3.5]
         c_su_G = 50 # [50, 75, 100]
         c_su_H = 10 # [5, 10, 15]
@@ -196,7 +204,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     hydro_generator = HydrogenLoadGenerator()
     # hydro_generator.generate_profiles()
     elec_demand_mwh = elec_generator.generate_community_load(monthly_base_load_mwh_per_household=0.363, season='winter', num_days=10, variability='normal', method='empirical')
-    hydro_demand_kg = hydro_generator.get_profiles()*0.5
+    hydro_demand_kg = hydro_generator.get_profiles()
     heat_demand_mwh = heat_generator.get_profiles(month=1)
     for u in players:
         for t in time_periods:
@@ -219,4 +227,22 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
     parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
     parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
+
+    # Pure Consumer Utility Function
+    N_E = len(parameters['players_with_nfl_elec_demand'])
+    factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)
+    N_H = len(parameters['players_with_nfl_heat_demand'])
+    factor_H = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_H), size=N_H)
+    N_G = len(parameters['players_with_nfl_hydro_demand'])
+    factor_G = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_G), size=N_G)
+    for t in time_periods:
+        for i,u in enumerate(parameters['players_with_nfl_elec_demand']):
+            u_E = parameters[f"pi_E_gri_import_{t}"] * factor_E[i]
+            parameters[f"u_E_{u}_{t}"] = u_E
+        for i,u in enumerate(parameters['players_with_nfl_heat_demand']):
+            u_H = parameters[f"pi_H_gri_import_{t}"] * factor_H[i]
+            parameters[f"u_H_{u}_{t}"] = u_H
+        for i,u in enumerate(parameters['players_with_nfl_hydro_demand']):
+            u_G = parameters[f"pi_G_gri_import_{t}"] * factor_G[i]
+            parameters[f"u_G_{u}_{t}"] = u_G
     return parameters
