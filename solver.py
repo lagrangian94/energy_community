@@ -5,8 +5,8 @@ from pyscipopt import Model, quicksum
 import sys
 sys.path.append('/mnt/project')
 import numpy as np
-from compact import LocalEnergyMarket, solve_and_extract_results
-# from compact_debug import LocalEnergyMarket, solve_and_extract_results
+# from compact import LocalEnergyMarket, solve_and_extract_results
+from compact_utility import LocalEnergyMarket, solve_and_extract_results
 from typing import Dict, List, Tuple
 
 
@@ -79,7 +79,9 @@ class PlayerSubproblem:
                 if (u, t) in self.lem.e_E_gri:
                     pi_export = self.parameters.get(f'pi_E_gri_export_{t}', np.inf)
                     new_obj -= pi_export * self.lem.e_E_gri[u, t]
-                
+                if (u, 'elec', t) in self.lem.nfl_d:
+                    u_E = self.parameters.get(f'u_E_{u}_{t}', 0.0)
+                    new_obj -= u_E * self.lem.nfl_d[u, 'elec', t]
                 # Heat grid costs
                 if (u, t) in self.lem.i_H_gri:
                     pi_import = self.parameters.get(f'pi_H_gri_import_{t}', np.inf)
@@ -87,7 +89,9 @@ class PlayerSubproblem:
                 if (u, t) in self.lem.e_H_gri:
                     pi_export = self.parameters.get(f'pi_H_gri_export_{t}', np.inf)
                     new_obj -= pi_export * self.lem.e_H_gri[u, t]
-                
+                if (u, 'heat', t) in self.lem.nfl_d:
+                    u_H = self.parameters.get(f'u_H_{u}_{t}', 0.0)
+                    new_obj -= u_H * self.lem.nfl_d[u, 'heat', t]
                 # Hydrogen grid costs
                 if (u, t) in self.lem.i_G_gri:
                     pi_import = self.parameters.get(f'pi_G_gri_import_{t}', np.inf)
@@ -95,7 +99,9 @@ class PlayerSubproblem:
                 if (u, t) in self.lem.e_G_gri:
                     pi_export = self.parameters.get(f'pi_G_gri_export_{t}', np.inf)
                     new_obj -= pi_export * self.lem.e_G_gri[u, t]
-                
+                if (u, 'hydro', t) in self.lem.nfl_d:
+                    u_G = self.parameters.get(f'u_G_{u}_{t}', 0.0)
+                    new_obj -= u_G * self.lem.nfl_d[u, 'hydro', t]
                 # Production costs
                 if (u, 'res', t) in self.lem.p:
                     c_res = self.parameters.get(f'c_res_{u}', np.inf)
@@ -417,6 +423,14 @@ def calculate_column_cost(player: str, solution: Dict, params: Dict, time_period
         cost += b_ch_G * params.get(f'c_sto_G_{player}', 0.0) * nu_ch_G
         cost += b_dis_H * params.get(f'c_sto_H_{player}', 0.0) * (1/nu_dis_H)
         cost += b_ch_H * params.get(f'c_sto_H_{player}', 0.0) * nu_ch_H
+
+        # Utility (Minimization - 음수)
+        nfl_d_elec = solution.get('nfl_d', {}).get((player, 'elec', t), 0.0)
+        nfl_d_hydro = solution.get('nfl_d', {}).get((player, 'hydro', t), 0.0)
+        nfl_d_heat = solution.get('nfl_d', {}).get((player, 'heat', t), 0.0)
+        cost -= nfl_d_elec * params.get(f'u_E_{player}_{t}', 0.0)
+        cost -= nfl_d_hydro * params.get(f'u_G_{player}_{t}', 0.0)
+        cost -= nfl_d_heat * params.get(f'u_H_{player}_{t}', 0.0)
 
     if (cost == np.inf) or (cost == -np.inf) or (np.isnan(cost)):
         raise Exception(f"Cost is infinite for player {player} at time {t}")

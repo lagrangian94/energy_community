@@ -10,7 +10,8 @@ from pyscipopt import SCIP_PARAMSETTING
 from typing import Dict, List, Tuple
 
 from data_generator import setup_lem_parameters
-from compact import LocalEnergyMarket, solve_and_extract_results
+# from compact import LocalEnergyMarket, solve_and_extract_results
+from compact_utility import LocalEnergyMarket, solve_and_extract_results
 from solver import PlayerSubproblem, MasterProblem
 from pricer import LEMPricer
 import numpy as np
@@ -336,6 +337,7 @@ class ColumnGenerationSolver:
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
+                'utility': 0.0,
                 'net_profit': 0.0
             }
             
@@ -448,6 +450,19 @@ class ColumnGenerationSolver:
                     profit['startup_cost'] += results['z_su_G'][u,t] * self.parameters.get(f'c_su_G_{u}', np.inf)
                 if 'z_su_H' in results and (u,t) in results['z_su_H']:
                     profit['startup_cost'] += results['z_su_H'][u,t] * self.parameters.get(f'c_su_H_{u}', np.inf)
+                # 6. Utility
+                if 'nfl_d' in results and (u, 'elec', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'elec', t]
+                    if demand > 0:
+                        profit['utility'] += demand * self.parameters.get(f'u_E_{u}_{t}', 0)
+                if 'nfl_d' in results and (u, 'hydro', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'hydro', t]
+                    if demand > 0:
+                        profit['utility'] += demand * self.parameters.get(f'u_G_{u}_{t}', 0)
+                if 'nfl_d' in results and (u, 'heat', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'heat', t]
+                    if demand > 0:
+                        profit['utility'] += demand * self.parameters.get(f'u_H_{u}_{t}', 0)
             # Calculate net profit
             profit['net_profit'] = (
                 profit['grid_revenue'] + 
@@ -456,7 +471,8 @@ class ColumnGenerationSolver:
                 profit['community_cost'] - 
                 profit['production_cost'] - 
                 profit['storage_cost'] - 
-                profit['startup_cost']
+                profit['startup_cost'] +
+                profit['utility']
             )
             
             player_profits[u] = profit

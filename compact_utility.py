@@ -2790,16 +2790,23 @@ class LocalEnergyMarket:
             \quad 그리드 수입 & - & """ + f"{revenue_analysis['electricity']['grid_import_cost']:.2f}" + r""" \\
             \quad 생산 비용 & - & """ + f"{revenue_analysis['electricity']['production_cost']:.2f}" + r""" \\
             \quad 저장 비용 & - & """ + f"{revenue_analysis['electricity']['storage_cost']:.2f}" + r""" \\
+            \quad \textcolor{blue}{수요 충족 효용} & """ + f"{revenue_analysis['electricity']['nfl_demand_utility']:.2f}" + r""" & - \\ 
             \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('+' if revenue_analysis['electricity']['net'] >= 0 else '') + f"{revenue_analysis['electricity']['net']:.2f}" + r"""} \\
             \midrule
             \textbf{수소} & & \\
             \quad 그리드 수출 & """ + f"{revenue_analysis['hydrogen']['grid_export_revenue']:.2f}" + r""" & - \\
             \quad 그리드 수입 & - & """ + f"{revenue_analysis['hydrogen']['grid_import_cost']:.2f}" + r""" \\
             \quad 생산/시작 비용 & - & """ + f"{revenue_analysis['hydrogen']['production_cost'] + revenue_analysis['hydrogen']['startup_cost']:.2f}" + r""" \\
+            \quad 저장 비용 & - & """ + f"{revenue_analysis['hydrogen']['storage_cost']:.2f}" + r""" \\
+            \quad \textcolor{blue}{수요 충족 효용} & """ + f"{revenue_analysis['hydrogen']['nfl_demand_utility']:.2f}" + r""" & - \\  # ✅ 추가
             \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('-' if revenue_analysis['hydrogen']['net'] < 0 else '+') + f"{abs(revenue_analysis['hydrogen']['net']):.2f}" + r"""} \\
             \midrule
             \textbf{열} & & \\
+            \quad 그리드 수출 & """ + f"{revenue_analysis['heat']['grid_export_revenue']:.2f}" + r""" & - \\
             \quad 그리드 수입 & - & """ + f"{revenue_analysis['heat']['grid_import_cost']:.2f}" + r""" \\
+            \quad 생산 비용 & - & """ + f"{revenue_analysis['heat']['production_cost']:.2f}" + r""" \\
+            \quad 저장 비용 & - & """ + f"{revenue_analysis['heat']['storage_cost']:.2f}" + r""" \\
+            \quad \textcolor{blue}{수요 충족 효용} & """ + f"{revenue_analysis['heat']['nfl_demand_utility']:.2f}" + r""" & - \\  # ✅ 추가
             \quad \textbf{소계} & \multicolumn{2}{r}{""" + ('-' if revenue_analysis['heat']['net'] < 0 else '+') + f"{abs(revenue_analysis['heat']['net']):.2f}" + r"""} \\
             \bottomrule
             \multicolumn{3}{r}{\textbf{총 순이익: """ + ('+' if revenue_analysis['net_profit'] >= 0 else '') + f"{revenue_analysis['net_profit']:.2f}" + r""" EUR/일}} \\
@@ -2839,6 +2846,8 @@ class LocalEnergyMarket:
             latex_code += f"{p['grid_revenue']:.2f} & {p['grid_cost']:.2f} & "
             latex_code += f"{p['community_revenue']:.2f} & {p['community_cost']:.2f} & "
             latex_code += f"{p['production_cost']:.2f} & "
+            latex_code += f"{p['storage_cost']:.2f} & "
+            latex_code += f"{p['utility']:.2f} & "
             
             if p['net_profit'] > 0:
                 latex_code += r"\textcolor{blue}{+" + f"{p['net_profit']:.2f}" + r"}"
@@ -3366,11 +3375,12 @@ class LocalEnergyMarket:
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
+                'utility': 0.0,
                 'net_profit': 0.0
             }
             
             for t in self.time_periods:
-                # 1. 그리드 거래 수익/비용
+                # 1. 그리드 거래 수익/비용, 에너지 소비 효용(utility)
                 # 전기
                 if 'e_E_gri' in results and (u,t) in results['e_E_gri']:
                     export = results['e_E_gri'][u,t]
@@ -3381,7 +3391,10 @@ class LocalEnergyMarket:
                     import_val = results['i_E_gri'][u,t]
                     if import_val > 0:
                         profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_E_gri_import_{t}', 0)
-                
+                if 'nfl_d' in results and (u, 'elec', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'elec', t]
+                    if demand > 0:
+                        profit_breakdown['utility'] += demand * self.params.get(f'u_E_{u}_{t}', 0)
                 # 수소
                 if 'e_G_gri' in results and (u,t) in results['e_G_gri']:
                     export = results['e_G_gri'][u,t]
@@ -3392,7 +3405,10 @@ class LocalEnergyMarket:
                     import_val = results['i_G_gri'][u,t]
                     if import_val > 0:
                         profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_G_gri_import_{t}', 0)
-                
+                if 'nfl_d' in results and (u, 'hydro', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'hydro', t]
+                    if demand > 0:
+                        profit_breakdown['utility'] += demand * self.params.get(f'u_G_{u}_{t}', 0)
                 # 열
                 if 'e_H_gri' in results and (u,t) in results['e_H_gri']:
                     export = results['e_H_gri'][u,t]
@@ -3403,7 +3419,10 @@ class LocalEnergyMarket:
                     import_val = results['i_H_gri'][u,t]
                     if import_val > 0:
                         profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_H_gri_import_{t}', 0)
-                
+                if 'nfl_d' in results and (u, 'heat', t) in results['nfl_d']:
+                    demand = results['nfl_d'][u, 'heat', t]
+                    if demand > 0:
+                        profit_breakdown['utility'] += demand * self.params.get(f'u_H_{u}_{t}', 0)
                 # 2. 커뮤니티 내부 거래 (shadow price 기반)
                 # 전기
                 if 'e_E_com' in results and (u,t) in results['e_E_com']:
@@ -3478,7 +3497,8 @@ class LocalEnergyMarket:
             # 순이익 계산
             profit_breakdown['net_profit'] = (
                 profit_breakdown['grid_revenue'] + 
-                profit_breakdown['community_revenue'] - 
+                profit_breakdown['community_revenue'] + 
+                profit_breakdown['utility'] - 
                 profit_breakdown['grid_cost'] - 
                 profit_breakdown['community_cost'] - 
                 profit_breakdown['production_cost'] - 
@@ -3493,18 +3513,18 @@ class LocalEnergyMarket:
         print("PLAYER PROFITS WITH COMMUNITY PRICING")
         print("="*80)
         
-        print(f"{'Player':^8} | {'Grid Rev':^10} | {'Grid Cost':^10} | {'Comm Rev':^10} | {'Comm Cost':^10} | {'Prod Cost':^10} | {'Net Profit':^12}")
+        print(f"{'Player':^8} | {'Grid Rev':^10} | {'Grid Cost':^10} | {'Utility':^10} | {'Comm Rev':^10} | {'Comm Cost':^10} | {'Prod Cost':^10} | {'Net Profit':^12}")
         print("-"*80)
         
         for u in self.players:
             p = player_profits[u]
-            print(f"{u:^8} | {p['grid_revenue']:^10.2f} | {p['grid_cost']:^10.2f} | "
+            print(f"{u:^8} | {p['grid_revenue']:^10.2f} | {p['grid_cost']:^10.2f} | {p['utility']:^10.2f} | "
                 f"{p['community_revenue']:^10.2f} | {p['community_cost']:^10.2f} | "
                 f"{p['production_cost']:^10.2f} | {p['net_profit']:^12.2f}")
         
         print("-"*80)
         total_profit = sum(p['net_profit'] for p in player_profits.values())
-        print(f"{'Total':^8} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {total_profit:^12.2f}")
+        print(f"{'Total':^8} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {total_profit:^12.2f}")
         # 검증: 커뮤니티 내부 거래 균형
         total_comm_revenue = sum(p['community_revenue'] for p in player_profits.values())
         total_comm_cost = sum(p['community_cost'] for p in player_profits.values())
