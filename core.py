@@ -13,7 +13,8 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Set
 import sys
 sys.path.append('/mnt/project')
-from compact import LocalEnergyMarket
+# from compact import LocalEnergyMarket
+from compact_utility import LocalEnergyMarket
 
 
 class SeparationProblem(LocalEnergyMarket):
@@ -180,7 +181,19 @@ class SeparationProblem(LocalEnergyMarket):
                     M = M_default
                     self.model.addCons(self.fl_d[u,'heat',t] <= M * z_u,
                                       name=f"bigm_fl_d_heat_{u}_{t}")
-                
+                # # Non-flexible dmeand
+                # if (u, 'elec', t) in self.nfl_d:
+                #     M = M_default
+                #     self.model.addCons(self.nfl_d[u,'elec',t] <= M * z_u,
+                #                       name=f"bigm_nfl_d_elec_{u}_{t}")
+                # if (u, 'hydro', t) in self.nfl_d:
+                #     M = M_default
+                #     self.model.addCons(self.nfl_d[u,'hydro',t] <= M * z_u,
+                #                       name=f"bigm_nfl_d_hydro_{u}_{t}")
+                # if (u, 'heat', t) in self.nfl_d:
+                #     M = M_default
+                #     self.model.addCons(self.nfl_d[u,'heat',t] <= M * z_u,
+                #                       name=f"bigm_nfl_d_heat_{u}_{t}")
                 # Storage variables - Electricity
                 if (u, t) in self.s_E:
                     M = self.params.get('storage_capacity', M_default)
