@@ -155,7 +155,7 @@ class ColumnGenerationSolver:
         else:
             print(f"\nColumn generation failed with status: {status}")
             return status, None, None, None
-    def analyze_synergy_with_convex_hull_prices(self, solution: Dict, obj_val: float, community_prices: Dict):
+    def analyze_synergy_with_convex_hull_prices(self, results: Dict, obj_val: float, community_prices: Dict):
         """
         Analyze individual vs community profits using convex hull prices
         
@@ -171,38 +171,34 @@ class ColumnGenerationSolver:
         # Extract convex hull prices
         chp = community_prices
         
-        # Step 1: Calculate community player profits using convex hull prices
-        print("\nSTEP 1: Computing player profits in community (using convex hull prices)")
-        print("-"*80)
+        # # Step 1: Calculate community player profits using convex hull prices
+        # print("\nSTEP 1: Computing player profits in community (using convex hull prices)")
+        # print("-"*80)
         
-        # For this, we need to solve the community problem again to get detailed results
-        lem_community = LocalEnergyMarket(
-            self.players, 
-            self.time_periods, 
-            self.parameters, 
-            model_type = 'mip',
-            dwr=False
-        )
+        # # For this, we need to solve the community problem again to get detailed results
+        # lem_community = LocalEnergyMarket(
+        #     self.players, 
+        #     self.time_periods, 
+        #     self.parameters, 
+        #     model_type = 'mip',
+        #     dwr=False
+        # )
         
-        # Solve with SCIP settings for consistency
-        from pyscipopt import SCIP_PARAMSETTING
-        lem_community.model.setPresolve(SCIP_PARAMSETTING.OFF)
-        lem_community.model.setHeuristics(SCIP_PARAMSETTING.OFF)
-        lem_community.model.disablePropagation()
-        lem_community.model.setSeparating(SCIP_PARAMSETTING.OFF)
-        # lem_community.model.hideOutput()
-        lem_community.model.optimize()
+        # # Solve with SCIP settings for consistency
+        # from pyscipopt import SCIP_PARAMSETTING
+        # # lem_community.model.hideOutput()
+        # lem_community.model.optimize()
         
-        status_comm = lem_community.model.getStatus()
-        if status_comm != "optimal":
-            print(f"âš ï¸ Community optimization failed: {status_comm}")
-            return
+        # status_comm = lem_community.model.getStatus()
+        # if status_comm != "optimal":
+        #     print(f"âš ï¸ Community optimization failed: {status_comm}")
+        #     return
         
-        _, results_comm = solve_and_extract_results(lem_community.model)
+        # _, results_comm = solve_and_extract_results(lem_community.model)
         
         # Calculate player profits with convex hull prices
         player_profits_chp = self._calculate_player_profits_with_chp(
-            results_comm, chp, lem_community
+            results, chp
         )
         
         # Step 2: Optimize each player individually
@@ -314,7 +310,7 @@ class ColumnGenerationSolver:
             'total_gain': total_gain,
             'convex_hull_prices': chp
         }
-    def _calculate_player_profits_with_chp(self, results: Dict, chp: Dict, lem: 'LocalEnergyMarket') -> Dict:
+    def _calculate_player_profits_with_chp(self, results: Dict, chp: Dict) -> Dict:
         """
         Calculate player profits using convex hull prices
         
@@ -340,7 +336,7 @@ class ColumnGenerationSolver:
                 'utility': 0.0,
                 'net_profit': 0.0
             }
-            
+
             for t in self.time_periods:
                 # 1. Grid trading
                 if 'e_E_gri' in results and (u,t) in results['e_E_gri']:

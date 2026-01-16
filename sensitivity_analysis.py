@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     sensitivity_analysis_candidates = {
         'use_korean_price': [True],#,False],
-        'use_tou': [True],#,, False],
+        'use_tou_elec': [True],#,, False],
         'month': [1],
         'storage_capacity_E': [1.0],
         'storage_capacity_G': [50],

@@ -579,9 +579,8 @@ class LocalEnergyMarket:
                 
                 # Flexible demand variables
                 if u in self.players_with_fl_elec_demand:
-                    fl_elec_demand_cap = 1 ## Total electrolyzer power consumption capacity [MW]
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
-                                                       lb=0.0, ub=fl_elec_demand_cap)
+                                                       lb=0.0)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", obj=self.params.get(f'pi_E_gri_import_{t}', 0))
                     self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
                 if u in self.players_with_fl_hydro_demand:
@@ -1308,7 +1307,7 @@ class LocalEnergyMarket:
             prices = {
             'electricity': {},
             'heat': {},
-            'hydro': {}
+            'hydrogen': {}
             }
             for t in self.time_periods:
                 # Get dual multipliers for community balance constraints
@@ -1333,7 +1332,7 @@ class LocalEnergyMarket:
                 "time": t,
                 "electricity": prices["electricity"][t],
                 "heat": prices["heat"][t],
-                "hydro": prices["hydro"][t]
+                "hydro": prices["hydrogen"][t]
             }
             price_records.append(row)
             print(f"{t:6d} {row['electricity']:12.4f} {row['heat']:12.4f} {row['hydro']:12.4f}")
@@ -1346,6 +1345,10 @@ class LocalEnergyMarket:
         g_export_prices = [self.params[f'pi_G_gri_export_{t}'] for t in self.time_periods]
         h_import_prices = [self.params[f'pi_H_gri_import_{t}'] for t in self.time_periods]
         h_export_prices = [self.params[f'pi_H_gri_export_{t}'] for t in self.time_periods]
+
+        import_market_prices = {"electricity": e_import_prices, "heat": h_import_prices, "hydrogen": g_import_prices}
+        export_market_prices = {"electricity": e_export_prices, "heat": h_export_prices, "hydrogen": g_export_prices}
+        market_prices = {"import": import_market_prices, "export": export_market_prices, "use_tou_elec": self.params.get('use_tou_elec', None)}
         import matplotlib.pyplot as plt
         
         if analyze_revenue:
@@ -1466,7 +1469,7 @@ class LocalEnergyMarket:
 
             # 5. Plot storage operation
             self.plot_storage_operation(results)
-        return status, results, revenue_analysis if analyze_revenue else None, prices
+        return status, results, revenue_analysis if analyze_revenue else None, prices, market_prices
     
     def _analyze_revenue_by_resource(self, results):
         """
@@ -2724,7 +2727,7 @@ class LocalEnergyMarket:
         prices = {
             'electricity': {},
             'heat': {},
-            'hydro': {}
+            'hydrogen': {}
         }
         
         for t in self.time_periods:
@@ -2738,7 +2741,7 @@ class LocalEnergyMarket:
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(heat_cons))
             prices['heat'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(hydro_cons))
-            prices['hydro'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
+            prices['hydrogen'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
         
         print("✓ Shadow prices extracted")
         
@@ -3188,7 +3191,7 @@ class LocalEnergyMarket:
             print("• Consider flexible cooperation (partial community)")
             print("• Implement fair profit-sharing mechanisms")
             print("• Optimize storage and production coordination")
-    def compare_individual_vs_community_profits(self, results, players, model_type,time_periods, base_parameters, player_profits, social_welfare):
+    def compare_individual_vs_community_profits(self, results, players, model_type,time_periods, base_parameters, player_profits, prices):
         """
         각 플레이어의 개별 운영 수익과 커뮤니티 운영 수익을 비교
         
@@ -3199,7 +3202,7 @@ class LocalEnergyMarket:
         'community': {
             'total_profit': 0, 
             'player_profits': {}, 
-            'prices': {},
+            'prices': prices,
             'status': None
         },
         'individual': {},
@@ -3356,6 +3359,10 @@ class LocalEnergyMarket:
         print("      In community, they pay for energy, resulting in negative profit.")
         results_comparison['synergy']['absolute_gain'] = total_community_player - total_individual
         return results_comparison
+    def proportional_cost_allocation(self, individual_profit, welfare):
+        denom = sum(individual_profit[player]["profit"] for player in individual_profit.keys())
+        pca = {player: individual_profit[player]["profit"]/denom*welfare for player in individual_profit.keys()}
+        return pca
     def calculate_player_profits_with_community_prices(self, results, prices):
         """
         커뮤니티 가격(shadow price)으로 각 플레이어의 수익 계산
@@ -3439,12 +3446,12 @@ class LocalEnergyMarket:
                 if 'e_G_com' in results and (u,t) in results['e_G_com']:
                     export = results['e_G_com'][u,t]
                     if export > 0:
-                        profit_breakdown['community_revenue'] += export * prices['hydro'].get(t, 0)
+                        profit_breakdown['community_revenue'] += export * prices['hydrogen'].get(t, 0)
                 
                 if 'i_G_com' in results and (u,t) in results['i_G_com']:
                     import_val = results['i_G_com'][u,t]
                     if import_val > 0:
-                        profit_breakdown['community_cost'] += import_val * prices['hydro'].get(t, 0)
+                        profit_breakdown['community_cost'] += import_val * prices['hydrogen'].get(t, 0)
                 
                 # 열
                 if 'e_H_com' in results and (u,t) in results['e_H_com']:

@@ -56,8 +56,7 @@ if __name__ == "__main__":
         lem_lp.model_type,
         time_periods, 
         parameters,
-        player_profits_lp,
-        welfare_lp
+        player_profits_lp
     )
     lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_linear_games.tex')
 

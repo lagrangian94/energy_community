@@ -49,7 +49,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     """
     if sensitivity_analysis:
         use_korean_price = sensitivity_analysis['use_korean_price']
-        use_tou = sensitivity_analysis['use_tou']
+        use_tou_elec = sensitivity_analysis['use_tou_elec']
         month = sensitivity_analysis['month']
         storage_capacity_E = sensitivity_analysis['storage_capacity_E']
         storage_capacity_G = sensitivity_analysis['storage_capacity_G']
@@ -67,18 +67,18 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = sensitivity_analysis['eff_type']
     else:
         use_korean_price = True
-        use_tou = True
+        use_tou_elec = True
         month = 1
-        storage_capacity_E = 1.0 # [0.5, 1.0, 1.5]
-        storage_capacity_G = 50
-        storage_capacity_heat = 0.40
+        storage_capacity_E = 2.0 # [0.0, 1.0]
+        storage_capacity_G = 150 # [0.0, 50.0]
+        storage_capacity_heat = 4.5 # [0.0, 0.40]
         hp_cap = 0.8 # [0.6, 0.8, 1.0]
         els_cap = 1 # [0.5, 1.0, 1.5]
         res_cap = 2
         num_households = 700
-        nu_cop = 3.28 # [3.0, 3.28, 3.5]
-        c_su_G = 50 # [50, 75, 100]
-        c_su_H = 10 # [5, 10, 15]
+        nu_cop = 3.28
+        c_su_G = 50
+        c_su_H = 10 
         base_h2_price_eur = 5000/1500 #2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
         e_E_cap_ratio = 1.0
         e_H_cap_ratio = 1.0
@@ -108,11 +108,11 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'storage_capacity_G': storage_capacity_G, #kg
         'storage_capacity_heat': storage_capacity_heat,
         'storage_power_E': 0.5,
-        'storage_power_G': 0.25,
+        'storage_power_G': 0.5,
         'storage_power_heat': 0.5,
-        'initial_soc_E': 0.5*1,
-        'initial_soc_G': 25,
-        'initial_soc_H': 0.2,
+        'initial_soc_E': 1.5,
+        'initial_soc_G': 50,
+        'initial_soc_H': 2.0,
         'nu_ch_E': 0.95,
         'nu_dis_E': 0.95,        
         'nu_ch_G': 0.95,
@@ -144,13 +144,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_RD_H': 0.9,
         'c_RSU_H': 0.9,
         'c_RSD_H': 0.9,
-        'c_su_G': 50,
-        'c_su_H': 10,
+        'c_su_G': c_su_G,
+        'c_su_H': c_su_H,
         'c_min_G': 0.15, #0.15MW
         'c_sb_G': 0.01, #0.01MW
         'c_max_G': 1.0, #1.0MW,
         'c_min_H': 0.2,
-        'c_max_H': 0.8
+        'c_max_H': 0.8,
+
+        'use_tou_elec': use_tou_elec,
     }
     parameters['players_with_fl_elec_demand'] = list(set(
         parameters['players_with_electrolyzers'] + parameters['players_with_heatpumps']
@@ -189,7 +191,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         parameters[f'c_sto_H_{u}'] = parameters['c_sto_H']
     
     # Add grid prices
-    elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou).generate_price(month=month, time_horizon=24)
+    elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou_elec).generate_price(month=month, time_horizon=24)
     """
     hydrogen, heat price의 tou는 차후 구현
     """
