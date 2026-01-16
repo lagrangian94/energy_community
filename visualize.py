@@ -57,13 +57,13 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         if market_prices and 'import' in market_prices:
             if energy_type in market_prices['import']:
                 data[energy_type]['Market Import'] = list_to_array(market_prices['import'][energy_type])
-                data[energy_type]['Market Export'] = list_to_array(market_prices['export'][energy_type]) if market_prices['use_tou_elec'] else np.array([])
+                data[energy_type]['Market Export'] = list_to_array(market_prices['export'][energy_type])
             else:
                 data[energy_type]['Market Import'] = np.array([])
-                data[energy_type]['Market Export'] = np.array([]) if market_prices['use_tou_elec'] else np.array([])
+                data[energy_type]['Market Export'] = np.array([])
         else:
             data[energy_type]['Market Import'] = np.array([])
-            data[energy_type]['Market Export'] = np.array([]) if market_prices['use_tou_elec'] else np.array([])
+            data[energy_type]['Market Export'] = np.array([])
     
     # Create figure
     n_energy_types = len(energy_types)
@@ -116,13 +116,14 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
                 ax_time.plot(hours[:len(market_import_data)], market_import_data, 'x--',
                             color=colors['Market_Import'], linewidth=1.5, markersize=4,
                             label='External Market (TOU)', alpha=0.8)
-                ax_time.plot(hours[:len(market_export_data)], market_export_data, 'd-.',
-                            color=colors['Market_Export'], linewidth=1.5, markersize=6,
-                            label='External Market (Export)', alpha=0.8)
             else:
                 ax_time.plot(hours[:len(market_import_data)], market_import_data, 'x--',
                             color=colors['Market_Import'], linewidth=1.5, markersize=4,
-                            label='External Market', alpha=0.8)
+                            label='External Market (Import)', alpha=0.8)
+        if len(market_export_data) > 0:
+            ax_time.plot(hours[:len(market_export_data)], market_export_data, 'd-.',
+            color=colors['Market_Export'], linewidth=1.5, markersize=6,
+            label='External Market (Export)', alpha=0.8)
         # Check if prices are all zero or nearly identical
         all_data = np.concatenate([d for d in [ip_data, lp_data, chp_data] if len(d) > 0])
         if len(all_data) > 0:

@@ -68,9 +68,10 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     else:
         use_korean_price = True
         use_tou_elec = True
+        import_factor = 1.2 # market import price가 export 대비 몇배 더 큰지
         month = 1
         storage_capacity_E = 2.0 # 2.0 # [0.0, 2.0]
-        storage_capacity_G = 0.0 #150 # [0.0, 150.0]
+        storage_capacity_G = 150 # [0.0, 150.0]
         storage_capacity_H = 4.5 # [0.0, 0.40]
         hp_cap = 0.8 # [0.6, 0.8, 1.0]
         els_cap = 1 # [0.5, 1.0, 1.5]
@@ -191,12 +192,12 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         parameters[f'c_sto_H_{u}'] = parameters['c_sto_H']
     
     # Add grid prices
-    elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou_elec).generate_price(month=month, time_horizon=24)
+    elec_prices = ElectricityPriceGenerator(use_korean_price=use_korean_price, tou=use_tou_elec).generate_price(import_factor=import_factor, month=month, time_horizon=24)
     """
     hydrogen, heat price의 tou는 차후 구현
     """
-    h2_prices = generate_hydrogen_price(base_price_eur=base_h2_price_eur, time_horizon=24)
-    heat_prices = HeatPriceGenerator().get_profiles(month=month, customer_type='residential', use_seasonal=False)
+    h2_prices = generate_hydrogen_price(base_price_eur=base_h2_price_eur, import_factor=import_factor, time_horizon=24)
+    heat_prices = HeatPriceGenerator().get_profiles(month=month, import_factor=import_factor, customer_type='residential', use_seasonal=False)
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
     
     

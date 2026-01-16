@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Optional
 
 
-def generate_hydrogen_price(base_price_eur: float = 2.1, tou: bool = False, time_horizon: int = 24):
+def generate_hydrogen_price(base_price_eur: float = 2.1, import_factor: float = 1.2, tou: bool = False, time_horizon: int = 24):
     """
     Generate hydrogen price
     Parameters:
@@ -29,7 +29,7 @@ def generate_hydrogen_price(base_price_eur: float = 2.1, tou: bool = False, time
     if tou:
         raise Exception("TOU is not supported yet")
     h2_prices_export = [base_price_eur for _ in time_periods]
-    h2_prices_import = [price*1.001 for price in h2_prices_export]
+    h2_prices_import = [price*import_factor for price in h2_prices_export]
     h2_prices = {"import": h2_prices_import, "export": h2_prices_export}
     return h2_prices
 

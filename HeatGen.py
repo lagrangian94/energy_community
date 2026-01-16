@@ -56,6 +56,7 @@ class HeatPriceGenerator:
     def get_profiles(
         self, 
         month: int = 1,
+        import_factor: float = 1.2,
         customer_type: str = 'residential',  # 'residential', 'commercial', 'public'
         use_seasonal: bool = True,           # Only for residential
     ) -> np.ndarray:
@@ -123,8 +124,9 @@ class HeatPriceGenerator:
                     prices[hour] = peak_price
                 else:  # Off-peak hours
                     prices[hour] = offpeak_price
-        import_prices = [price*1.001 for price in prices]
-        return {"import": import_prices, "export": prices}
+        # import_prices = [price*1.001 for price in prices]
+        export_prices = [price*(1/import_factor) for price in prices] # 여기선 열요금이 소비자 기준이니까 export price를 반대로 변환
+        return {"import": prices, "export": export_prices}
 
 class HeatLoadGenerator:
     """

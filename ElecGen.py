@@ -58,7 +58,7 @@ class ElectricityPriceGenerator:
         data.set_index('Date', inplace = True)
         return data
     
-    def generate_price(self, month: int=1, time_horizon: int = 24):
+    def generate_price(self, import_factor: float = 1.2, month: int=1, time_horizon: int = 24):
         if not self.use_korean_price:
             data = self.denmark_data[self.denmark_data['Month'] == month].reset_index(drop=True)
             data = data[data['Day'] == 1].reset_index(drop=True)
@@ -68,7 +68,7 @@ class ElectricityPriceGenerator:
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
-                import_prices = arr*1.001
+                import_prices = arr*import_factor
             return {"import": import_prices, "export": arr}
         else:
             data = self.korean_data
@@ -83,7 +83,7 @@ class ElectricityPriceGenerator:
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
-                import_prices = arr*0.999
+                import_prices = arr*import_factor
             return {"import": import_prices, "export": arr}
             return arr
     def load_and_process_korean_data(self):
