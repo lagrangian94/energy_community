@@ -5,16 +5,27 @@
 그것을 만드는 electrolyzer의 binary state는 크게 다르지 않을 것임 (특히 6시에 off되어있어야 하니까.)
 
 
-1. u2의 전기구매량이 대부분 trivial하게 1만 나옴 -> 확인해보니 fl_elec_demand_cap = 1로 설정되었음
-   -> 그래서 pwl segment도 대부분 가장마지막 index가 1.0이 나오는? 그래서 IP=LP가 가깝게 나오는건가?
-    그리고 u3의 전기구매량도 0.19512로 binding됨. 근데 capacity 차이가 너무 심한거아닌가? (hp_cap*c_max = 0.64이고 nu_cop로 나누면 0.19512가 되기 때문임)
+1.u3의 전기구매량도 0.19512로 binding됨. 근데 capacity 차이가 너무 심한거아닌가? (hp_cap*c_max = 0.64이고 nu_cop로 나누면 0.19512가 되기 때문임)
     -> 그리고 u3는 왜 전기구매가 다 0.19512 아니면 0으로 나오지? 중간값이 안나오는이유..? (결국 storage도 안씀)
-   -> 애초에 linking constraint에 \sum_{j\in N}i_E_gri <= C=배전 capa로 해야되는거아닌지?
+2.애초에 linking constraint에 \sum_{j\in N}e_E_gri <= C=배전 capa, \sum_{j\in N}i_E_gri <=big_C로 해야되는거아닌지?
 
-2. price가 높아도 그때 community trading을 안하면 어차피 그 price로 거래로 안하니까 IP, CHP, LP수익이 비슷해지는거같다.
+3. price가 높아도 그때 community trading을 안하면 어차피 그 price로 거래로 안하니까 IP, CHP, LP수익이 비슷해지는거같다.
 
-3. ESS capa가 높아지면 ESS에 충전할 수 있는 양이 많아지므로, 역시 2.와 연관이 되어 전기생산자가 내부에 판매할 유인이 줄어들어 CHP, LP 수익이 비슷해지는듯.
+4. ESS capa가 높아지면 ESS에 충전할 수 있는 양이 많아지므로, 역시 2.와 연관이 되어 전기생산자가 내부에 판매할 유인이 줄어들어 CHP, LP 수익이 비슷해지는듯.
+ㄴ 아니 오히려 capa=0으로 설정하니까 ip, lp, chp price가 다 같아져버림.
 
 
-4. Hydro storage capa가 높아지면 방전으로 수소생산을 보조할 수 있으므로, 전력 소비량이 시간대별로 극단적으로 변화할 일이 적어지고, 그에 따라 pwl에 따른 non-convexity도 약화됨.
-ㄴ 그럼 storage capa=0 으로 두고 실험해보면?
+5. Hydro storage capa가 높아지면 방전으로 수소생산을 보조할 수 있으므로, 전력 소비량이 시간대별로 극단적으로 변화할 일이 적어지고, 그에 따라 pwl에 따른 non-convexity도 약화됨.
+ㄴ 그럼 storage capa=0 으로 두고 실험해보면? => 확실히 전력소비량 dynamics가 증가함에 따라 pwl 값이 시간대별로 계속 변화함. 근데 왜 ip=lp=chp로 나오지?
+ㄴ 보니까 chp에서도 pwl 패턴이 16-20시 제외하고 다 recover됨. 근데 16-20시는 이미 z_sb영향도 섞여있어서 의미없어지나? 결국 다른 외부요인이 여전히 trivial하게 나오게 유도?
+
+
+6. Heat storage는 운영안하는게 합리적
+ㄴ heat price는 constant함.
+ㄴ heat storage에 충전을 하면, 그만큼 외부/내부에 판매할 수 있는 기회비용이 발생
+ㄴ 그렇다고 충전을 해도 다른 시간대에 비싸게 팔 수가 없음. 오히려 round trip을 하며 손실되는 heat 때문에 같은 가격에 덜 파는 손해를 보게 됨.
+
+7. Hydro demand는 애초에 21-8까지 0이기 때문에, 이 사이에 hydrogen CHP가 요동쳐도 allocation에 변화없음. 어차피 그 가격에 안사고 안파니까. (이게 IP = CHP 인 이유 핵심중 하나일듯.)
+ㄴ 그럼 9-20 시까진, u2는 u5에게 수소를 왜 파는거지? 그냥 전부 외부에 팔아도 되는거잖아.
+ㄴ 21-8까진 커뮤니티수요가 0이니까 외부에 갖다팜. (커뮤니티수요를 여기서 증가시키면 어떻게됨? 이것도 sensitivity analysis?)
+ㄴ e_G_gri를 낮게 조절하면 아마 변화가커질듯..

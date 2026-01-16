@@ -69,9 +69,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         use_korean_price = True
         use_tou_elec = True
         month = 1
-        storage_capacity_E = 2.0 # [0.0, 1.0]
-        storage_capacity_G = 150 # [0.0, 50.0]
-        storage_capacity_heat = 4.5 # [0.0, 0.40]
+        storage_capacity_E = 2.0 # 2.0 # [0.0, 2.0]
+        storage_capacity_G = 0.0 #150 # [0.0, 150.0]
+        storage_capacity_H = 4.5 # [0.0, 0.40]
         hp_cap = 0.8 # [0.6, 0.8, 1.0]
         els_cap = 1 # [0.5, 1.0, 1.5]
         res_cap = 2
@@ -106,13 +106,13 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
          #capacity_E=2이고, power_E_가0.25일땐 u2가 이득, 근데 power_E_가 0.5일땐 손해. 왜 그럴까??
         'storage_capacity_E': storage_capacity_E,
         'storage_capacity_G': storage_capacity_G, #kg
-        'storage_capacity_heat': storage_capacity_heat,
+        'storage_capacity_H': storage_capacity_H,
         'storage_power_E': 0.5,
         'storage_power_G': 0.5,
-        'storage_power_heat': 0.5,
-        'initial_soc_E': 1.5,
-        'initial_soc_G': 50,
-        'initial_soc_H': 2.0,
+        'storage_power_H': 0.5,
+        'initial_soc_E': storage_capacity_E*0.2,
+        'initial_soc_G': storage_capacity_G*0.2,
+        'initial_soc_H': storage_capacity_H*0.2,
         'nu_ch_E': 0.95,
         'nu_dis_E': 0.95,        
         'nu_ch_G': 0.95,

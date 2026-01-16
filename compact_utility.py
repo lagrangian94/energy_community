@@ -493,11 +493,11 @@ class LocalEnergyMarket:
                 if u in self.U_E:
                     self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
                                                         ub=self.params.get(f'e_E_cap', -np.inf), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
-                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0, ub=1000)
+                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0, ub=100)
                 if u in self.U_H:
                     self.e_H_gri[u,t] = self.model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
                                                         ub=self.params.get(f'e_H_cap', -np.inf), obj=-1*self.params.get(f'pi_H_gri_export_{t}', 0))
-                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0, ub=500)
+                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0, ub=10000)
                 if u in self.U_G:
                     self.e_G_gri[u,t] = self.model.addVar(vtype="C", name=f"e_G_gri_{u}_{t}", lb=0,
                                                         ub=self.params.get(f'e_G_cap', -np.inf), obj=-1*self.params.get(f'pi_G_gri_export_{t}', 0))
@@ -559,7 +559,7 @@ class LocalEnergyMarket:
                     self.elec_nfl_demand_cons[f"elec_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_E_cap', -np.inf), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=self.params.get(f'i_E_cap', -np.inf))
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=100) #100MW: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}", obj=-1*self.params.get(f'u_G_{u}_{t}', -np.inf))
@@ -567,7 +567,7 @@ class LocalEnergyMarket:
                     self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_G_cap', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=10000) #10000kg: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}", obj=-1*self.params.get(f'u_H_{u}_{t}', -np.inf))
@@ -575,26 +575,26 @@ class LocalEnergyMarket:
                     self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_H_cap', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=100) #100MW: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
                 
                 # Flexible demand variables
                 if u in self.players_with_fl_elec_demand:
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=0.0)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=1000)
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=100)
                 if u in self.players_with_fl_hydro_demand:
                     fl_hydro_demand_cap = 10**6
                     self.fl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=0.0, ub=fl_hydro_demand_cap)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=100)
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=10000)
                 if u in self.players_with_fl_heat_demand:
                     fl_heat_demand_cap = 10**6
                     self.fl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=0.0, ub=fl_heat_demand_cap)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=500)
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=100)
                 # Storage variables by type with capacity constraints
                 # Electricity storage
                 if u in self.players_with_elec_storage:
@@ -631,14 +631,14 @@ class LocalEnergyMarket:
                     c_sto_H = self.params.get("c_sto_H", np.inf)
                     nu_ch_H = self.params.get('nu_ch_H', np.inf)
                     nu_dis_H = self.params.get('nu_dis_H', np.inf)
-                    storage_capacity_heat = self.params.get('storage_capacity_heat', -np.inf)
-                    storage_power_heat = storage_capacity_heat * self.params.get("storage_power_heat", -np.inf)
+                    storage_capacity_H = self.params.get('storage_capacity_H', -np.inf)
+                    storage_power_H = storage_capacity_H * self.params.get("storage_power_H", -np.inf)
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
-                                                        lb=0, ub=storage_power_heat, obj=c_sto_H*(1/nu_dis_H))
+                                                        lb=0, ub=storage_power_H, obj=c_sto_H*(1/nu_dis_H))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
-                                                       lb=0, ub=storage_power_heat, obj=c_sto_H*nu_ch_H)
+                                                       lb=0, ub=storage_power_H, obj=c_sto_H*nu_ch_H)
                     self.s_H[u,t] = self.model.addVar(vtype="C", name=f"s_H_{u}_{t}", 
-                                                    lb=0, ub=storage_capacity_heat)
+                                                    lb=0, ub=storage_capacity_H)
     
     def _create_constraints(self):
         """Create constraints based on slides 9-15"""
@@ -824,6 +824,9 @@ class LocalEnergyMarket:
             # Set initial SOC at 6시 (논리적 시작점)
             if (u,6) in self.s_E:
                 initial_soc = self.params.get(f'initial_soc_E', np.inf)  # Default 50% SOC
+                storage_capacity_E = self.params.get(f'storage_capacity_E', -np.inf)
+                if storage_capacity_E <=0:
+                    initial_soc = 0.0
                 cons = self.model.addCons(self.s_E[u,6] == initial_soc, name=f"initial_soc_E_{u}")
                 self.storage_cons[f"initial_soc_E_{u}"] = cons
             
@@ -913,6 +916,7 @@ class LocalEnergyMarket:
                         name=f"soc_transition_H_{u}_23_to_0"
                     )
                     self.storage_cons[f"soc_transition_H_{u}_23_to_0"] = cons
+                
         if not self.dwr:
             # Community heat balance
             for t in self.time_periods:
@@ -946,7 +950,9 @@ class LocalEnergyMarket:
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)            
                 initial_soc = self.params.get(f'initial_soc_G', np.inf)
-                
+                storage_capacity_G = self.params.get(f'storage_capacity_G', -np.inf)
+                if storage_capacity_G <=0:
+                    initial_soc = 0.0
                 # Set initial SOC at 6시 (논리적 시작점)
                 if (u,6) in self.s_G:
                     cons = self.model.addCons(self.s_G[u,6] == initial_soc, name=f"initial_soc_G_{u}")

@@ -1,0 +1,15 @@
+1. 먼저 hydro storage = 0이기 때문에 demand fluctuation이 심하고 그에 따라 z_els_d_G도 다양하게 나옴
+ㄴ 근데 chp에서 recover한 z_els_d_G는 전부 integer임. 왜?
+2. 8시 elec price 높아진건 z_on_G[8]=1 이기 때문. 
+ㄴ z_on_G가 0에서 1이 된 순간 (1) Start-up cost 발생 (2) Elec consumption 증가함. (둘다 discrete manner)
+ㄴ 수소생산자입장에선 수소생산 비용이 증가하는 것이고, 동시에 전력소비자입장에선 전기구매량이 증가하는 것임.
+ㄴ 즉, 이에따라 수소 가격이 올라가거나 전기 가격이 올라감.
+ㄴ 그런데 둘중 어느부분이 더 올라갈지는 arbitrary? 예를들어 전기가격은 안올리고 수소가격만 올릴수도있나?
+ㄴ 이게 여러개이면 dual feasible region을 살펴봐야 함.
+
+3. chp가 이긴이유
+ㄴ 사실 ch price가 요동치는 대부분 시간대에서 community trade =0임.
+ㄴ chp가 IP,LP랑 다른데도 trade가 일어난 유일한 시간이 17-22시
+ㄴ 보면 External Market Price= import market price = 69.128 > chp = 67.327
+ㄴ 이 경우, 소비자는 trade할 유인이 있음. 반대로 판매자 u2는 판매할 유인이 없음.
+ㄴ 그러나 u2의 export grid capacity가 0.4523인데, u1의 wind 생산량은 1에 가까움. 즉 남는 전기를 커뮤니티에 판매할 유인 생김.
