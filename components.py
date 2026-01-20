@@ -283,13 +283,14 @@ def plot_el_curves(El, config_dict):
             plt.figure(fig_prod)
             plt.plot(x, (El["b"][jj]+El["a"][jj]*x), ":.", color='red', linewidth=2, label='Piecewise linearization', markersize=10)  
         plt.legend(['Nonlinear curve', 'Approximated curve'])
+        plt.savefig(f'production_curves_HYP-MIL.png', dpi=300, bbox_inches='tight')
         # Approximated efficiency curve
         for jj in range(0, N_s):
             p_vec=np.linspace(El["p_val"][jj],El["p_val"][jj+1])
             plt.figure(fig_eff)
             plt.plot(p_vec, (El["a"][jj]+El["b"][jj]/(p_vec)), color='red', linewidth=2, label='Piecewise linearization', linestyle='--', dashes=(1, 1)) 
         plt.legend(['Nonlinear curve', 'Approximated curve'])
-        plt.savefig(f'electrolyzer_curves_HYP-MIL.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'efficiency_curves_HYP-MIL.png', dpi=300, bbox_inches='tight')
         plt.close()
     if config_dict["eff_type"]==2: #HYP_L  
         N_pw=len(El["p_val"]) # Number of piecewise discretization points

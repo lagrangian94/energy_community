@@ -1,6 +1,7 @@
 from data_generator import setup_lem_parameters
 from core import CoreComputation
-from compact import LocalEnergyMarket
+from compact_utility import LocalEnergyMarket
+import json
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Set
 from chp import ColumnGenerationSolver
@@ -34,12 +35,16 @@ if __name__ == "__main__":
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing    
+    with open('working_chp_wins_all_2_effect_of_zsb/parameters.json', 'r') as f:
+        parameters = json.load(f)
+        parameters["El"]["eff_type"] = 2
+
     ## ========================================
     ## Marginal Pricing (Solve LP Relaxation)
     ## ========================================
     lem_lp = LocalEnergyMarket(players, time_periods, parameters, model_type='lp')
     time_start = time.time()
-    status_lp, results_complete_lp, revenue_analysis_lp, community_prices_lp = lem_lp.solve_complete_model(analyze_revenue=False)
+    status_lp, results_complete_lp, revenue_analysis_lp, community_prices_lp, market_prices = lem_lp.solve_complete_model(analyze_revenue=False)
     time_end = time.time()
     time_lp = time_end - time_start
     welfare_lp = lem_lp.model.getObjVal()
@@ -56,7 +61,8 @@ if __name__ == "__main__":
         lem_lp.model_type,
         time_periods, 
         parameters,
-        player_profits_lp
+        player_profits_lp,
+        community_prices_lp 
     )
     lem_lp.generate_beamer_synergy_table(comparison_results_lp, players, filename='synergy_analysis_linear_games.tex')
 

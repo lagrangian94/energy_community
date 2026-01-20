@@ -25,7 +25,9 @@
 ㄴ heat price는 constant함.
 ㄴ heat storage에 충전을 하면, 그만큼 외부/내부에 판매할 수 있는 기회비용이 발생
 ㄴ 그렇다고 충전을 해도 다른 시간대에 비싸게 팔 수가 없음. 오히려 round trip을 하며 손실되는 heat 때문에 같은 가격에 덜 파는 손해를 보게 됨.
-ㄴ 그러면 Hydro storage는 왜 쓰는거지? 전기 -> 수소 비효율성때문에? 
+ㄴ 근데 전기가격에 따라 heat 생산단가가 변화하니까 쌀때 많이 생산해서 저장하면 안됨?
+6-1. 그러면 Hydro storage는 왜 쓰는거지? 전기 -> 수소 비효율성때문에? 아니면 전기가격이 비쌀 때 수소 방출하기 위해?
+ㄴ u2가 ESS까지 가지고 있으면?
 
 
 7. Hydro demand는 애초에 21-8까지 0이기 때문에, 이 사이에 hydrogen CHP가 요동쳐도 allocation에 변화없음. 어차피 그 가격에 안사고 안파니까. (이게 IP = CHP 인 이유 핵심중 하나일듯.)
@@ -49,3 +51,14 @@
 ㄴ 보면 External Market Price= import market price = 69.128 > chp = 67.327
 ㄴ 이 경우, 소비자는 trade할 유인이 있음. 반대로 판매자 u2는 판매할 유인이 없음.
 ㄴ 그러나 u2의 export grid capacity가 0.4523인데, u1의 wind 생산량은 1에 가까움. 즉 남는 전기를 커뮤니티에 판매할 유인 생김.
+ㄴ 즉, (1) chp가 요동치게 하고 (2) internal trade를 만들게 할 유인을 증가시키면 CHP의 가치가 커짐
+ㄴ 그런데 chp도 approximation이니까 producer들의 lost opportunity cost 등이 있을텐데, 그런건 어떻게 찾을 수 있나. 그리고 코어가 존재하기 때문에 부작용이 없는건가?
+
+
+11. 그런데 여태 다 core를 찾는 알고리즘이 core를 찾고잇는데, core자체를 없게만들면 안되나? 어떻게?
+ㄴ 그래야 chp의 가치도 더 제대로 볼 수 있을 거 같음.
+
+
+12. CHP가 왜 그런 price를 냈는지를 보려면 results_chp를 봐야 함. results_complete_ip가 아니라. 대신에 그런 price하에서 'clear된 market quantity'는 reuslts_complete_ip를 봐야됨.
+여기서 만약에 CHP에선 community trade가 존재하고 그때 price가 달랏는데, 실제 ip quantity에선 community trade가 존재하지 않을시 CHP의 유니크한 price는 무의미해지고 allocation에 영향 안줌.
+이건 잘 알려진 CHP의 price - market clearing mismatch 문제.

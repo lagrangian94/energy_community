@@ -298,8 +298,8 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
 def _get_unit(energy_type):
     """Get appropriate unit for energy type"""
     units = {
-        'electricity': 'EUR/kWh',
-        'heat': 'EUR/kWh',
+        'electricity': 'EUR/mWh',
+        'heat': 'EUR/MWh',
         'hydrogen': 'EUR/kg',
         'hydro': 'EUR/kg',  # Assuming hydro is actually hydrogen
     }

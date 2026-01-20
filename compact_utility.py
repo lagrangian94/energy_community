@@ -1180,6 +1180,7 @@ class LocalEnergyMarket:
                         name=f"heatpump_max_power_rate_{u}_{t}"
                     )
                     # ramping up rate
+                    ## ramping limit이 굉장히 커서 사실 잇으나마나한 수준인거같음.
                     cons = self.model.addCons(
                         self.p.get((u,'hp',t),0) - self.p.get((u,'hp',t-1),0) <= c_RU_H * hp_cap * self.z_on_H[u,t] + c_RSU_H * hp_cap * self.z_su_H[u,t],
                         name=f"heatpump_ramping_up_rate_{u}_{t}"
@@ -1326,7 +1327,7 @@ class LocalEnergyMarket:
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(heat_cons))
                 prices['heat'][t] = np.abs(pi)#np.round(np.abs(pi), 2)
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(hydro_cons))
-                prices['hydro'][t] = np.abs(pi)#np.round(np.abs(pi), 2)        
+                prices['hydrogen'][t] = np.abs(pi)#np.round(np.abs(pi), 2)        
         else:
             raise ValueError("a function <solve_complete_model> has a model_type must be either 'mip' or 'lp', got: {}".format(self.model_type))
         

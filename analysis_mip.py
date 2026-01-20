@@ -46,6 +46,18 @@ if __name__ == "__main__":
     os.makedirs(base_path, exist_ok=True)
     with open(f"{base_path}/parameters.json", "w") as f:
         json.dump(parameters, f, default=lambda x: x.tolist() if hasattr(x, 'tolist') else str(x), indent=2)
+        parameters["storage_capacity_E"]= 0
+        parameters["storage_capacity_G"]= 0
+        parameters["storage_capacity_H"]= 0
+        parameters["storage_power_E"]= 0
+        parameters["storage_power_G"]= 0
+        parameters["storage_power_H"]= 0
+        parameters["initial_soc_E"]= 0
+        parameters["initial_soc_G"]= 0
+        parameters["initial_soc_H"]= 0
+    import json
+    with open('working_chp_wins_all/parameters.json', 'r') as f:
+        parameters = json.load(f)
     ## ========================================
     ## Restricted Pricing
     ## ========================================
@@ -172,6 +184,12 @@ if __name__ == "__main__":
         pickle.dump(results_complete_lp, f)
     with open(f'{base_path}/results_chp.pkl', 'wb') as f:
         pickle.dump(results_chp, f)
+    
+    # # results_ip.pkl 읽는 코드
+    # import pickle
+
+    # with open(f'{base_path}/results_ip.pkl', 'rb') as f:
+    #     results_ip_loaded = pickle.load(f)
     ## ========================================
     ## Computational Stability Analysis
     ## ========================================

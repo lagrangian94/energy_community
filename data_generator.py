@@ -67,7 +67,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = sensitivity_analysis['eff_type']
     else:
         use_korean_price = True
-        use_tou_elec = True
+        use_tou_elec = False #True
         import_factor = 1.2 # market import price가 export 대비 몇배 더 큰지
         month = 1
         storage_capacity_E = 2.0 # 2.0 # [0.0, 2.0]
