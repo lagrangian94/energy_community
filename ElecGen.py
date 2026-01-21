@@ -237,9 +237,15 @@ class ElectricityProdGenerator:
         return data
     def generate_wind_production(self, month: int = 12, time_horizon: int = 24):
         data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
+        
         data = data[data['Day'] == 1].reset_index(drop=True)
-        arr = [data[data['Hour']==t]["CP"].values[0] for t in range(time_horizon)]
-        arr = np.array(arr).astype('float64') * self.wind_el_ratio
+
+        # data = data[["CP","Hour"]]
+        # data = data.groupby('Hour')['CP'].mean().reset_index()
+        
+        arr = np.array([data[data['Hour']==t]["CP"].values[0] for t in range(time_horizon)]).astype('float64')
+        # arr = arr * 1/arr.max() *self.wind_cap_mw
+        arr = arr * self.wind_el_ratio
         return arr
     def generate_solar_production(self, month: int=1, time_horizon: int = 24):
         """

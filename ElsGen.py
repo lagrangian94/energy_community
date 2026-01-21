@@ -83,4 +83,5 @@ def generate_electrolyzer(eff_type, els_cap, wind_el_ratio, c_min, c_sb, c_su_G,
     El.update({'eff_type': eff_type})
     components.initialize_electrolyzer(El,config_dict) # Initialize electrolyzer (approximation coeff., etc.)
     components.plot_el_curves(El,config_dict)
+    El.update({"p_els_cap": El["a"][-1]*els_cap + El["b"][-1]})
     return El

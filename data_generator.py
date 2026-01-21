@@ -67,15 +67,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = sensitivity_analysis['eff_type']
     else:
         use_korean_price = True
-        use_tou_elec = False #True
+        use_tou_elec = True
         import_factor = 1.2 # market import price가 export 대비 몇배 더 큰지
         month = 1
         storage_capacity_E = 2.0 # 2.0 # [0.0, 2.0]
-        storage_capacity_G = 150 # [0.0, 150.0]
+        storage_capacity_G = 150.0 # [0.0, 150.0]
         storage_capacity_H = 4.5 # [0.0, 0.40]
-        hp_cap = 0.8 # [0.6, 0.8, 1.0]
-        els_cap = 1 # [0.5, 1.0, 1.5]
-        res_cap = 2
+        hp_cap = 0.8 #MW [0.6, 0.8, 1.0]
+        els_cap = 1 #MW
+        res_cap = 2 #MW
         num_households = 700
         nu_cop = 3.28
         c_su_G = 50
@@ -122,8 +122,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'nu_ch_H': 0.9,
         'nu_dis_H': 0.9,
         # 'nu_loss_H':0.002,
-        # Equipment capacities
-        'res_cap': res_cap,
+        # Equipment capacities (res_cap은 아래에서 els_cap에 비례하게 설정됨.)
         'hp_cap': hp_cap,
         'els_cap': els_cap,
         'e_E_cap_ratio': e_E_cap_ratio,
@@ -133,8 +132,6 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_hp': 2.69,
         'c_els': 0.05,
         'nu_cop': nu_cop,
-        # Grid connection limits
-        'res_capacity': 2,        
         # Cost parameters
         'c_sto_E': 0.01,
         'c_sto_G': 0.01,
@@ -164,7 +161,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
     wind_production = electricity_prod_generator.generate_wind_production()
     pv_production = electricity_prod_generator.generate_solar_production()
-    El = generate_electrolyzer(eff_type=eff_type, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"], segments=segments)
+    El = generate_electrolyzer(eff_type=eff_type, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"],
+     segments=segments)
     parameters['El'] = El
     # Add cost parameters
     for u in parameters['players_with_solar']:
@@ -230,10 +228,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["i_E_cap"] = np.max(elec_demand_mwh)
     parameters["i_H_cap"] = np.max(heat_demand_mwh)
     parameters["i_G_cap"] = np.max(hydro_demand_kg)
-    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
-    parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
-    parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
 
+    total_elec_cap = np.max(pv_production)*len(parameters['players_with_solar']) + np.max(wind_production)*len(parameters['players_with_wind'])
+    total_els_cap = El['p_els_cap'] * len(parameters['players_with_electrolyzers'])
+    total_heat_cap = parameters['hp_cap'] * len(parameters['players_with_heatpumps'])
+    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
+    # parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * total_heat_cap
+    # parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * total_els_cap
+    parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
+    parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
     # Pure Consumer Utility Function
     N_E = len(parameters['players_with_nfl_elec_demand'])
     factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)
