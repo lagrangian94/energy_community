@@ -86,6 +86,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         e_G_cap_ratio = 1.0
         eff_type = 1
         segments = 6
+        peak_penalty_ratio = 1.0
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -199,6 +200,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     h2_prices = generate_hydrogen_price(base_price_eur=base_h2_price_eur, import_factor=import_factor, time_horizon=24)
     heat_prices = HeatPriceGenerator().get_profiles(month=month, import_factor=import_factor, customer_type='residential', use_seasonal=False)
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
+
+    parameters[f"pi_E_peak"] = np.mean(elec_prices["import"])*peak_penalty_ratio
     
     
     # DEMANDS

@@ -493,15 +493,15 @@ class LocalEnergyMarket:
                 if u in self.U_E:
                     self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
                                                         ub=self.params.get(f'e_E_cap', -np.inf), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
-                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0, ub=100)
+                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0)
                 if u in self.U_H:
                     self.e_H_gri[u,t] = self.model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
                                                         ub=self.params.get(f'e_H_cap', -np.inf), obj=-1*self.params.get(f'pi_H_gri_export_{t}', 0))
-                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0, ub=10000)
+                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0)
                 if u in self.U_G:
                     self.e_G_gri[u,t] = self.model.addVar(vtype="C", name=f"e_G_gri_{u}_{t}", lb=0,
                                                         ub=self.params.get(f'e_G_cap', -np.inf), obj=-1*self.params.get(f'pi_G_gri_export_{t}', 0))
-                    self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0, ub=100)
+                    self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0)
                 
                 # Production variables (for renewables, heat pumps, electrolyzers) with capacity limits
                 if u in self.players_with_renewables:  # Renewable generators
@@ -559,7 +559,7 @@ class LocalEnergyMarket:
                     self.elec_nfl_demand_cons[f"elec_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_E_cap', -np.inf), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=100) #100MW: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}", obj=-1*self.params.get(f'u_G_{u}_{t}', -np.inf))
@@ -567,7 +567,7 @@ class LocalEnergyMarket:
                     self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_G_cap', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=10000) #10000kg: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}", obj=-1*self.params.get(f'u_H_{u}_{t}', -np.inf))
@@ -575,26 +575,26 @@ class LocalEnergyMarket:
                     self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
                                                      ub=self.params.get(f'i_H_cap', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=100) #100MW: 거의 있으나마나한 big bound지만 CHP의 subproblem을 bound시켜주기위해 넣어줌.
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 
                 # Flexible demand variables
                 if u in self.players_with_fl_elec_demand:
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=0.0)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0, ub=100)
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0) #어차피 수전해, 열펌프 장비의 산출 output이 존재하니 implicit하게 bound됨.
                 if u in self.players_with_fl_hydro_demand:
                     fl_hydro_demand_cap = 10**6
                     self.fl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=0.0, ub=fl_hydro_demand_cap)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0, ub=10000)
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0) #어차피 fuel cell 장비의 산출 output이 존재하니 implicit하게 bound됨.
                 if u in self.players_with_fl_heat_demand:
                     fl_heat_demand_cap = 10**6
                     self.fl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=0.0, ub=fl_heat_demand_cap)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0, ub=100)
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0)
                 # Storage variables by type with capacity constraints
                 # Electricity storage
                 if u in self.players_with_elec_storage:
