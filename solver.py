@@ -182,7 +182,7 @@ class MasterProblem:
     Restricted Master Problem for column generation
     Contains only community balance constraints
     """
-    def __init__(self, players: List[str], time_periods: List[int]):
+    def __init__(self, players: List[str], time_periods: List[int], params: Dict):
         """
         Initialize master problem
         
@@ -194,6 +194,7 @@ class MasterProblem:
         self.time_periods = time_periods
         self.model = Model("RMP_LocalEnergyMarket")
         self.model.data = {}
+        self.params = params
         # Storage for variables and constraints
         self.model.data['vars'] = {
             player:{} for player in players
@@ -204,7 +205,10 @@ class MasterProblem:
             'community_elec_balance': {},
             'community_heat_balance': {},
             'community_hydro_balance': {},
-            'convexity': {}
+            'convexity': {},
+            'export_capacity_elec': {},
+            'export_capacity_heat': {},
+            'export_capacity_hydro': {}
         }
     
     def _create_master_constraints(self):
@@ -226,6 +230,7 @@ class MasterProblem:
         # Farkas pricing will ensure feasibility
         for t in self.time_periods:
             elec_expr, heat_expr, hydro_expr = 0, 0, 0
+            export_elec_expr, export_heat_expr, export_hydro_expr = 0, 0, 0
             for u in self.players:
                 var = self.model.data["vars"][u][0]["var"]
                 solution = self.model.data["vars"][u][0]["solution"]
@@ -241,6 +246,13 @@ class MasterProblem:
                 e_G_com_val = solution.get('e_G_com', {}).get((u, t), 0.0)
                 i_G_com_val = solution.get('i_G_com', {}).get((u, t), 0.0)
                 hydro_expr += var * (i_G_com_val - e_G_com_val)
+
+                e_E_gri_val = solution.get('e_E_gri', {}).get((u, t), 0.0)
+                e_H_gri_val = solution.get('e_H_gri', {}).get((u, t), 0.0)
+                e_G_gri_val = solution.get('e_G_gri', {}).get((u, t), 0.0)
+                export_elec_expr += var * e_E_gri_val
+                export_heat_expr += var * e_H_gri_val
+                export_hydro_expr += var * e_G_gri_val
             # # Add artificial variables (positive and negative slack with big-M penalty)
             # BIG_M = 1e6  # Large penalty cost
             # art_elec_pos = self.model.addVar(f"art_elec_pos_{t}", vtype="C", lb=0, obj=BIG_M)
@@ -276,6 +288,23 @@ class MasterProblem:
                 name=f"community_hydro_balance_{t}", modifiable=True
             )
             self.model.data['cons']['community_hydro_balance'][t] = cons
+
+            # Export capacity constraints
+            cons = self.model.addCons(
+                export_elec_expr <= self.params.get(f'e_E_cap', -np.inf),
+                name=f"export_capacity_elec_{t}", modifiable=True
+            )
+            self.model.data['cons']['export_capacity_elec'][t] = cons
+            cons = self.model.addCons(
+                export_heat_expr <= self.params.get(f'e_H_cap', -np.inf),
+                name=f"export_capacity_heat_{t}", modifiable=True
+            )
+            self.model.data['cons']['export_capacity_heat'][t] = cons
+            cons = self.model.addCons(
+                export_hydro_expr <= self.params.get(f'e_G_cap', -np.inf),
+                name=f"export_capacity_hydro_{t}", modifiable=True
+            )
+            self.model.data['cons']['export_capacity_hydro'][t] = cons
         print(f"  Added {len(self.time_periods)} community balance constraints (with artificial vars)")
         # print(f"  Artificial variable penalty: {BIG_M}")
         print("=== Master Constraints Created ===\n")

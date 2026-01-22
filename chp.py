@@ -49,7 +49,7 @@ class ColumnGenerationSolver:
         
         # Create master problem
         print("\n=== Creating Master Problem ===")
-        self.master = MasterProblem(players, time_periods)
+        self.master = MasterProblem(players, time_periods, parameters)
         
         print("Note: Initial columns will be generated via initial solve")
     

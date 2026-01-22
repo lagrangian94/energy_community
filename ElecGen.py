@@ -236,17 +236,34 @@ class ElectricityProdGenerator:
         data.set_index('Date', inplace = True)
         return data
     def generate_wind_production(self, month: int = 12, time_horizon: int = 24):
-        data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
+        if month:
+            data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
+        else:
+            data = self.wind_data
         
-        data = data[data['Day'] == 1].reset_index(drop=True)
+        
+        """
+        wind profile 시각화하고싶으면 아래 주석 제거
+        """
+        # plot_wind_profile(data)
 
-        # data = data[["CP","Hour"]]
-        # data = data.groupby('Hour')['CP'].mean().reset_index()
+        # data = data[data['Day'] == 1].reset_index(drop=True)
+        medoid_profiles, medoid_days, labels, cluster_sizes = find_k_medoids(data, k=2)
         
-        arr = np.array([data[data['Hour']==t]["CP"].values[0] for t in range(time_horizon)]).astype('float64')
-        # arr = arr * 1/arr.max() *self.wind_cap_mw
-        arr = arr * self.wind_el_ratio
-        return arr
+
+        # Show which actual days belong to which cluster
+        print("\nCluster assignments:")
+        for i in range(len(medoid_profiles)):
+            cluster_days = np.where(labels == i)[0] + 1
+            print(f"Cluster {i} (represented by Day {medoid_days[i]}): {cluster_days[:10]}... (total {cluster_sizes[i]} days)")
+
+
+        arrs = []
+        for profile in medoid_profiles:
+            arr = profile*1/profile.max()*self.wind_cap_mw
+            arrs.append(arr)
+        arrs = np.array(arrs)
+        return arrs
     def generate_solar_production(self, month: int=1, time_horizon: int = 24):
         """
         이건 추후에 data 수집할 예정. 지금은 단순한 임의 formula로 생성.
@@ -610,4 +627,121 @@ class ElectricityLoadGenerator:
         
         plt.tight_layout()
         plt.show()
+def plot_wind_profile(data):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    # Group data by day and plot all days on same axes
+    unique_days = sorted(data['Day'].unique())
+    n_days = len(unique_days)
+    
+    plt.figure(figsize=(12, 6))
+    
+    # Use colormap to differentiate days
+    colors = plt.cm.viridis(np.linspace(0, 1, n_days))
+    
+    for idx, day in enumerate(unique_days):
+        day_data = data[data['Day'] == day].sort_values('Hour')
+        plt.plot(day_data['Hour'], day_data['CP'], marker='o', markersize=3, 
+                linewidth=1.5, alpha=0.6, c=colors[idx], label=f'Day {day}')
+    
+    plt.xlabel('Hour', fontsize=12)
+    plt.ylabel('CP', fontsize=12)
+    plt.title(f'Wind CP by Hour - All Days Overlaid (Month {month})', fontsize=14)
+    plt.xlim(-0.5, 23.5)
+    plt.xticks(range(0, 24, 2))
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, ncol=2)
+    plt.tight_layout()
+    plt.savefig('wind.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    return
+def find_k_medoids(data, k=2, max_iter=100):
+    """
+    Find k representative days using k-medoids clustering
+    
+    Parameters:
+    - k: number of representative days to select
+    - max_iter: maximum iterations for clustering
+    
+    Returns:
+    - medoid_profiles: array of shape (k, 24) with k representative profiles
+    - medoid_days: list of day numbers
+    - labels: cluster assignment for each day
+    """
+    # Group by day and get 24-hour profiles
+    days = data.groupby('Day')['CP'].apply(list).values
+    days_matrix = np.array([day for day in days if len(day) == 24])
+    n_days = len(days_matrix)
+    
+    # Calculate pairwise distances once
+    distances = np.zeros((n_days, n_days))
+    for i in range(n_days):
+        for j in range(i+1, n_days):
+            dist = np.sqrt(np.sum((days_matrix[i] - days_matrix[j])**2))
+            distances[i, j] = dist
+            distances[j, i] = dist
+    
+    # Initialize medoids randomly
+    np.random.seed(42)  # for reproducibility
+    medoid_indices = np.random.choice(n_days, k, replace=False)
+    
+    # K-medoids algorithm (PAM - Partitioning Around Medoids)
+    for iteration in range(max_iter):
+        # Assign each day to nearest medoid
+        labels = np.argmin(distances[:, medoid_indices], axis=1)
+        
+        # Update medoids
+        new_medoid_indices = []
+        for cluster_id in range(k):
+            cluster_members = np.where(labels == cluster_id)[0]
+            if len(cluster_members) == 0:
+                # Keep old medoid if cluster is empty
+                new_medoid_indices.append(medoid_indices[cluster_id])
+                continue
+            
+            # Find point in cluster with minimum sum of distances to other points in cluster
+            cluster_distances = distances[np.ix_(cluster_members, cluster_members)]
+            within_cluster_costs = cluster_distances.sum(axis=1)
+            best_idx = cluster_members[np.argmin(within_cluster_costs)]
+            new_medoid_indices.append(best_idx)
+        
+        new_medoid_indices = np.array(new_medoid_indices)
+        
+        # Check convergence
+        if np.array_equal(medoid_indices, new_medoid_indices):
+            break
+            
+        medoid_indices = new_medoid_indices
+    
+    medoid_profiles = days_matrix[medoid_indices]
+    medoid_days = medoid_indices + 1  # +1 because Day starts from 1
+    
+    # Calculate cluster statistics
+    cluster_sizes = [np.sum(labels == i) for i in range(k)]
+    
+    """
+    representative profiles 시각화 하고 싶으면 아래 주석 제거
+    """
+
+    # # Visualize the two representative days
+    # fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # for i, (profile, day_num, cluster_size) in enumerate(zip(medoid_profiles, medoid_days, cluster_sizes)):
+    #     axes[i].plot(range(24), profile, 'o-', linewidth=2, markersize=6)
+    #     axes[i].set_xlabel('Hour')
+    #     axes[i].set_ylabel('Capacity Factor')
+    #     axes[i].set_title(f'Representative Day {day_num}\n({cluster_size} similar days)')
+    #     axes[i].grid(True, alpha=0.3)
+    #     axes[i].set_ylim([0, 1])
+        
+    #     # Add statistics
+    #     axes[i].text(0.02, 0.98, f'Mean: {profile.mean():.3f}\nStd: {profile.std():.3f}\nMax: {profile.max():.3f}',
+    #                 transform=axes[i].transAxes, verticalalignment='top',
+    #                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+    # plt.tight_layout()
+    # plt.savefig(f'representative_days_k_{k}.png', dpi=300, bbox_inches='tight')
+    # plt.close()
+    return medoid_profiles, medoid_days, labels, cluster_sizes
 

@@ -420,12 +420,17 @@ class LocalEnergyMarket:
         self.hydro_nfl_demand_cons = {}
         self.heat_nfl_demand_cons = {}
 
+        # Initialize export capacity constraints
+        self.export_capacity_cons = {}
+
         # Initialize variables
         self._create_variables()
         self._create_constraints()
         
         # Store all variables and constraints in model.data
         self._store_model_data()
+
+
     
     def _create_variables(self):
         """Create decision variables based on slides 6"""
@@ -566,7 +571,7 @@ class LocalEnergyMarket:
                     cons = self.model.addCons(self.nfl_d[u,'hydro',t] == nfl_hydro_demand_t, name=f"fix_nfl_d_hydro_{u}_{t}")
                     self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap', 100), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_G_cap', -np.inf), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
                     self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
@@ -574,7 +579,7 @@ class LocalEnergyMarket:
                     cons = self.model.addCons(self.nfl_d[u,'heat',t] == nfl_heat_demand_t, name=f"fix_nfl_d_heat_{u}_{t}")
                     self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap', 500), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
+                                                     ub=self.params.get(f'i_H_cap', -np.inf), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
                     self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 
                 # Flexible demand variables
@@ -662,6 +667,30 @@ class LocalEnergyMarket:
             self._add_hydro_nonconvex_cons_mip()
             self._add_heat_nonconvex_cons_mip()
             self._fix_binaries()
+
+        # Restrict total export capacity
+        self._add_export_capacity_constraints()
+    def _add_export_capacity_constraints(self):
+        self.export_capacity_cons["elec"] = {}
+        self.export_capacity_cons["heat"] = {}
+        self.export_capacity_cons["hydro"] = {}
+        for t in self.time_periods:
+            ## electricity
+            cons = self.model.addCons(
+                quicksum(self.e_E_gri[(u,t)] for u in self.U_E) <= self.params.get(f'e_E_cap', -np.inf)
+            )
+            self.export_capacity_cons["elec"][f"export_capacity_cons_{t}"] = cons
+            ## heat
+            cons = self.model.addCons(
+                quicksum(self.e_H_gri[(u,t)] for u in self.U_H) <= self.params.get(f'e_H_cap', -np.inf)
+            )
+            self.export_capacity_cons["heat"][f"export_capacity_cons_{t}"] = cons
+            ## hydro
+            cons = self.model.addCons(
+                quicksum(self.e_G_gri[(u,t)] for u in self.U_G) <= self.params.get(f'e_G_cap', -np.inf)
+            )
+            self.export_capacity_cons["hydro"][f"export_capacity_cons_{t}"] = cons
+        return
     def _fix_binaries(self):
         # If binary_values are provided, add constraints to fix binary variables
         for u in self.players_with_electrolyzers:

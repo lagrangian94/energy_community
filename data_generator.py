@@ -81,9 +81,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         c_su_G = 50
         c_su_H = 10 
         base_h2_price_eur = 5000/1500 #2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
-        e_E_cap_ratio = 1.0
-        e_H_cap_ratio = 1.0
-        e_G_cap_ratio = 1.0
+        e_E_cap_ratio = 0.7
+        e_H_cap_ratio = 0.7
+        e_G_cap_ratio = 0.7
         eff_type = 1
         segments = 6
         peak_penalty_ratio = 1.0
@@ -160,6 +160,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
 
     electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
     wind_production = electricity_prod_generator.generate_wind_production()
+    if len(wind_production)>1:
+        wind_production = wind_production[0]
     pv_production = electricity_prod_generator.generate_solar_production()
     El = generate_electrolyzer(eff_type=eff_type, els_cap=parameters["els_cap"], wind_el_ratio=2.0, c_min=parameters["c_min_G"], c_sb=parameters["c_sb_G"], c_su_G=parameters["c_su_G"],
      segments=segments)
@@ -232,11 +234,12 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     total_elec_cap = np.max(pv_production)*len(parameters['players_with_solar']) + np.max(wind_production)*len(parameters['players_with_wind'])
     total_els_cap = El['p_els_cap'] * len(parameters['players_with_electrolyzers'])
     total_heat_cap = parameters['hp_cap'] * len(parameters['players_with_heatpumps'])
-    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
-    # parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * total_heat_cap
-    # parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * total_els_cap
-    parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
-    parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
+    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * total_elec_cap
+    parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * total_heat_cap
+    parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * total_els_cap
+    # parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
+    # parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
+    # parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
     # Pure Consumer Utility Function
     N_E = len(parameters['players_with_nfl_elec_demand'])
     factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)
