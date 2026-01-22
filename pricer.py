@@ -43,29 +43,45 @@ class LEMPricer(Pricer):
         dual_heat = {}
         dual_hydro = {}
         dual_convexity = {}
-
+        dual_export_elec, dual_export_heat, dual_export_hydro = {}, {}, {}
+        pi_times_rhs = 0.0
         # Get community balance constraint duals/Farkas multipliers
         for t in self.time_periods:
             elec_cons = self.model.data['cons']['community_elec_balance'][t]
             heat_cons = self.model.data['cons']['community_heat_balance'][t]
             hydro_cons = self.model.data['cons']['community_hydro_balance'][t]
-            
+            export_elec_cons = self.model.data['cons']['export_capacity_elec'][t]
+            export_heat_cons = self.model.data['cons']['export_capacity_heat'][t]
+            export_hydro_cons = self.model.data['cons']['export_capacity_hydro'][t]
             # Get transformed constraints
             t_elec_cons = self.model.getTransformedCons(elec_cons)
             t_heat_cons = self.model.getTransformedCons(heat_cons)
             t_hydro_cons = self.model.getTransformedCons(hydro_cons)
-            
+            t_export_elec_cons = self.model.getTransformedCons(export_elec_cons)
+            t_export_heat_cons = self.model.getTransformedCons(export_heat_cons)
+            t_export_hydro_cons = self.model.getTransformedCons(export_hydro_cons)
             if farkas:
                 # Get Farkas multipliers for infeasible problem
                 dual_elec[t] = self.model.getDualfarkasLinear(t_elec_cons)
                 dual_heat[t] = self.model.getDualfarkasLinear(t_heat_cons)
                 dual_hydro[t] = self.model.getDualfarkasLinear(t_hydro_cons)
+                dual_export_elec[t] = self.model.getDualfarkasLinear(t_export_elec_cons)
+                dual_export_heat[t] = self.model.getDualfarkasLinear(t_export_heat_cons)
+                dual_export_hydro[t] = self.model.getDualfarkasLinear(t_export_hydro_cons)
+                """
+                여기선 reduced cost test 어떻게 하는거더라?
+                """
             else:
                 # Get regular dual multipliers
                 dual_elec[t] = self.model.getDualsolLinear(t_elec_cons)
                 dual_heat[t] = self.model.getDualsolLinear(t_heat_cons)
                 dual_hydro[t] = self.model.getDualsolLinear(t_hydro_cons)
-                
+                dual_export_elec[t] = self.model.getDualsolLinear(t_export_elec_cons)
+                dual_export_heat[t] = self.model.getDualsolLinear(t_export_heat_cons)
+                dual_export_hydro[t] = self.model.getDualsolLinear(t_export_hydro_cons)
+                pi_times_rhs += dual_export_elec[t]*self.model.getRhs(t_export_elec_cons)
+                pi_times_rhs += dual_export_heat[t]*self.model.getRhs(t_export_heat_cons)
+                pi_times_rhs += dual_export_hydro[t]*self.model.getRhs(t_export_hydro_cons)
         # Get convexity constraint duals/Farkas multipliers for each player
         for player in self.players:
             conv_cons = self.model.data['cons']['convexity'][player]
@@ -96,8 +112,9 @@ class LEMPricer(Pricer):
         obj_val_list = []
         for player in self.players:
             reduced_cost, solution, obj_val = self.subproblems[player].solve_pricing(
-                dual_elec, dual_heat, dual_hydro, dual_convexity[player], farkas=farkas
-            )
+                dual_elec, dual_heat, dual_hydro, dual_convexity[player],
+                dual_export_elec, dual_export_heat, dual_export_hydro,
+                farkas=farkas)
             debug_sol[player] = solution  
             obj_val_list.append(obj_val)
             # Add column if reduced cost is negative
@@ -109,7 +126,7 @@ class LEMPricer(Pricer):
                 min_reduced_cost = min(min_reduced_cost, reduced_cost)
                 # break ## column은 한 player만 넣어도 수렴에 충분.
         if len(obj_val_list) == len(self.players):
-            self._update_lagrangian_bound(obj_val_list, farkas=farkas)
+            self._update_lagrangian_bound(obj_val_list, pi_times_rhs, farkas=farkas)
             lagrangian_gap = (self.model.getLPObjVal() - self.lb)/np.abs(self.lb) if self.lb != -1*np.inf else np.inf
             ## 사실 이걸 먼저 체크하고 termination 조건 체크한 뒤, 그 다음에 column을 넣어줘야 pricing이 제대로 끝날것임.
         if columns_added == 0:
@@ -214,12 +231,38 @@ class LEMPricer(Pricer):
                 new_var,
                 coeff_hydro
             )
-    def _update_lagrangian_bound(self, obj_val_list: List[float], farkas: bool):
+
+            # Export
+            ## Electricity
+            e_E_gri_val = solution.get('e_G_gri', {}).get((player, t), 0)
+            coeff_export_elec = e_E_gri_val
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['export_capacity_elec'][t]),
+                new_var,
+                coeff_export_elec
+            )
+            ## Heat
+            e_H_gri_val = solution.get('e_H_gri', {}).get((player, t), 0)
+            coeff_export_heat = e_H_gri_val
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['export_capacity_heat'][t]),
+                new_var,
+                coeff_export_heat
+            )
+            ## Hydrogen
+            e_G_gri_val = solution.get('e_G_gri', {}).get((player, t), 0)
+            coeff_export_hydro = e_G_gri_val
+            self.model.addConsCoeff(
+                self.model.getTransformedCons(self.model.data['cons']['export_capacity_hydro'][t]),
+                new_var,
+                coeff_export_hydro
+            )
+    def _update_lagrangian_bound(self, obj_val_list: List[float], pi_times_rhs: float, farkas: bool):
         """
         Update Lagrangian bound
         이 문제에서 linking constraint의 right-hand-side는 전부 zero이기 때문에, subproblem들의 objective value만 합하면 됨.
         """
         if farkas:
             return
-        self.lb = max(self.lb, np.sum(obj_val_list))
+        self.lb = max(self.lb, np.sum(obj_val_list) + pi_times_rhs)
         return

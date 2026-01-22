@@ -1,5 +1,7 @@
 """
 Solver components for column generation: Subproblem and Master Problem
+
+_add_initial_columns, solve_pricing, calculate_column_cost 세 개 다 업데이트하는거 까먹지 말 것.
 """
 from pyscipopt import Model, quicksum
 import sys
@@ -49,6 +51,9 @@ class PlayerSubproblem:
                       dual_heat: Dict[int, float], 
                       dual_hydro: Dict[int, float],
                       dual_convexity: float,
+                      dual_export_elec: Dict[int, float],
+                      dual_export_heat: Dict[int, float],
+                      dual_export_hydro: Dict[int, float],
                       farkas: bool=False) -> Tuple[float, Dict]:
         """
         Solve pricing problem with modified objective based on dual prices
@@ -145,18 +150,26 @@ class PlayerSubproblem:
             if (u, t) in self.lem.e_E_com:
                 # Export to community: coefficient is -1 in balance
                 new_obj += dual_elec[t] * self.lem.e_E_com[u, t]
+            if (u, t) in self.lem.e_E_gri:
+                # Export to grid: coefficient is -1 in export capacity cons
+                new_obj -= dual_export_elec[t] * self.lem.e_E_gri[u, t]
             
             # Heat
             if (u, t) in self.lem.i_H_com:
                 new_obj -= dual_heat[t] * self.lem.i_H_com[u, t]
             if (u, t) in self.lem.e_H_com:
                 new_obj += dual_heat[t] * self.lem.e_H_com[u, t]
-            
+            if (u, t) in self.lem.e_H_gri:
+                # Export to grid: coefficient is -1 in export capacity cons
+                new_obj -= dual_export_heat[t] * self.lem.e_H_gri[u, t]
             # Hydrogen
             if (u, t) in self.lem.i_G_com:
                 new_obj -= dual_hydro[t] * self.lem.i_G_com[u, t]
             if (u, t) in self.lem.e_G_com:
                 new_obj += dual_hydro[t] * self.lem.e_G_com[u, t]
+            if (u, t) in self.lem.e_G_gri:
+                # Export to grid: coefficient is -1 in export capacity cons
+                new_obj -= dual_export_hydro[t] * self.lem.e_G_gri[u, t]
         
         # Set modified objective
         try:
@@ -322,14 +335,17 @@ class MasterProblem:
         zero_duals_heat = {t: 0.0 for t in self.time_periods}
         zero_duals_hydro = {t: 0.0 for t in self.time_periods}
         zero_duals_convexity = {player: 0.0 for player in self.players}
-        
+        zero_duals_export_elec = {t: 0.0 for t in self.time_periods}
+        zero_duals_export_heat = {t: 0.0 for t in self.time_periods}
+        zero_duals_export_hydro = {t: 0.0 for t in self.time_periods}
         for player in self.players:
             print(f"Generating initial column for player {player}...")
 
             if not init_sol:
                 # Solve subproblem with zero dual prices
                 reduced_cost, solution, obj_val = subproblems[player].solve_pricing(
-                    zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player]
+                    zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player],
+                    zero_duals_export_elec, zero_duals_export_heat, zero_duals_export_hydro
                 )
             else:
                 # Solve subproblem with initial solution
