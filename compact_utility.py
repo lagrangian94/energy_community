@@ -313,8 +313,7 @@ def solve_and_extract_results(model):
                         "b_dis_H", "b_ch_H", "s_H", 
                         "z_su_G", "z_on_G", "z_off_G", "z_sb_G", "z_sd_G",
                         "z_su_H", "z_on_H", "z_sd_H"
-                        ,"z_ru_H"]
-                        # "chi_peak"]
+                        ,"z_ru_H", "chi_peak_E"]
             raise Exception(f"Model data is None. Cannot extract results for {vars_name}")
             
         return status, results
@@ -489,8 +488,6 @@ class LocalEnergyMarket:
           A multistage stochastic optimization approach. Energy Economics, 136, 107764.
         """
         self.z_ru_H = {}   # Ramp-up decision
-        # Peak power variable
-        # self.chi_peak = self.model.addVar(vtype="C", name="chi_peak", lb=0, obj=self.params.get('pi_peak', 0))
         
         # Create variables for each player and time period
         for u in self.players:
@@ -669,28 +666,21 @@ class LocalEnergyMarket:
             self._fix_binaries()
 
         # Restrict total export capacity
-        self._add_export_capacity_constraints()
-    def _add_export_capacity_constraints(self):
-        self.export_capacity_cons["elec"] = {}
-        self.export_capacity_cons["heat"] = {}
-        self.export_capacity_cons["hydro"] = {}
+        # self._add_export_capacity_constraints()
+        # Impose peak penalty on total import power
+        # self._add_peak_penalty_constraints()
+    def _add_peak_penalty_constraints(self):
+        #Electricity
+        self.peak_penalty_cons = {"elec": {}}
+        self.chi_peak_E = self.model.addVar(vtype="C", name="chi_peak_E", lb=0, obj=self.params.get(f'pi_E_peak', 0))
+        self.model.data["vars"]["chi_peak_E"] = self.chi_peak_E
         for t in self.time_periods:
-            ## electricity
             cons = self.model.addCons(
-                quicksum(self.e_E_gri[(u,t)] for u in self.U_E) <= self.params.get(f'e_E_cap', -np.inf)
+                quicksum(self.i_E_gri[(u,t)] for u in set(self.U_E_fl + self.U_E_nfl)) - self.chi_peak_E <= 0.0
             )
-            self.export_capacity_cons["elec"][f"export_capacity_cons_{t}"] = cons
-            ## heat
-            cons = self.model.addCons(
-                quicksum(self.e_H_gri[(u,t)] for u in self.U_H) <= self.params.get(f'e_H_cap', -np.inf)
-            )
-            self.export_capacity_cons["heat"][f"export_capacity_cons_{t}"] = cons
-            ## hydro
-            cons = self.model.addCons(
-                quicksum(self.e_G_gri[(u,t)] for u in self.U_G) <= self.params.get(f'e_G_cap', -np.inf)
-            )
-            self.export_capacity_cons["hydro"][f"export_capacity_cons_{t}"] = cons
+            self.peak_penalty_cons["elec"][f"peak_penalty_cons_{t}"] = cons
         return
+
     def _fix_binaries(self):
         # If binary_values are provided, add constraints to fix binary variables
         for u in self.players_with_electrolyzers:
@@ -803,9 +793,7 @@ class LocalEnergyMarket:
         self.model.data["vars"]["z_sd_H"] = self.z_sd_H
 
         # self.model.data["vars"]["z_ru_H"] = self.z_ru_H
-        
-        # self.model.data["vars"]["chi_peak"] = self.chi_peak
-        
+                
         # Store all constraints (we need to collect them during creation)
         # For now, we'll store the constraint dictionaries that were created
         self.model.data["cons"]["community_elec_balance"] = self.community_elec_balance_cons
@@ -1345,6 +1333,10 @@ class LocalEnergyMarket:
             'heat': {},
             'hydrogen': {}
             }
+            if "chi_peak_E" in results:
+                prices = prices | {"peak_penalty": {}}
+            if hasattr(self, "export_capacity_cons"):
+                prices= prices | {"export_capacity": {"electricity": {}, "heat": {}, "hydrogen": {}}}
             for t in self.time_periods:
                 # Get dual multipliers for community balance constraints
                 elec_cons = self.community_elec_balance_cons[f"community_elec_balance_{t}"]
@@ -1356,7 +1348,15 @@ class LocalEnergyMarket:
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(heat_cons))
                 prices['heat'][t] = np.abs(pi)#np.round(np.abs(pi), 2)
                 pi = self.model.getDualsolLinear(self.model.getTransformedCons(hydro_cons))
-                prices['hydrogen'][t] = np.abs(pi)#np.round(np.abs(pi), 2)        
+                prices['hydrogen'][t] = np.abs(pi)#np.round(np.abs(pi), 2)
+
+                """
+                여기서 문제는 minimization이고 peak constraint 부호는 <= 니까 dual variable의 부호는 음수(-)가 되어야 함.
+                그래서 penalty price를 양수로 저장하기 위해 np.abs(pi) 사용. 이거는 순전히 아래 profit 계산할 때 쓰기 위함.
+                """
+                if "peak_penalty" in prices:
+                    peak_penalty_cons = self.peak_penalty_cons["elec"][f"peak_penalty_cons_{t}"]
+                    prices["peak_penalty"][t] = np.abs(self.model.getDualsolLinear(self.model.getTransformedCons(peak_penalty_cons)))
         else:
             raise ValueError("a function <solve_complete_model> has a model_type must be either 'mip' or 'lp', got: {}".format(self.model_type))
         
@@ -1511,7 +1511,7 @@ class LocalEnergyMarket:
         """
         Analyze revenue contribution by resource type from objective function
         Based ONLY on addVar(obj=...) coefficients defined in the model
-        
+        Dual variable 가지고 ALLOCATION하는건 여기서 하지 않음.
         Args:
             results: Dictionary containing optimization results
             
@@ -1525,6 +1525,7 @@ class LocalEnergyMarket:
                 'nfl_demand_utility': 0.0,
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
+                'peak_penalty': 0.0,
                 'net': 0.0
             },
             'hydrogen': {
@@ -1559,7 +1560,7 @@ class LocalEnergyMarket:
         nu_dis_G = self.params.get('nu_dis_G', np.inf)
         nu_ch_H = self.params.get('nu_ch_H', np.inf)
         nu_dis_H = self.params.get('nu_dis_H', np.inf)
-        
+        pi_E_peak = self.params.get('pi_E_peak', np.inf)
         # ========== ELECTRICITY ==========
         # Export revenue
         if 'e_E_gri' in results:
@@ -1567,13 +1568,15 @@ class LocalEnergyMarket:
                 if val > 0:
                     price = self.params.get(f'pi_E_gri_export_{t}', 0)
                     revenue_analysis['electricity']['grid_export_revenue'] += val * price
-        
         # Import cost
         if 'i_E_gri' in results:
             for (u, t), val in results['i_E_gri'].items():
                 if val > 0:
                     price = self.params.get(f'pi_E_gri_import_{t}', 0)
                     revenue_analysis['electricity']['grid_import_cost'] += val * price
+        # Peak penalty cost
+        if 'chi_peak_E' in results:
+            revenue_analysis['electricity']['peak_penalty'] += results['chi_peak_E'] * pi_E_peak
         # Non-flexible demand utility
         if 'nfl_d' in results:
             for (u, resource_type, t), val in results['nfl_d'].items():
@@ -1693,7 +1696,8 @@ class LocalEnergyMarket:
             revenue_analysis['electricity']['grid_import_cost'] -
             revenue_analysis['electricity']['production_cost'] +
             revenue_analysis['electricity']['nfl_demand_utility'] -
-            revenue_analysis['electricity']['storage_cost']
+            revenue_analysis['electricity']['storage_cost'] -
+            revenue_analysis['electricity']['peak_penalty']
         )
         
         # Hydrogen net
@@ -1738,7 +1742,8 @@ class LocalEnergyMarket:
             revenue_analysis['heat']['grid_import_cost'] +
             revenue_analysis['heat']['production_cost'] +
             revenue_analysis['heat']['storage_cost'] +
-            revenue_analysis['heat']['startup_cost']
+            revenue_analysis['heat']['startup_cost'] -
+            revenue_analysis['electricity']['peak_penalty']
         )
         
         revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost'] + revenue_analysis['total_consumption_utility']
@@ -2765,7 +2770,8 @@ class LocalEnergyMarket:
             'heat': {},
             'hydrogen': {}
         }
-        
+        if "chi_peak_E" in lp_model.model.data["vars"]:
+            prices = prices | {"peak_penalty": {}}
         for t in self.time_periods:
             # Get dual multipliers for community balance constraints
             elec_cons = lp_model.community_elec_balance_cons[f"community_elec_balance_{t}"]
@@ -2778,7 +2784,12 @@ class LocalEnergyMarket:
             prices['heat'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
             pi = lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(hydro_cons))
             prices['hydrogen'][t] = np.abs(pi) #np.round(np.abs(pi), 2)
-        
+            if "peak_penalty" in prices:
+                peak_penalty_cons = lp_model.peak_penalty_cons["elec"][f"peak_penalty_cons_{t}"]
+                """
+                이후 revenue 분석 시 이용해야하므로 np.abs 사용. 왜냐하면 목적함수는 min이고 부호는 <=라서 dual은 음수가 나오기 때문.
+                """
+                prices["peak_penalty"][t] = np.abs(lp_model.model.getDualsolLinear(lp_model.model.getTransformedCons(peak_penalty_cons)))
         print("✓ Shadow prices extracted")
         
         
@@ -3419,7 +3430,8 @@ class LocalEnergyMarket:
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
                 'utility': 0.0,
-                'net_profit': 0.0
+                'net_profit': 0.0,
+                'peak_penalty_cost': 0.0
             }
             
             for t in self.time_periods:
@@ -3434,6 +3446,8 @@ class LocalEnergyMarket:
                     import_val = results['i_E_gri'][u,t]
                     if import_val > 0:
                         profit_breakdown['grid_cost'] += import_val * self.params.get(f'pi_E_gri_import_{t}', 0)
+                        if "peak_penalty" in prices:
+                            profit_breakdown["peak_penalty_cost"] += import_val * prices["peak_penalty"][t]
                 if 'nfl_d' in results and (u, 'elec', t) in results['nfl_d']:
                     demand = results['nfl_d'][u, 'elec', t]
                     if demand > 0:
@@ -3443,7 +3457,6 @@ class LocalEnergyMarket:
                     export = results['e_G_gri'][u,t]
                     if export > 0:
                         profit_breakdown['grid_revenue'] += export * self.params.get(f'pi_G_gri_export_{t}', 0)
-                
                 if 'i_G_gri' in results and (u,t) in results['i_G_gri']:
                     import_val = results['i_G_gri'][u,t]
                     if import_val > 0:
@@ -3457,7 +3470,6 @@ class LocalEnergyMarket:
                     export = results['e_H_gri'][u,t]
                     if export > 0:
                         profit_breakdown['grid_revenue'] += export * self.params.get(f'pi_H_gri_export_{t}', 0)
-                
                 if 'i_H_gri' in results and (u,t) in results['i_H_gri']:
                     import_val = results['i_H_gri'][u,t]
                     if import_val > 0:
@@ -3546,7 +3558,8 @@ class LocalEnergyMarket:
                 profit_breakdown['community_cost'] - 
                 profit_breakdown['production_cost'] - 
                 profit_breakdown['storage_cost'] - 
-                profit_breakdown['startup_cost']
+                profit_breakdown['startup_cost'] -
+                profit_breakdown['peak_penalty_cost']
             )
             
             player_profits[u] = profit_breakdown
@@ -3556,18 +3569,18 @@ class LocalEnergyMarket:
         print("PLAYER PROFITS WITH COMMUNITY PRICING")
         print("="*80)
         
-        print(f"{'Player':^8} | {'Grid Rev':^10} | {'Grid Cost':^10} | {'Utility':^10} | {'Comm Rev':^10} | {'Comm Cost':^10} | {'Prod Cost':^10} | {'Net Profit':^12}")
+        print(f"{'Player':^8} | {'Grid Rev':^10} | {'Grid Cost':^10} | {'Utility':^10} | {'Comm Rev':^10} | {'Comm Cost':^10} | {'Prod Cost':^10} |  {'Net Profit':^12}")
         print("-"*80)
         
         for u in self.players:
             p = player_profits[u]
             print(f"{u:^8} | {p['grid_revenue']:^10.2f} | {p['grid_cost']:^10.2f} | {p['utility']:^10.2f} | "
                 f"{p['community_revenue']:^10.2f} | {p['community_cost']:^10.2f} | "
-                f"{p['production_cost']:^10.2f} | {p['net_profit']:^12.2f}")
+                f"{p['production_cost']:^10.2f} |  {p['net_profit']:^12.2f}")
         
         print("-"*80)
         total_profit = sum(p['net_profit'] for p in player_profits.values())
-        print(f"{'Total':^8} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {total_profit:^12.2f}")
+        print(f"{'Total':^8} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^10} | {'':^12} | {total_profit:^12.2f}")
         # 검증: 커뮤니티 내부 거래 균형
         total_comm_revenue = sum(p['community_revenue'] for p in player_profits.values())
         total_comm_cost = sum(p['community_cost'] for p in player_profits.values())

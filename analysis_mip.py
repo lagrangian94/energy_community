@@ -139,7 +139,8 @@ if __name__ == "__main__":
                 print("CONVEX HULL PRICES (Community Balance Shadow Prices)")
                 print("="*80)
                 community_prices_chp = results_chp['convex_hull_prices']
-
+                if "capacity_prices" in results_chp:
+                    community_prices_chp = community_prices_chp | results_chp['capacity_prices']
                 # Perform synergy analysis
                 print("\n" + "="*80)
                 print("PERFORMING SYNERGY ANALYSIS")

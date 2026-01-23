@@ -51,9 +51,6 @@ class PlayerSubproblem:
                       dual_heat: Dict[int, float], 
                       dual_hydro: Dict[int, float],
                       dual_convexity: float,
-                      dual_export_elec: Dict[int, float],
-                      dual_export_heat: Dict[int, float],
-                      dual_export_hydro: Dict[int, float],
                       farkas: bool=False) -> Tuple[float, Dict]:
         """
         Solve pricing problem with modified objective based on dual prices
@@ -150,26 +147,17 @@ class PlayerSubproblem:
             if (u, t) in self.lem.e_E_com:
                 # Export to community: coefficient is -1 in balance
                 new_obj += dual_elec[t] * self.lem.e_E_com[u, t]
-            if (u, t) in self.lem.e_E_gri:
-                # Export to grid: coefficient is -1 in export capacity cons
-                new_obj -= dual_export_elec[t] * self.lem.e_E_gri[u, t]
             
             # Heat
             if (u, t) in self.lem.i_H_com:
                 new_obj -= dual_heat[t] * self.lem.i_H_com[u, t]
             if (u, t) in self.lem.e_H_com:
                 new_obj += dual_heat[t] * self.lem.e_H_com[u, t]
-            if (u, t) in self.lem.e_H_gri:
-                # Export to grid: coefficient is -1 in export capacity cons
-                new_obj -= dual_export_heat[t] * self.lem.e_H_gri[u, t]
             # Hydrogen
             if (u, t) in self.lem.i_G_com:
                 new_obj -= dual_hydro[t] * self.lem.i_G_com[u, t]
             if (u, t) in self.lem.e_G_com:
                 new_obj += dual_hydro[t] * self.lem.e_G_com[u, t]
-            if (u, t) in self.lem.e_G_gri:
-                # Export to grid: coefficient is -1 in export capacity cons
-                new_obj -= dual_export_hydro[t] * self.lem.e_G_gri[u, t]
         
         # Set modified objective
         try:
@@ -219,9 +207,6 @@ class MasterProblem:
             'community_heat_balance': {},
             'community_hydro_balance': {},
             'convexity': {},
-            'export_capacity_elec': {},
-            'export_capacity_heat': {},
-            'export_capacity_hydro': {}
         }
     
     def _create_master_constraints(self):
@@ -243,7 +228,6 @@ class MasterProblem:
         # Farkas pricing will ensure feasibility
         for t in self.time_periods:
             elec_expr, heat_expr, hydro_expr = 0, 0, 0
-            export_elec_expr, export_heat_expr, export_hydro_expr = 0, 0, 0
             for u in self.players:
                 var = self.model.data["vars"][u][0]["var"]
                 solution = self.model.data["vars"][u][0]["solution"]
@@ -259,13 +243,6 @@ class MasterProblem:
                 e_G_com_val = solution.get('e_G_com', {}).get((u, t), 0.0)
                 i_G_com_val = solution.get('i_G_com', {}).get((u, t), 0.0)
                 hydro_expr += var * (i_G_com_val - e_G_com_val)
-
-                e_E_gri_val = solution.get('e_E_gri', {}).get((u, t), 0.0)
-                e_H_gri_val = solution.get('e_H_gri', {}).get((u, t), 0.0)
-                e_G_gri_val = solution.get('e_G_gri', {}).get((u, t), 0.0)
-                export_elec_expr += var * e_E_gri_val
-                export_heat_expr += var * e_H_gri_val
-                export_hydro_expr += var * e_G_gri_val
             # # Add artificial variables (positive and negative slack with big-M penalty)
             # BIG_M = 1e6  # Large penalty cost
             # art_elec_pos = self.model.addVar(f"art_elec_pos_{t}", vtype="C", lb=0, obj=BIG_M)
@@ -302,22 +279,6 @@ class MasterProblem:
             )
             self.model.data['cons']['community_hydro_balance'][t] = cons
 
-            # Export capacity constraints
-            cons = self.model.addCons(
-                export_elec_expr <= self.params.get(f'e_E_cap', -np.inf),
-                name=f"export_capacity_elec_{t}", modifiable=True
-            )
-            self.model.data['cons']['export_capacity_elec'][t] = cons
-            cons = self.model.addCons(
-                export_heat_expr <= self.params.get(f'e_H_cap', -np.inf),
-                name=f"export_capacity_heat_{t}", modifiable=True
-            )
-            self.model.data['cons']['export_capacity_heat'][t] = cons
-            cons = self.model.addCons(
-                export_hydro_expr <= self.params.get(f'e_G_cap', -np.inf),
-                name=f"export_capacity_hydro_{t}", modifiable=True
-            )
-            self.model.data['cons']['export_capacity_hydro'][t] = cons
         print(f"  Added {len(self.time_periods)} community balance constraints (with artificial vars)")
         # print(f"  Artificial variable penalty: {BIG_M}")
         print("=== Master Constraints Created ===\n")
@@ -335,17 +296,13 @@ class MasterProblem:
         zero_duals_heat = {t: 0.0 for t in self.time_periods}
         zero_duals_hydro = {t: 0.0 for t in self.time_periods}
         zero_duals_convexity = {player: 0.0 for player in self.players}
-        zero_duals_export_elec = {t: 0.0 for t in self.time_periods}
-        zero_duals_export_heat = {t: 0.0 for t in self.time_periods}
-        zero_duals_export_hydro = {t: 0.0 for t in self.time_periods}
         for player in self.players:
             print(f"Generating initial column for player {player}...")
 
             if not init_sol:
                 # Solve subproblem with zero dual prices
                 reduced_cost, solution, obj_val = subproblems[player].solve_pricing(
-                    zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player],
-                    zero_duals_export_elec, zero_duals_export_heat, zero_duals_export_hydro
+                    zero_duals_elec, zero_duals_heat, zero_duals_hydro, zero_duals_convexity[player]
                 )
             else:
                 # Solve subproblem with initial solution

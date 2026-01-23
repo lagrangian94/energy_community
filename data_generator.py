@@ -84,9 +84,12 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         e_E_cap_ratio = 0.7
         e_H_cap_ratio = 0.7
         e_G_cap_ratio = 0.7
+        i_E_cap_ratio = 0.7
+        i_H_cap_ratio = 0.7
+        i_G_cap_ratio = 0.7
         eff_type = 1
         segments = 6
-        peak_penalty_ratio = 1.0
+        peak_penalty_ratio = 0.0
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],

@@ -120,12 +120,11 @@ class ColumnGenerationSolver:
             chp_elec = {}
             chp_heat = {}
             chp_hydro = {}
-            
+
             for t in self.time_periods:
                 elec_cons = self.master.model.data['cons']['community_elec_balance'][t]
                 heat_cons = self.master.model.data['cons']['community_heat_balance'][t]
                 hydro_cons = self.master.model.data['cons']['community_hydro_balance'][t]
-                
                 try:
                     t_elec_cons = self.master.model.getTransformedCons(elec_cons)
                     t_heat_cons = self.master.model.getTransformedCons(heat_cons)
@@ -133,6 +132,7 @@ class ColumnGenerationSolver:
                     chp_elec[t] = np.abs(self.master.model.getDualsolLinear(t_elec_cons))
                     chp_heat[t] = np.abs(self.master.model.getDualsolLinear(t_heat_cons))
                     chp_hydro[t] = np.abs(self.master.model.getDualsolLinear(t_hydro_cons))
+
                 except:
                     raise Exception("Error getting dual multipliers")
             
@@ -356,7 +356,6 @@ class ColumnGenerationSolver:
                     if export > 0:
                         grid_price = self.parameters.get(f'pi_G_gri_export_{t}', 0)
                         profit['grid_revenue'] += export * grid_price
-
                 if 'i_G_gri' in results and (u,t) in results['i_G_gri']:
                     import_val = results['i_G_gri'][u,t]
                     if import_val > 0:
@@ -369,7 +368,6 @@ class ColumnGenerationSolver:
                     if export > 0:
                         grid_price = self.parameters.get(f'pi_H_gri_export_{t}', 0)
                         profit['grid_revenue'] += export * grid_price
-
                 if 'i_H_gri' in results and (u,t) in results['i_H_gri']:
                     import_val = results['i_H_gri'][u,t]
                     if import_val > 0:
@@ -470,7 +468,7 @@ class ColumnGenerationSolver:
                 profit['startup_cost'] +
                 profit['utility']
             )
-            
+
             player_profits[u] = profit
         
         return player_profits

@@ -20,7 +20,9 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     save_path : str, optional
         Path to save figure
     """
-    
+    community_prices = {k:v for k,v in community_prices.items() if k in ['electricity', 'heat', 'hydrogen']}
+    community_prices_lp = {k:v for k,v in community_prices_lp.items() if k in ['electricity', 'heat', 'hydrogen']}
+    community_prices_chp = {k:v for k,v in community_prices_chp.items() if k in ['electricity', 'heat', 'hydrogen']}
     # Convert dictionaries to arrays
     def dict_to_array(price_dict):
         """Convert {0: val, 1: val, ...} to numpy array"""
