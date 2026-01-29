@@ -47,8 +47,21 @@ if __name__ == "__main__":
     with open(f"{base_path}/parameters.json", "w") as f:
         json.dump(parameters, f, default=lambda x: x.tolist() if hasattr(x, 'tolist') else str(x), indent=2)
 
+    """
+    참고용: 아래 hydrogen efficient, inefficient 다시 계산해볼것.
+    """
+    hydro_efficient = parameters["El"]["a"][0]*(parameters["El"]["p_val"][1])+parameters["El"]["b"][0]
+    hydro_inefficient = parameters["El"]["a"][-1]*(parameters["El"]["p_val"][-1]-parameters["El"]["p_val"][-2])/(parameters["El"]["p_val"][-1]-parameters["El"]["p_val"][-2])
+    ## 수소 1kg 위해 구매해야 하는 전기비용
+    hydro_cost_per_kg_efficient = 1/hydro_efficient*parameters["pi_E_gri"]["import"].mean()
+    hydro_cost_per_kg_inefficient = 1/hydro_inefficient*parameters["pi_E_gri"]["import"].mean()
+    print(f"수소 1kg 위해 구매해야 하는 전기비용 (efficient): {hydro_cost_per_kg_efficient} EUR")
+    print(f"수소 1kg 위해 구매해야 하는 전기비용 (inefficient): {hydro_cost_per_kg_inefficient} EUR")
+    heat_cost_per_mwh = (1/parameters["nu_cop"])*parameters["pi_E_gri"]["import"].mean()
+    print(f"heat 1MWh 생산단가: {heat_cost_per_mwh} EUR")
     # with open('working_chp_wins_all_2/parameters.json', 'r') as f:
     #     parameters = json.load(f)
+    #     print(1)
     ## ========================================
     ## Restricted Pricing
     ## ========================================

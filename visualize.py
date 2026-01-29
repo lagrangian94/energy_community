@@ -98,20 +98,21 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         hours = np.arange(T)
         
         # --- Time Series Plot ---
-        if len(ip_data) > 0:
-            ax_time.plot(hours[:len(ip_data)], ip_data, 'o-', 
-                        color=colors['IP'], linewidth=2.5, markersize=6,
-                        label='IP', alpha=0.8)
-        
-        if len(lp_data) > 0:
-            ax_time.plot(hours[:len(lp_data)], lp_data, 's-', 
-                        color=colors['LP'], linewidth=2.5, markersize=6,
-                        label='LP', alpha=0.8)
-        
         if len(chp_data) > 0:
             ax_time.plot(hours[:len(chp_data)], chp_data, '^-', 
                         color=colors['CHP'], linewidth=2.5, markersize=6,
-                        label='CHP', alpha=0.8)
+                        label='CHP', alpha=0.6, zorder=2)
+        if len(lp_data) > 0:
+            ax_time.plot(hours[:len(lp_data)], lp_data, 's-', 
+                        color=colors['LP'], linewidth=2.5, markersize=6,
+                        label='LP', alpha=0.6, zorder=1)
+        if len(ip_data) > 0:
+            ax_time.plot(hours[:len(ip_data)], ip_data, 'o-', 
+                        color=colors['IP'], linewidth=2.5, markersize=6,
+                        label='IP', alpha=0.6, zorder=1)
+        
+        
+
         # Plot market import price
         if len(market_import_data) > 0:
             if market_prices['use_tou_elec'] and energy_type == 'electricity':

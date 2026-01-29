@@ -74,18 +74,15 @@ class ElectricityPriceGenerator:
             data = self.korean_data
             data = data[data['Month'] == month].reset_index(drop=True)
             ## time_horizon이 8760이라면, 아래 isin()을 적절히 계산해야.
-            data = data[data['Day'].isin([1])].reset_index(drop=True)
-            price_col = [f"{i:02d}시" for i in range(1,25)]
-            arr = data[price_col].values.flatten()
-            arr = np.array(arr).astype('float64')
-            arr = arr/1.4 ## exchange rate: kor to eur
-
+            plot_price_profile(data)
+            medoid_profiles, medoid_days, labels, cluster_sizes = find_k_medoids_price(data, k=2)
+            arr = medoid_profiles/1500*1000 ## exchange rate: kor to eur, 한국데이터는 kWh 단위이므로 MWh로 변환하려고 1000 곱해줌.
+            arr = arr[0]
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
                 import_prices = arr*import_factor
             return {"import": import_prices, "export": arr}
-            return arr
     def load_and_process_korean_data(self):
         """한국 전력가격 데이터 로드 및 처리"""
         
@@ -194,7 +191,7 @@ class ElectricityPriceGenerator:
                     tou_multiplier = multipliers['off_peak']
                     tou_import_prices.append(tou_base[t]*tou_multiplier)
                     period_name = "경부하"
-        return tou_import_prices
+        return np.array(tou_import_prices)
 
 class ElectricityProdGenerator:
     """
@@ -235,7 +232,7 @@ class ElectricityProdGenerator:
         # Set datetime column as index
         data.set_index('Date', inplace = True)
         return data
-    def generate_wind_production(self, month: int = 12, time_horizon: int = 24):
+    def generate_wind_production(self, month: int = 12, time_horizon: int = 24, day: int = 1):
         if month:
             data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
         else:
@@ -246,9 +243,7 @@ class ElectricityProdGenerator:
         wind profile 시각화하고싶으면 아래 주석 제거
         """
         # plot_wind_profile(data)
-
-        # data = data[data['Day'] == 1].reset_index(drop=True)
-        medoid_profiles, medoid_days, labels, cluster_sizes = find_k_medoids(data, k=2)
+        medoid_profiles, medoid_days, labels, cluster_sizes = find_k_medoids_wind(data, k=2)
         
 
         # Show which actual days belong to which cluster
@@ -263,6 +258,20 @@ class ElectricityProdGenerator:
             arr = profile*1/profile.max()*self.wind_cap_mw
             arrs.append(arr)
         arrs = np.array(arrs)
+
+        data = data[data['Day'] == day].reset_index(drop=True)
+        arrs = [data["CP"].values/data["CP"].max() * 1 for _ in range(2)]
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(10, 4))
+        plt.plot(data["CP"].values/data["CP"], marker='o', linestyle='-', color='b')
+        plt.xlabel("Index")
+        plt.ylabel("CP")
+        plt.title("Wind CP Profile")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("wind_cp_profile.png", dpi=300)
+        plt.close()
         return arrs
     def generate_solar_production(self, month: int=1, time_horizon: int = 24):
         """
@@ -656,7 +665,46 @@ def plot_wind_profile(data):
     plt.savefig('wind.png', dpi=300, bbox_inches='tight')
     plt.close()
     return
-def find_k_medoids(data, k=2, max_iter=100):
+
+def plot_price_profile(data):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    # Extract 24-hour price columns
+    price_col = [f"{i:02d}시" for i in range(1,25)]
+    
+    # Get unique days
+    unique_days = sorted(data['Day'].unique())
+    n_days = len(unique_days)
+    
+    plt.figure(figsize=(12, 6))
+    
+    # Use colormap to differentiate days
+    colors = plt.cm.viridis(np.linspace(0, 1, n_days))
+    
+    hours = range(1, 25)  # 1시 to 24시
+    
+    for idx, day in enumerate(unique_days):
+        day_data = data[data['Day'] == day]
+        if len(day_data) > 0:
+            prices = day_data[price_col].values[0]
+            plt.plot(hours, prices, marker='o', markersize=3, 
+                    linewidth=1.5, alpha=0.6, c=colors[idx], label=f'Day {day}')
+    
+    plt.xlabel('Hour', fontsize=12)
+    plt.ylabel('Price', fontsize=12)
+    month = data['Month'].iloc[0] if 'Month' in data.columns else ''
+    plt.title(f'Price by Hour - All Days Overlaid (Month {month})', fontsize=14)
+    plt.xlim(0.5, 24.5)
+    plt.xticks(range(1, 25, 2))
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, ncol=2)
+    plt.tight_layout()
+    plt.savefig('price.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    return
+
+def find_k_medoids_wind(data, k=2, max_iter=100):
     """
     Find k representative days using k-medoids clustering
     
@@ -724,24 +772,124 @@ def find_k_medoids(data, k=2, max_iter=100):
     representative profiles 시각화 하고 싶으면 아래 주석 제거
     """
 
-    # # Visualize the two representative days
-    # fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    # Visualize the two representative days
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
+    for i, (profile, day_num, cluster_size) in enumerate(zip(medoid_profiles, medoid_days, cluster_sizes)):
+        axes[i].plot(range(24), profile, 'o-', linewidth=2, markersize=6)
+        axes[i].set_xlabel('Hour')
+        axes[i].set_ylabel('Capacity Factor')
+        axes[i].set_title(f'Representative Day {day_num}\n({cluster_size} similar days)')
+        axes[i].grid(True, alpha=0.3)
+        axes[i].set_ylim([0, 1])
+        
+        # Add statistics
+        axes[i].text(0.02, 0.98, f'Mean: {profile.mean():.3f}\nStd: {profile.std():.3f}\nMax: {profile.max():.3f}',
+                    transform=axes[i].transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+    plt.tight_layout()
+    plt.savefig(f'representative_days_k_{k}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    return medoid_profiles, medoid_days, labels, cluster_sizes
+
+def find_k_medoids_price(data, k=2, max_iter=100):
+    """
+    Find k representative days using k-medoids clustering for price data
+    
+    Parameters:
+    - data: DataFrame with columns "01시" to "24시" and "Day" column
+    - k: number of representative days to select
+    - max_iter: maximum iterations for clustering
+    
+    Returns:
+    - medoid_profiles: array of shape (k, 24) with k representative price profiles
+    - medoid_days: list of day numbers
+    - labels: cluster assignment for each day
+    - cluster_sizes: list of cluster sizes
+    """
+    # Extract 24-hour price columns
+    price_col = [f"{i:02d}시" for i in range(1,25)]
+    
+    # Get 24-hour profiles for each day (each row is a day)
+    days_matrix = data[price_col].values
+    # Filter out rows that don't have exactly 24 valid values
+    valid_rows = []
+    valid_day_indices = []
+    for idx, row in enumerate(days_matrix):
+        if len(row) == 24 and not np.isnan(row).any():
+            valid_rows.append(row)
+            valid_day_indices.append(idx)
+    days_matrix = np.array(valid_rows)
+    n_days = len(days_matrix)
+    
+    # Calculate pairwise distances once
+    distances = np.zeros((n_days, n_days))
+    for i in range(n_days):
+        for j in range(i+1, n_days):
+            dist = np.sqrt(np.sum((days_matrix[i] - days_matrix[j])**2))
+            distances[i, j] = dist
+            distances[j, i] = dist
+    
+    # Initialize medoids randomly
+    np.random.seed(42)  # for reproducibility
+    medoid_indices = np.random.choice(n_days, k, replace=False)
+    
+    # K-medoids algorithm (PAM - Partitioning Around Medoids)
+    for iteration in range(max_iter):
+        # Assign each day to nearest medoid
+        labels = np.argmin(distances[:, medoid_indices], axis=1)
+        
+        # Update medoids
+        new_medoid_indices = []
+        for cluster_id in range(k):
+            cluster_members = np.where(labels == cluster_id)[0]
+            if len(cluster_members) == 0:
+                # Keep old medoid if cluster is empty
+                new_medoid_indices.append(medoid_indices[cluster_id])
+                continue
+            
+            # Find point in cluster with minimum sum of distances to other points in cluster
+            cluster_distances = distances[np.ix_(cluster_members, cluster_members)]
+            within_cluster_costs = cluster_distances.sum(axis=1)
+            best_idx = cluster_members[np.argmin(within_cluster_costs)]
+            new_medoid_indices.append(best_idx)
+        
+        new_medoid_indices = np.array(new_medoid_indices)
+        
+        # Check convergence
+        if np.array_equal(medoid_indices, new_medoid_indices):
+            break
+            
+        medoid_indices = new_medoid_indices
+    
+    medoid_profiles = days_matrix[medoid_indices]
+    # Get actual day numbers from the data using valid_day_indices
+    medoid_days = [data.iloc[valid_day_indices[idx]]['Day'] for idx in medoid_indices]
+    
+    # Calculate cluster statistics
+    cluster_sizes = [np.sum(labels == i) for i in range(k)]
+    
+    # visualize k representative days
+    # fig, axes = plt.subplots(1, k, figsize=(7*k, 5))
+    # if k == 1:
+    #     axes = [axes]
+    
     # for i, (profile, day_num, cluster_size) in enumerate(zip(medoid_profiles, medoid_days, cluster_sizes)):
     #     axes[i].plot(range(24), profile, 'o-', linewidth=2, markersize=6)
     #     axes[i].set_xlabel('Hour')
-    #     axes[i].set_ylabel('Capacity Factor')
+    #     axes[i].set_ylabel('Price')
     #     axes[i].set_title(f'Representative Day {day_num}\n({cluster_size} similar days)')
     #     axes[i].grid(True, alpha=0.3)
-    #     axes[i].set_ylim([0, 1])
         
     #     # Add statistics
     #     axes[i].text(0.02, 0.98, f'Mean: {profile.mean():.3f}\nStd: {profile.std():.3f}\nMax: {profile.max():.3f}',
     #                 transform=axes[i].transAxes, verticalalignment='top',
     #                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-
+    
     # plt.tight_layout()
-    # plt.savefig(f'representative_days_k_{k}.png', dpi=300, bbox_inches='tight')
+    # plt.savefig(f'representative_days_price_k_{k}.png', dpi=300, bbox_inches='tight')
     # plt.close()
+    
     return medoid_profiles, medoid_days, labels, cluster_sizes
 

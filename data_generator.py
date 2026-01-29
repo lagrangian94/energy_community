@@ -23,7 +23,15 @@ def epsilon_log(n_consumers, scale=0.1):
 
 
 def update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices):
-    
+    parameters['pi_E_gri'] = {}
+    parameters['pi_G_gri'] = {}
+    parameters['pi_H_gri'] = {}
+    parameters['pi_E_gri']['import'] = elec_prices["import"]
+    parameters['pi_E_gri']['export'] = elec_prices["export"]
+    parameters['pi_G_gri']['export'] = h2_prices["export"]
+    parameters['pi_G_gri']['import'] = h2_prices["import"]
+    parameters['pi_H_gri']['import'] = heat_prices["import"]
+    parameters['pi_H_gri']['export'] = heat_prices["export"]
     for t in time_periods:
         parameters[f'pi_E_gri_import_{t}'] = elec_prices["import"][t]
         parameters[f'pi_E_gri_export_{t}'] = elec_prices["export"][t]    
@@ -50,46 +58,57 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     if sensitivity_analysis:
         use_korean_price = sensitivity_analysis['use_korean_price']
         use_tou_elec = sensitivity_analysis['use_tou_elec']
+        import_factor = sensitivity_analysis['import_factor'] # market import price가 export 대비 몇배 더 큰지
         month = sensitivity_analysis['month']
-        storage_capacity_E = sensitivity_analysis['storage_capacity_E']
-        storage_capacity_G = sensitivity_analysis['storage_capacity_G']
-        storage_capacity_heat = sensitivity_analysis['storage_capacity_heat']
         hp_cap = sensitivity_analysis['hp_cap']
         els_cap = sensitivity_analysis['els_cap']
-        res_cap = sensitivity_analysis['res_cap']
         num_households = sensitivity_analysis['num_households']
         nu_cop = sensitivity_analysis['nu_cop']
         c_su_G = sensitivity_analysis['c_su_G']
         c_su_H = sensitivity_analysis['c_su_H']
         base_h2_price_eur = sensitivity_analysis['base_h2_price_eur']
-        e_E_cap = res_cap * sensitivity_analysis['e_E_cap']
-        e_H_cap = hp_cap * sensitivity_analysis['e_H_cap']
+        e_E_cap_ratio = sensitivity_analysis['e_E_cap_ratio']
+        e_H_cap_ratio = sensitivity_analysis['e_H_cap_ratio']
+        e_G_cap_ratio = sensitivity_analysis['e_G_cap_ratio']
         eff_type = sensitivity_analysis['eff_type']
+        segments = sensitivity_analysis['segments']
+        peak_penalty_ratio = sensitivity_analysis['peak_penalty_ratio']
+        wind_el_ratio = sensitivity_analysis['wind_el_ratio']
+        solar_el_ratio = sensitivity_analysis['solar_el_ratio']
+        storage_capacity_E = sensitivity_analysis['storage_capacity_E']
+        storage_capacity_G = sensitivity_analysis['storage_capacity_G']
+        storage_capacity_H = sensitivity_analysis['storage_capacity_H']
+        day = sensitivity_analysis['day']
     else:
         use_korean_price = True
-        use_tou_elec = True
-        import_factor = 1.2 # market import price가 export 대비 몇배 더 큰지
+        use_tou_elec = False
+        import_factor = 1.5 # market import price가 export 대비 몇배 더 큰지
         month = 1
-        storage_capacity_E = 2.0 # 2.0 # [0.0, 2.0]
-        storage_capacity_G = 150.0 # [0.0, 150.0]
-        storage_capacity_H = 4.5 # [0.0, 0.40]
         hp_cap = 0.8 #MW [0.6, 0.8, 1.0]
         els_cap = 1 #MW
-        res_cap = 2 #MW
         num_households = 700
         nu_cop = 3.28
         c_su_G = 50
         c_su_H = 10 
         base_h2_price_eur = 5000/1500 #2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
-        e_E_cap_ratio = 0.7
-        e_H_cap_ratio = 0.7
-        e_G_cap_ratio = 0.7
-        i_E_cap_ratio = 0.7
-        i_H_cap_ratio = 0.7
-        i_G_cap_ratio = 0.7
+        e_E_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
+        e_H_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
+        e_G_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
         eff_type = 1
         segments = 6
         peak_penalty_ratio = 0.0
+        wind_el_ratio = 1.0# [1.0, 2.0]
+        solar_el_ratio = 1.0
+        storage_power_ratio_E = 0.25
+        storage_power_ratio_G = 0.25
+        storage_power_ratio_H = 0.25
+        storage_capacity_ratio_E = 3.0 #3.0 -> storage_power의 3배가 총 storage 용량
+        storage_capacity_ratio_G = 0.0 
+        storage_capacity_ratio_H = 0.0 
+        initial_soc_ratio_E = 0.2
+        initial_soc_ratio_G = 0.2
+        initial_soc_ratio_H = 0.2
+        day = 2
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -109,15 +128,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         
         # Storage parameters
          #capacity_E=2이고, power_E_가0.25일땐 u2가 이득, 근데 power_E_가 0.5일땐 손해. 왜 그럴까??
-        'storage_capacity_E': storage_capacity_E,
-        'storage_capacity_G': storage_capacity_G, #kg
-        'storage_capacity_H': storage_capacity_H,
-        'storage_power_E': 0.5,
-        'storage_power_G': 0.5,
-        'storage_power_H': 0.5,
-        'initial_soc_E': storage_capacity_E*0.2,
-        'initial_soc_G': storage_capacity_G*0.2,
-        'initial_soc_H': storage_capacity_H*0.2,
+        'storage_power_ratio_E': storage_power_ratio_E,
+        'storage_power_ratio_G': storage_power_ratio_G,
+        'storage_power_ratio_H': storage_power_ratio_H,
+        'storage_capacity_ratio_E': storage_capacity_ratio_E, 
+        'storage_capacity_ratio_G': storage_capacity_ratio_G, 
+        'storage_capacity_ratio_H': storage_capacity_ratio_H, 
+        'initial_soc_ratio_E': initial_soc_ratio_E,
+        'initial_soc_ratio_G': initial_soc_ratio_G,
+        'initial_soc_ratio_H': initial_soc_ratio_H,
         'nu_ch_E': 0.95,
         'nu_dis_E': 0.95,        
         'nu_ch_G': 0.95,
@@ -136,9 +155,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'c_els': 0.05,
         'nu_cop': nu_cop,
         # Cost parameters
-        'c_sto_E': 0.01,
-        'c_sto_G': 0.01,
-        'c_sto_H': 0.01,
+        'c_sto_E': 0.0,
+        'c_sto_G': 0.0,
+        'c_sto_H': 0.0,
 
         # Unit commitment parameters
         'min_down_time_G': 2,
@@ -161,8 +180,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     ))
     
 
-    electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=2.0, solar_el_ratio=1.0, el_cap_mw=parameters["els_cap"])
-    wind_production = electricity_prod_generator.generate_wind_production()
+    electricity_prod_generator = ElectricityProdGenerator(num_units=1, wind_el_ratio=wind_el_ratio, solar_el_ratio=solar_el_ratio, el_cap_mw=parameters["els_cap"])
+    wind_production = electricity_prod_generator.generate_wind_production(day=day)
     if len(wind_production)>1:
         wind_production = wind_production[0]
     pv_production = electricity_prod_generator.generate_solar_production()
@@ -234,15 +253,21 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["i_H_cap"] = np.max(heat_demand_mwh)
     parameters["i_G_cap"] = np.max(hydro_demand_kg)
 
-    total_elec_cap = np.max(pv_production)*len(parameters['players_with_solar']) + np.max(wind_production)*len(parameters['players_with_wind'])
-    total_els_cap = El['p_els_cap'] * len(parameters['players_with_electrolyzers'])
-    total_heat_cap = parameters['hp_cap'] * len(parameters['players_with_heatpumps'])
+    total_elec_cap = np.max(wind_production)#*len(parameters['players_with_solar']) + np.max(wind_production)*len(parameters['players_with_wind'])
+    total_els_cap = El['p_els_cap']# * len(parameters['players_with_electrolyzers'])
+    total_heat_cap = parameters['hp_cap']# * len(parameters['players_with_heatpumps'])
     parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * total_elec_cap
     parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * total_heat_cap
     parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * total_els_cap
-    # parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * parameters["i_E_cap"]
-    # parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * parameters["i_H_cap"]
-    # parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * parameters["i_G_cap"]
+    parameters["storage_power_E"] = parameters["storage_power_ratio_E"] * total_elec_cap
+    parameters["storage_power_G"] = parameters["storage_power_ratio_G"] * total_els_cap
+    parameters["storage_power_H"] = parameters["storage_power_ratio_H"] * total_heat_cap
+    parameters["storage_capacity_E"] = parameters["storage_capacity_ratio_E"] * parameters["storage_power_E"]
+    parameters["storage_capacity_G"] = parameters["storage_capacity_ratio_G"] * parameters["storage_power_G"]
+    parameters["storage_capacity_H"] = parameters["storage_capacity_ratio_H"] * parameters["storage_power_H"]
+    parameters["initial_soc_E"] = parameters["initial_soc_ratio_E"] * parameters["storage_capacity_E"]
+    parameters["initial_soc_G"] = parameters["initial_soc_ratio_G"] * parameters["storage_capacity_G"]
+    parameters["initial_soc_H"] = parameters["initial_soc_ratio_H"] * parameters["storage_capacity_H"]
     # Pure Consumer Utility Function
     N_E = len(parameters['players_with_nfl_elec_demand'])
     factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)

@@ -72,92 +72,78 @@ class PlayerSubproblem:
         u = self.player
 
         # Original grid costs
-        for t in self.time_periods:
-            if not farkas:
-                # Electricity grid costs
-                if (u, t) in self.lem.i_E_gri:
-                    pi_import = self.parameters.get(f'pi_E_gri_import_{t}', np.inf)
-                    new_obj += pi_import * self.lem.i_E_gri[u, t]
-                if (u, t) in self.lem.e_E_gri:
-                    pi_export = self.parameters.get(f'pi_E_gri_export_{t}', np.inf)
-                    new_obj -= pi_export * self.lem.e_E_gri[u, t]
-                if (u, 'elec', t) in self.lem.nfl_d:
-                    u_E = self.parameters.get(f'u_E_{u}_{t}', 0.0)
-                    new_obj -= u_E * self.lem.nfl_d[u, 'elec', t]
-                # Heat grid costs
-                if (u, t) in self.lem.i_H_gri:
-                    pi_import = self.parameters.get(f'pi_H_gri_import_{t}', np.inf)
-                    new_obj += pi_import * self.lem.i_H_gri[u, t]
-                if (u, t) in self.lem.e_H_gri:
-                    pi_export = self.parameters.get(f'pi_H_gri_export_{t}', np.inf)
-                    new_obj -= pi_export * self.lem.e_H_gri[u, t]
-                if (u, 'heat', t) in self.lem.nfl_d:
-                    u_H = self.parameters.get(f'u_H_{u}_{t}', 0.0)
-                    new_obj -= u_H * self.lem.nfl_d[u, 'heat', t]
-                # Hydrogen grid costs
-                if (u, t) in self.lem.i_G_gri:
-                    pi_import = self.parameters.get(f'pi_G_gri_import_{t}', np.inf)
-                    new_obj += pi_import * self.lem.i_G_gri[u, t]
-                if (u, t) in self.lem.e_G_gri:
-                    pi_export = self.parameters.get(f'pi_G_gri_export_{t}', np.inf)
-                    new_obj -= pi_export * self.lem.e_G_gri[u, t]
-                if (u, 'hydro', t) in self.lem.nfl_d:
-                    u_G = self.parameters.get(f'u_G_{u}_{t}', 0.0)
-                    new_obj -= u_G * self.lem.nfl_d[u, 'hydro', t]
-                # Production costs
-                if (u, 'res', t) in self.lem.p:
-                    c_res = self.parameters.get(f'c_res_{u}', np.inf)
-                    new_obj += c_res * self.lem.p[u, 'res', t]
-                if (u, 'hp', t) in self.lem.p:
-                    c_hp = self.parameters.get(f'c_hp_{u}', np.inf)
-                    new_obj += c_hp * self.lem.p[u, 'hp', t]
-                if (u, 'els', t) in self.lem.p:
-                    c_els = self.parameters.get(f'c_els_{u}', np.inf)
-                    new_obj += c_els * self.lem.p[u, 'els', t]
-                
-                # Startup costs
-                if (u, t) in self.lem.z_su_G:
-                    c_su = self.parameters.get(f'c_su_G_{u}', np.inf)
-                    new_obj += c_su * self.lem.z_su_G[u, t]
-                if (u, t) in self.lem.z_su_H:
-                    c_su = self.parameters.get(f'c_su_H_{u}', np.inf)
-                    new_obj += c_su * self.lem.z_su_H[u, t]
-                # Storage costs
-                if u in self.lem.params["players_with_elec_storage"]:
-                    c_E_sto = self.parameters.get(f'c_sto_E_{u}', np.inf)
-                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_E', np.inf), self.parameters.get(f'nu_dis_E', np.inf)
-                    new_obj += c_E_sto * self.lem.b_ch_E[u, t] * nu_ch
-                    new_obj += c_E_sto * self.lem.b_dis_E[u, t] * (1/nu_dis)
-                if u in self.lem.params["players_with_hydro_storage"]:
-                    c_G_sto = self.parameters.get(f'c_sto_G_{u}', np.inf)
-                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_G', np.inf), self.parameters.get(f'nu_dis_G', np.inf)
-                    new_obj += c_G_sto * self.lem.b_ch_G[u, t] * nu_ch
-                    new_obj += c_G_sto * self.lem.b_dis_G[u, t] * (1/nu_dis)
-                if u in self.lem.params["players_with_heat_storage"]:
-                    c_H_sto = self.parameters.get(f'c_sto_H_{u}', np.inf)
-                    nu_ch, nu_dis = self.parameters.get(f'nu_ch_H', np.inf), self.parameters.get(f'nu_dis_H', np.inf)
-                    new_obj += c_H_sto * self.lem.b_ch_H[u, t] * nu_ch
-                    new_obj += c_H_sto * self.lem.b_dis_H[u, t] * (1/nu_dis)
-            # Community trading with dual prices
-            # For reduced cost: original_cost - dual_price * coefficient
-            # Electricity
-            if (u, t) in self.lem.i_E_com:
-                # Import from community: coefficient is +1 in balance
-                new_obj -= dual_elec[t] * self.lem.i_E_com[u, t]
-            if (u, t) in self.lem.e_E_com:
-                # Export to community: coefficient is -1 in balance
-                new_obj += dual_elec[t] * self.lem.e_E_com[u, t]
+        if not farkas:
+            # Electricity grid costs
+            if (u, 0) in self.lem.i_E_gri:
+                new_obj += quicksum(self.parameters.get(f'pi_E_gri_import_{t}', np.inf) * self.lem.i_E_gri[u, t] for t in self.time_periods)
+            if (u, 0) in self.lem.e_E_gri:
+                new_obj -= quicksum(self.parameters.get(f'pi_E_gri_export_{t}', np.inf) * self.lem.e_E_gri[u, t] for t in self.time_periods)
+            if (u, 'elec', 0) in self.lem.nfl_d:
+                # u_E = self.parameters.get(f'u_E_{u}_{t}', 0.0)
+                new_obj -= quicksum(self.parameters.get(f'u_E_{u}_{t}', 0.0) * self.lem.nfl_d[u, 'elec', t] for t in self.time_periods)
+            # Heat grid costs
+            if (u, 0) in self.lem.i_H_gri:
+                new_obj += quicksum(self.parameters.get(f'pi_H_gri_import_{t}', np.inf) * self.lem.i_H_gri[u, t] for t in self.time_periods)
+            if (u, 0) in self.lem.e_H_gri:
+                new_obj -= quicksum(self.parameters.get(f'pi_H_gri_export_{t}', np.inf) * self.lem.e_H_gri[u, t] for t in self.time_periods)
+            if (u, 'heat', 0) in self.lem.nfl_d:
+                new_obj -= quicksum(self.parameters.get(f'u_H_{u}_{t}', 0.0) * self.lem.nfl_d[u, 'heat', t] for t in self.time_periods)
+            # Hydrogen grid costs
+            if (u, 0) in self.lem.i_G_gri:
+                new_obj += quicksum(self.parameters.get(f'pi_G_gri_import_{t}', np.inf) * self.lem.i_G_gri[u, t] for t in self.time_periods)
+            if (u, 0) in self.lem.e_G_gri:
+                new_obj -= quicksum(self.parameters.get(f'pi_G_gri_export_{t}', np.inf) * self.lem.e_G_gri[u, t] for t in self.time_periods)
+            if (u, 'hydro', 0) in self.lem.nfl_d:
+                new_obj -= quicksum(self.parameters.get(f'u_G_{u}_{t}', 0.0) * self.lem.nfl_d[u, 'hydro', t] for t in self.time_periods)
+            # Production costs
+            if (u, 'res', 0) in self.lem.p:
+                new_obj += quicksum(self.parameters.get(f'c_res_{u}', np.inf) * self.lem.p[u, 'res', t] for t in self.time_periods)
+            if (u, 'hp', 0) in self.lem.p:
+                new_obj += quicksum(self.parameters.get(f'c_hp_{u}', np.inf) * self.lem.p[u, 'hp', t] for t in self.time_periods)
+            if (u, 'els', 0) in self.lem.p:
+                new_obj += quicksum(self.parameters.get(f'c_els_{u}', np.inf) * self.lem.p[u, 'els', t] for t in self.time_periods)
             
-            # Heat
-            if (u, t) in self.lem.i_H_com:
-                new_obj -= dual_heat[t] * self.lem.i_H_com[u, t]
-            if (u, t) in self.lem.e_H_com:
-                new_obj += dual_heat[t] * self.lem.e_H_com[u, t]
-            # Hydrogen
-            if (u, t) in self.lem.i_G_com:
-                new_obj -= dual_hydro[t] * self.lem.i_G_com[u, t]
-            if (u, t) in self.lem.e_G_com:
-                new_obj += dual_hydro[t] * self.lem.e_G_com[u, t]
+            # Startup costs
+            if (u, 0) in self.lem.z_su_G:
+                new_obj += quicksum(self.parameters.get(f'c_su_G_{u}', np.inf) * self.lem.z_su_G[u, t] for t in self.time_periods)
+            if (u, 0) in self.lem.z_su_H:
+                new_obj += quicksum(self.parameters.get(f'c_su_H_{u}', np.inf) * self.lem.z_su_H[u, t] for t in self.time_periods)
+            # Storage costs
+            if u in self.lem.params["players_with_elec_storage"]:
+                c_sto_E = self.parameters.get(f'c_sto_E_{u}', np.inf)
+                nu_ch, nu_dis = self.parameters.get(f'nu_ch_E', np.inf), self.parameters.get(f'nu_dis_E', np.inf)
+                new_obj += quicksum(c_sto_E * self.lem.b_ch_E[u, t] * nu_ch for t in self.time_periods)
+                new_obj += quicksum(c_sto_E * self.lem.b_dis_E[u, t] * (1/nu_dis) for t in self.time_periods)
+            if u in self.lem.params["players_with_hydro_storage"]:
+                c_sto_G = self.parameters.get(f'c_sto_G_{u}', np.inf)
+                nu_ch, nu_dis = self.parameters.get(f'nu_ch_G', np.inf), self.parameters.get(f'nu_dis_G', np.inf)
+                new_obj += quicksum(c_sto_G * self.lem.b_ch_G[u, t] * nu_ch for t in self.time_periods)
+                new_obj += quicksum(c_sto_G * self.lem.b_dis_G[u, t] * (1/nu_dis) for t in self.time_periods)
+            if u in self.lem.params["players_with_heat_storage"]:
+                c_sto_H = self.parameters.get(f'c_sto_H_{u}', np.inf)
+                nu_ch, nu_dis = self.parameters.get(f'nu_ch_H', np.inf), self.parameters.get(f'nu_dis_H', np.inf)
+                new_obj += quicksum(c_sto_H * self.lem.b_ch_H[u, t] * nu_ch for t in self.time_periods)
+                new_obj += quicksum(c_sto_H * self.lem.b_dis_H[u, t] * (1/nu_dis) for t in self.time_periods)
+        # Community trading with dual prices
+        # For reduced cost: original_cost - dual_price * coefficient
+        # Electricity
+        if (u, 0) in self.lem.i_E_com:
+            # Import from community: coefficient is +1 in balance
+            new_obj -= quicksum(dual_elec[t] * self.lem.i_E_com[u, t] for t in self.time_periods)
+        if (u, 0) in self.lem.e_E_com:
+            # Export to community: coefficient is -1 in balance
+            new_obj += quicksum(dual_elec[t] * self.lem.e_E_com[u, t] for t in self.time_periods)
+        
+        # Heat
+        if (u, 0) in self.lem.i_H_com:
+            new_obj -= quicksum(dual_heat[t] * self.lem.i_H_com[u, t] for t in self.time_periods)
+        if (u, 0) in self.lem.e_H_com:
+            new_obj += quicksum(dual_heat[t] * self.lem.e_H_com[u, t] for t in self.time_periods)
+        # Hydrogen
+        if (u, 0) in self.lem.i_G_com:
+            new_obj -= quicksum(dual_hydro[t] * self.lem.i_G_com[u, t] for t in self.time_periods)
+        if (u, 0) in self.lem.e_G_com:
+            new_obj += quicksum(dual_hydro[t] * self.lem.e_G_com[u, t] for t in self.time_periods)
         
         # Set modified objective
         try:

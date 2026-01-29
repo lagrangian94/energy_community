@@ -601,7 +601,7 @@ class LocalEnergyMarket:
                 # Electricity storage
                 if u in self.players_with_elec_storage:
                     storage_capacity = self.params.get(f'storage_capacity_E', -np.inf)  # kWh capacity
-                    storage_power = storage_capacity * self.params.get(f'storage_power_E', -np.inf)
+                    storage_power = self.params.get(f'storage_power_E', -np.inf)
                     nu_ch = self.params.get('nu_ch_E', np.inf)
                     nu_dis = self.params.get('nu_dis_E', np.inf)
                     c_sto_E = self.params.get("c_sto_E", 0.0)
@@ -616,7 +616,7 @@ class LocalEnergyMarket:
                 if u in self.players_with_hydro_storage:
                     # 수소는 kg 단위
                     storage_capacity_G = self.params.get(f'storage_capacity_G', -np.inf)
-                    storage_power_G = storage_capacity_G * self.params.get(f'storage_power_G', -np.inf)
+                    storage_power_G = self.params.get(f'storage_power_G', -np.inf)
                     nu_ch_G = self.params.get('nu_ch_G', np.inf)
                     nu_dis_G = self.params.get('nu_dis_G', np.inf)
                     c_sto_G = self.params.get("c_sto_G", np.inf)
@@ -634,7 +634,7 @@ class LocalEnergyMarket:
                     nu_ch_H = self.params.get('nu_ch_H', np.inf)
                     nu_dis_H = self.params.get('nu_dis_H', np.inf)
                     storage_capacity_H = self.params.get('storage_capacity_H', -np.inf)
-                    storage_power_H = storage_capacity_H * self.params.get("storage_power_H", -np.inf)
+                    storage_power_H = self.params.get("storage_power_H", -np.inf)
                     self.b_dis_H[u,t] = self.model.addVar(vtype="C", name=f"b_dis_H_{u}_{t}", 
                                                         lb=0, ub=storage_power_H, obj=c_sto_H*(1/nu_dis_H))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
@@ -3522,27 +3522,27 @@ class LocalEnergyMarket:
                         profit_breakdown['production_cost'] += results['p'][u,'hp',t] * self.params.get(f'c_hp_{u}', 0)
                 
                 # 4. 저장 비용
-                c_E_sto = self.params.get('c_E_sto', 0.01)
-                c_G_sto = self.params.get('c_G_sto', 0.01)
-                c_H_sto = self.params.get('c_H_sto', 0.01)
+                c_sto_E = self.params.get('c_sto_E', np.inf)
+                c_sto_G = self.params.get('c_sto_G', np.inf)
+                c_sto_H = self.params.get('c_sto_G', np.inf)
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)
                 
                 if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
-                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_E_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_sto_E * nu_ch
                 if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
-                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_E_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_sto_E * (1/nu_dis)
                 # 수소 저장 비용 추가
                 if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
-                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_G_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_sto_G * nu_ch
                 if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
-                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_G_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_sto_G * (1/nu_dis)
                 
                 # 열 저장 비용 추가
                 if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
-                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_H_sto * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_sto_H * nu_ch
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
-                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_sto_H * (1/nu_dis)
                 # 5. 시작 비용
                 if 'z_su_G' in results and (u,t) in results['z_su_G']:
                     profit_breakdown['startup_cost'] += results['z_su_G'][u,t] * self.params.get(f'c_su_G_{u}', 50)

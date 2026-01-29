@@ -418,26 +418,26 @@ class ColumnGenerationSolver:
                         profit['production_cost'] += results['p'][u,'hp',t] * self.parameters.get(f'c_hp_{u}', 0)
                 
                 # 4. Storage costs
-                c_E_sto = self.parameters.get('c_E_sto', 0.01)
-                c_G_sto = self.parameters.get('c_G_sto', 0.01)
-                c_H_sto = self.parameters.get('c_H_sto', 0.01)
+                c_sto_E = self.parameters.get('c_sto_E', np.inf)
+                c_sto_G = self.parameters.get('c_sto_G', np.inf)
+                c_sto_H = self.parameters.get('c_sto_H', np.inf)
                 nu_ch = self.parameters.get('nu_ch', 0.9)
                 nu_dis = self.parameters.get('nu_dis', 0.9)
                 
                 if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
-                    profit['storage_cost'] += results['b_ch_E'][u,t] * c_E_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_E'][u,t] * c_sto_E * nu_ch
                 if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
-                    profit['storage_cost'] += results['b_dis_E'][u,t] * c_E_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_E'][u,t] * c_sto_E * (1/nu_dis)
                 
                 if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
-                    profit['storage_cost'] += results['b_ch_G'][u,t] * c_G_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_G'][u,t] * c_sto_G * nu_ch
                 if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
-                    profit['storage_cost'] += results['b_dis_G'][u,t] * c_G_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_G'][u,t] * c_sto_G * (1/nu_dis)
                 
                 if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
-                    profit['storage_cost'] += results['b_ch_H'][u,t] * c_H_sto * nu_ch
+                    profit['storage_cost'] += results['b_ch_H'][u,t] * c_sto_H * nu_ch
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
-                    profit['storage_cost'] += results['b_dis_H'][u,t] * c_H_sto * (1/nu_dis)
+                    profit['storage_cost'] += results['b_dis_H'][u,t] * c_sto_H * (1/nu_dis)
                 
                 # 5. Startup costs
                 if 'z_su_G' in results and (u,t) in results['z_su_G']:

@@ -28,8 +28,8 @@ def generate_hydrogen_price(base_price_eur: float = 2.1, import_factor: float = 
     time_periods = list(range(time_horizon))
     if tou:
         raise Exception("TOU is not supported yet")
-    h2_prices_export = [base_price_eur for _ in time_periods]
-    h2_prices_import = [price*import_factor for price in h2_prices_export]
+    h2_prices_export = np.array([base_price_eur for _ in time_periods])
+    h2_prices_import = np.array([price*import_factor for price in h2_prices_export])
     h2_prices = {"import": h2_prices_import, "export": h2_prices_export}
     return h2_prices
 
