@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     sensitivity_analysis_candidates = {
         'use_korean_price': [True],#,False],
-        'use_tou_elec': [True],#,, False],
+        'use_tou_elec': [False],#,, False],
         'import_factor': [1.5],
         'month': [1],
         'hp_cap': [0.8],
@@ -56,12 +56,12 @@ if __name__ == "__main__":
         'storage_power_ratio_G': [0.25],
         'storage_power_ratio_H': [0.25],
         'storage_capacity_ratio_E': [3.0],
-        'storage_capacity_ratio_G': [3.0],
-        'storage_capacity_ratio_H': [3.0],
+        'storage_capacity_ratio_G': [0.0],
+        'storage_capacity_ratio_H': [0.0],
         'initial_soc_ratio_E': [0.2],
         'initial_soc_ratio_G': [0.2],
         'initial_soc_ratio_H': [0.2],
-        'day': [5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
+        'day': [ 8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
        18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
     }
 
@@ -75,6 +75,7 @@ if __name__ == "__main__":
     results_summary = []
     violation_lp = []
     ip, lp_relax, chp = True, True, True
+    brute_force = True
     for i, values in enumerate(itertools.product(*param_values)):
         # Enum a single config
         sensitivity_analysis = dict(zip(param_names, values))
@@ -162,21 +163,30 @@ if __name__ == "__main__":
         model_type='mip',
         parameters=parameters
         )
+        time_start = time.time()
+        core_rowgen = core_comp.compute_core(
+            max_iterations=1e+8,
+            tolerance=1e-6
+        )
+        time_end = time.time()
+        time_rowgen = time_end - time_start
+        _, violation_rowgen = core_comp.measure_stability_violation(core_rowgen)
+        profit_rowgen = {u: -1*core_rowgen[u] for u in players}
         if ip:
             cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
-            violation_ip = core_comp.measure_stability_violation(cost_ip)
+            _,violation_ip = core_comp.measure_stability_violation(cost_ip)
             print(f"Violation IP: {violation_ip:.4f}")
 
             cost_pca = {u: -1*price for (u,price) in profit_pca.items()}
-            violation_pca = core_comp.measure_stability_violation(cost_pca)
+            _,violation_pca = core_comp.measure_stability_violation(cost_pca)
             print(f"Violation PCA: {violation_pca:.4f}")
         if lp_relax:
             cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-            violation_lp = core_comp.measure_stability_violation(cost_lp)
+            _,violation_lp = core_comp.measure_stability_violation(cost_lp)
             print(f"Violation LP: {violation_lp:.4f}")
         if chp:
             cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
-            violation_chp = core_comp.measure_stability_violation(cost_chp)
+            _,violation_chp = core_comp.measure_stability_violation(cost_chp)
             print(f"Violation CHP: {violation_chp:.4f}")
         result_row = {
             'sensitivity_analysis': sensitivity_analysis,
@@ -196,6 +206,11 @@ if __name__ == "__main__":
                 'solve_time_chp': time_chp,
                 'profit_chp': profit_chp
             }
+        result_row = result_row | {
+            'violation_rowgen': violation_rowgen,
+            'solve_time_rowgen': time_rowgen,
+            'profit_rowgen': profit_rowgen
+        }
         results_summary.append(result_row)
         # print('='*60)
         # print('Current Sensitivity Case:', sensitivity_analysis)
@@ -204,7 +219,21 @@ if __name__ == "__main__":
 
         # Optionally: Save as DataFrame
         df = pd.DataFrame(results_summary)
-        df.to_csv('sensitivity_analysis_results_all.csv', index=False)
+        df.to_csv('sensitivity_analysis_results_all_smp.csv', index=False)
+
+        if brute_force:
+            time_start = time.time()
+            coalition_rowgen, violation_rowgen = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
+            ## IP, LP, CHP도 다시 검증
+            if ip:
+                coalition_ip_bf, violation_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
+            if lp_relax:
+                coalition_lp_bf, violation_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
+            if chp:
+                coalition_chp_bf, violation_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
+
+            if (np.abs(violation_ip - violation_ip_bf) > 1e-6) or (np.abs(violation_lp - violation_lp_bf) > 1e-6) or (np.abs(violation_chp - violation_chp_bf) > 1e-6):
+                raise RuntimeError("Mismatch between actual and computed violation!")
 
         if i > 100:
             break

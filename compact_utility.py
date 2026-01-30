@@ -494,7 +494,7 @@ class LocalEnergyMarket:
             for t in self.time_periods:
                 if u in self.U_E:
                     self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
-                                                        ub=self.params.get(f'e_E_cap', -np.inf), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
+                                                        ub=self.params.get(f'e_E_cap_{u}', -np.inf), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
                     self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0)
                 if u in self.U_H:
                     self.e_H_gri[u,t] = self.model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
@@ -600,11 +600,11 @@ class LocalEnergyMarket:
                 # Storage variables by type with capacity constraints
                 # Electricity storage
                 if u in self.players_with_elec_storage:
-                    storage_capacity = self.params.get(f'storage_capacity_E', -np.inf)  # kWh capacity
-                    storage_power = self.params.get(f'storage_power_E', -np.inf)
+                    storage_capacity = self.params.get(f'storage_capacity_E_{u}', -np.inf)  # kWh capacity
+                    storage_power = self.params.get(f'storage_power_E_{u}', -np.inf)
                     nu_ch = self.params.get('nu_ch_E', np.inf)
                     nu_dis = self.params.get('nu_dis_E', np.inf)
-                    c_sto_E = self.params.get("c_sto_E", 0.0)
+                    c_sto_E = self.params.get(f"c_sto_E_{u}", 0.0)
                     self.b_dis_E[u,t] = self.model.addVar(vtype="C", name=f"b_dis_E_{u}_{t}", 
                                                         lb=0, ub=storage_power, obj=c_sto_E*(1/nu_dis))
                     self.b_ch_E[u,t] = self.model.addVar(vtype="C", name=f"b_ch_E_{u}_{t}", 
@@ -840,8 +840,8 @@ class LocalEnergyMarket:
                     
             # Set initial SOC at 6시 (논리적 시작점)
             if (u,6) in self.s_E:
-                initial_soc = self.params.get(f'initial_soc_E', np.inf)  # Default 50% SOC
-                storage_capacity_E = self.params.get(f'storage_capacity_E', -np.inf)
+                initial_soc = self.params.get(f'initial_soc_E_{u}', np.inf)  # Default 50% SOC
+                storage_capacity_E = self.params.get(f'storage_capacity_E_{u}', -np.inf)
                 if storage_capacity_E <=0:
                     initial_soc = 0.0
                 cons = self.model.addCons(self.s_E[u,6] == initial_soc, name=f"initial_soc_E_{u}")

@@ -181,7 +181,7 @@ class SeparationProblem(LocalEnergyMarket):
                     M = M_default
                     self.model.addCons(self.fl_d[u,'heat',t] <= M * z_u,
                                       name=f"bigm_fl_d_heat_{u}_{t}")
-                # # Non-flexible dmeand
+                # # Non-flexible dmeand: 아래 modify에서 처리함.
                 # if (u, 'elec', t) in self.nfl_d:
                 #     M = M_default
                 #     self.model.addCons(self.nfl_d[u,'elec',t] <= M * z_u,
@@ -279,6 +279,13 @@ class SeparationProblem(LocalEnergyMarket):
         --- for Storage ---
         Original: s_E, s_G, s_H at time 6 == initial SOC of E, G, H
         Modified: s_E, s_G, s_H at time 6 : s == initial SOC * z[i]
+
+        --- for Electrolyzer unit commitments ---
+        Original: z_on_G + z_off_G + z_sb_G == 1
+        Modified: z_on_G + z_off_G + z_sb_G == z[u]
+
+        나머지 제약식은 위의 bigm_constraints에서 변수가 0이 되므로 modify할 필요 없을 것으로 판단됨.
+        Heap Pump commitment도 필요 없음.
         """
         # Add modified electricity balance constraints
         for u in self.players:
@@ -304,7 +311,7 @@ class SeparationProblem(LocalEnergyMarket):
                     self.model.chgLhs(cons, 0.0)
 
             if u in self.players_with_elec_storage:
-                initial_soc = self.params.get(f'initial_soc_E', np.inf)
+                initial_soc = self.params.get(f'initial_soc_E_{u}', np.inf)
                 cons_fix_s_E = self.storage_cons[f"initial_soc_E_{u}"]
                 self.model.addConsCoeff(cons_fix_s_E, self.z[u], -initial_soc)
                 self.model.chgRhs(cons_fix_s_E, 0.0)
@@ -321,8 +328,10 @@ class SeparationProblem(LocalEnergyMarket):
                 self.model.addConsCoeff(cons_fix_s_H, self.z[u], -initial_soc)
                 self.model.chgRhs(cons_fix_s_H, 0.0)
                 self.model.chgLhs(cons_fix_s_H, 0.0)
-        
-        
+
+        # Electrolyzer state: z_on_G + z_off_G + z_sb_G == 1 -> == z[u] so when player not selected all are 0
+        ##는 넣으면안됨! 왜냐면 특정 t에 대해서 z_off_G >=1 이어야 하기때문에..
+
         print(f"Modified balance constraints to incorporate z variables")
     
     def solve_separation(self):
@@ -345,8 +354,7 @@ class SeparationProblem(LocalEnergyMarket):
         status = self.solve()
         
         if status != "optimal":
-            print(f"Separation problem failed with status: {status}")
-            return [], 0.0
+            raise RuntimeError(f"Separation problem failed with status: {status}")
         
         obj_val = self.model.getObjVal()
         
@@ -592,10 +600,19 @@ class CoreComputation:
             current_payoffs=payoffs
         )
         model = sep_problem.model
+        ## debug: z_3=z_6=1, 나머지 0으로 고정
+        # model.chgVarLb(sep_problem.z['u3'], 1.0)
+        # model.chgVarLb(sep_problem.z['u6'], 1.0)
+        # model.chgVarUb(sep_problem.z['u4'], 0.0)
+        # model.chgVarUb(sep_problem.z['u5'], 0.0)
+
+        # model.chgVarUb(sep_problem.z['u1'], 0.0)
+        # model.chgVarUb(sep_problem.z['u2'], 0.0)
+        ## 이렇게했더니 infeasible 뜸
         # model.hideOutput()
         coalition, violation = sep_problem.solve_separation()
         # Compute actual violation for verification
-        if len(coalition) > 0:
+        if violation > 1e-7:
             coalition_cost = self.compute_coalition_cost(coalition)
             payoff_sum = sum(payoffs[i] for i in coalition)
             actual_violation = payoff_sum - coalition_cost
@@ -608,7 +625,8 @@ class CoreComputation:
             print(f"  Found coalition: {coalition}")
             if abs(actual_violation - violation) > 1e-4:
                 raise RuntimeError("Mismatch between actual and computed violation!")
-            
+        else:
+            coalition = []
         print("="*60)
         
         return coalition, violation
@@ -712,12 +730,12 @@ class CoreComputation:
             if not is_imputation:
                 violation = np.inf
                 print("Cost allocation is not an imputation")
-                return violation
+                return [], violation
             if not brute_force:
                 coalition, violation = self.find_violated_coalition(payoffs)
             else:
-                violation = self._measure_violation_brute_force(payoffs)
-            return violation
+                coalition, violation = self._measure_violation_brute_force(payoffs)
+            return coalition, violation
     def check_imputation(self, payoffs: Dict[str, float]) -> bool:
         """
         Check whether the cost allocation is the imputation (at least no worse than the individually played cost)
@@ -795,13 +813,15 @@ class CoreComputation:
             print(f"  → Payoff is NOT in the core (violation = {violation:.6f})")
             binding_cons = [cons for cons in lp_model.getConss(False) if lp_model.getSlack(cons) <= 1e-6]
             if len(binding_cons) >1:
-                raise RuntimeError("Multiple binding constraints found!")
-            coalition_str = binding_cons[0].name.replace("stability_", "")
-            coalition = tuple(sorted(coalition_str.split("_")))
-            coalition_cost = self.coalition_costs.get(coalition, None)
-            payoff_sum = sum(payoffs[i] for i in coalition)
+                print("Multiple binding constraints found!")
+            coalition_str = [cons.name.replace("stability_", "") for cons in binding_cons]
+            coalition = [tuple(sorted(coalition.split("_"))) for coalition in coalition_str]
+            coalition_cost = [self.coalition_costs.get(coalition_tuple, None) for coalition_tuple in coalition]
+            payoff_sum = [sum(payoffs[i] for i in coalition_tuple) for coalition_tuple in coalition]
 
             print(f"  Binding coalition: {coalition}")
+            print(f"  Binding coalition cost: {coalition_cost}")
+            print(f"  Binding payoff sum: {payoff_sum}")
         print("="*70 + "\n")
         
         return coalition,violation
@@ -874,5 +894,22 @@ class CoreComputation:
             print(f"✓ All {total_coalitions + 1} coalitions computed")
             print(f"✓ Results cached in self.coalition_costs")
             print("="*70 + "\n")
-            
+            # INSERT_YOUR_CODE
+            import json
+            import os
+
+            # Prepare directory and file path for output
+            output_dir = getattr(self, "output_dir", ".")
+            os.makedirs(output_dir, exist_ok=True)
+            coalition_json_path = os.path.join(output_dir, "all_coalition_costs.json")
+
+            # Serialize coalition keys as stringified sorted list for JSON compatibility
+            serializable_coalition_costs = {
+                json.dumps(sorted(list(coalition))): cost
+                for coalition, cost in self.coalition_costs.items()
+            }
+            with open(coalition_json_path, "w", encoding="utf-8") as f:
+                json.dump(serializable_coalition_costs, f, indent=2, ensure_ascii=False)
+
+            print(f"All coalition costs saved to {coalition_json_path}")
             return self.coalition_costs.copy()

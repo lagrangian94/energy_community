@@ -75,9 +75,15 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         peak_penalty_ratio = sensitivity_analysis['peak_penalty_ratio']
         wind_el_ratio = sensitivity_analysis['wind_el_ratio']
         solar_el_ratio = sensitivity_analysis['solar_el_ratio']
-        storage_capacity_E = sensitivity_analysis['storage_capacity_E']
-        storage_capacity_G = sensitivity_analysis['storage_capacity_G']
-        storage_capacity_H = sensitivity_analysis['storage_capacity_H']
+        storage_power_ratio_E = sensitivity_analysis['storage_power_ratio_E']
+        storage_power_ratio_G = sensitivity_analysis['storage_power_ratio_G']
+        storage_power_ratio_H = sensitivity_analysis['storage_power_ratio_H']
+        storage_capacity_ratio_E = sensitivity_analysis['storage_capacity_ratio_E']
+        storage_capacity_ratio_G = sensitivity_analysis['storage_capacity_ratio_G']
+        storage_capacity_ratio_H = sensitivity_analysis['storage_capacity_ratio_H']
+        initial_soc_ratio_E = sensitivity_analysis['initial_soc_ratio_E']
+        initial_soc_ratio_G = sensitivity_analysis['initial_soc_ratio_G']
+        initial_soc_ratio_H = sensitivity_analysis['initial_soc_ratio_H']
         day = sensitivity_analysis['day']
     else:
         use_korean_price = True
@@ -108,7 +114,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         initial_soc_ratio_E = 0.2
         initial_soc_ratio_G = 0.2
         initial_soc_ratio_H = 0.2
-        day = 2
+        day = 29
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -253,19 +259,33 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["i_H_cap"] = np.max(heat_demand_mwh)
     parameters["i_G_cap"] = np.max(hydro_demand_kg)
 
-    total_elec_cap = np.max(wind_production)#*len(parameters['players_with_solar']) + np.max(wind_production)*len(parameters['players_with_wind'])
+    for u in parameters['players_with_solar']:
+        total_solar_cap = np.max(pv_production)
+        parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_solar_cap
+        parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_solar_cap
+        parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
+        parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
+    for u in parameters['players_with_wind']:
+        total_wind_cap = np.max(wind_production)
+        parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_wind_cap
+        parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_wind_cap
+        parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
+        parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
+    if set(parameters['players_with_solar']) & set(parameters['players_with_wind']):
+        raise ValueError("Solar and wind players cannot be the same")
+    # total_elec_cap = np.max(wind_production)
     total_els_cap = El['p_els_cap']# * len(parameters['players_with_electrolyzers'])
     total_heat_cap = parameters['hp_cap']# * len(parameters['players_with_heatpumps'])
-    parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * total_elec_cap
+    # parameters["e_E_cap"] = parameters["e_E_cap_ratio"] * total_elec_cap
     parameters["e_H_cap"] = parameters["e_H_cap_ratio"] * total_heat_cap
     parameters["e_G_cap"] = parameters["e_G_cap_ratio"] * total_els_cap
-    parameters["storage_power_E"] = parameters["storage_power_ratio_E"] * total_elec_cap
+    # parameters["storage_power_E"] = parameters["storage_power_ratio_E"] * total_elec_cap
     parameters["storage_power_G"] = parameters["storage_power_ratio_G"] * total_els_cap
     parameters["storage_power_H"] = parameters["storage_power_ratio_H"] * total_heat_cap
-    parameters["storage_capacity_E"] = parameters["storage_capacity_ratio_E"] * parameters["storage_power_E"]
+    # parameters["storage_capacity_E"] = parameters["storage_capacity_ratio_E"] * parameters["storage_power_E"]
     parameters["storage_capacity_G"] = parameters["storage_capacity_ratio_G"] * parameters["storage_power_G"]
     parameters["storage_capacity_H"] = parameters["storage_capacity_ratio_H"] * parameters["storage_power_H"]
-    parameters["initial_soc_E"] = parameters["initial_soc_ratio_E"] * parameters["storage_capacity_E"]
+    # parameters["initial_soc_E"] = parameters["initial_soc_ratio_E"] * parameters["storage_capacity_E"]
     parameters["initial_soc_G"] = parameters["initial_soc_ratio_G"] * parameters["storage_capacity_G"]
     parameters["initial_soc_H"] = parameters["initial_soc_ratio_H"] * parameters["storage_capacity_H"]
     # Pure Consumer Utility Function

@@ -38,7 +38,7 @@ if __name__ == "__main__":
     ip, chp = True, True
     lp_relax = True
     compute_core = True
-    brute_force = False
+    brute_force = True
     analyze_revenue = False
     base_path = '.'
     # INSERT_YOUR_CODE
@@ -220,7 +220,7 @@ if __name__ == "__main__":
         print(f"Time taken: {time_rowgen:.2f} seconds")
         if core_rowgen:
             print("double check the stability of the found core allocation")
-            violation_rowgen = core_comp.measure_stability_violation(core_rowgen)
+            coalition_rowgen, violation_rowgen = core_comp.measure_stability_violation(core_rowgen)
             if violation_rowgen <= 1e-6:    
                 print("\n" + "="*70)
                 print("SUCCESS: Core allocation found")
@@ -239,27 +239,38 @@ if __name__ == "__main__":
             print("="*70)
     if ip:
         cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
-        violation_ip = core_comp.measure_stability_violation(cost_ip)
+        coalition_ip, violation_ip = core_comp.measure_stability_violation(cost_ip)
         print(f"Violation IP: {violation_ip:.4f}")
 
         cost_pca = {u: -1*price for (u,price) in profit_pca.items()}
-        violation_pca = core_comp.measure_stability_violation(cost_pca)
+        coalition_pca, violation_pca = core_comp.measure_stability_violation(cost_pca)
         print(f"Violation PCA: {violation_pca:.4f}")
     if lp_relax:
         cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-        violation_lp = core_comp.measure_stability_violation(cost_lp)
+        coalition_lp, violation_lp = core_comp.measure_stability_violation(cost_lp)
         print(f"Violation LP: {violation_lp:.4f}")
     if chp:
         cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
-        violation_chp = core_comp.measure_stability_violation(cost_chp)
+        coalition_chp, violation_chp = core_comp.measure_stability_violation(cost_chp)
         print(f"Violation CHP: {violation_chp:.4f}")
     if brute_force:
         ## find all core
         time_start = time.time()
-        violation_core = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
+        coalition_core, violation_core = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
         time_end = time.time()
         time_core_bf = time_end - time_start
         print(f"Time taken: {time_core_bf:.2f} seconds")
+
+        ## IP, LP, CHP도 다시 검증
+        if ip:
+            coalition_ip_bf, violation_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
+        if lp_relax:
+            coalition_lp_bf, violation_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
+        if chp:
+            coalition_chp_bf, violation_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
+
+        if (np.abs(violation_ip - violation_ip_bf) > 1e-7) or (np.abs(violation_lp - violation_lp_bf) > 1e-7) or (np.abs(violation_chp - violation_chp_bf) > 1e-7):
+            raise RuntimeError("Mismatch between actual and computed violation!")
         # print(f"Violation Core: {violation_core:.4f}")
     # INSERT_YOUR_CODE
     import pandas as pd
