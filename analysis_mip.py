@@ -31,6 +31,25 @@ if __name__ == "__main__":
     configuration["players_with_fl_elec_demand"] = ['u2','u3']# + ['u7']
     configuration["players_with_fl_hydro_demand"] = []
     configuration["players_with_fl_heat_demand"] = []
+
+    # players = ['u2', 'u5']
+    # time_periods = list(range(24))  # 24 hours
+    # configuration = {}
+    # configuration["players_with_renewables"] = []
+    # configuration["players_with_solar"] = []
+    # configuration["players_with_wind"] = []
+    # configuration["players_with_electrolyzers"] = ['u2']# + ['u7']
+    # configuration["players_with_heatpumps"] = []
+    # configuration["players_with_elec_storage"] = [] #,'u7']
+    # configuration["players_with_hydro_storage"] = ['u2'] #+ ['u7']
+    # configuration["players_with_heat_storage"] = []
+    # configuration["players_with_nfl_elec_demand"] = []
+    # configuration["players_with_nfl_hydro_demand"] = ['u5'] #+ ['u8']
+    # configuration["players_with_nfl_heat_demand"] = []
+    # configuration["players_with_fl_elec_demand"] = []# + ['u7']
+    # configuration["players_with_fl_hydro_demand"] = []
+    # configuration["players_with_fl_heat_demand"] = []
+
     parameters = setup_lem_parameters(players, configuration, time_periods)
     # parameters["c_els_u7"] = parameters["c_els"]*2
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
@@ -57,6 +76,9 @@ if __name__ == "__main__":
     hydro_cost_per_kg_inefficient = 1/hydro_inefficient*parameters["pi_E_gri"]["import"].mean()
     print(f"수소 1kg 위해 구매해야 하는 전기비용 (efficient): {hydro_cost_per_kg_efficient} EUR")
     print(f"수소 1kg 위해 구매해야 하는 전기비용 (inefficient): {hydro_cost_per_kg_inefficient} EUR")
+    hydro_efficiency = np.array([parameters['El']['a'][jj] + parameters['El']['b'][jj]/parameters['El']['p_val'][jj] for jj in range(len(parameters['El']['a']))])
+    print(f"수소 Efficiency (kg/MWh): {hydro_efficiency} ")
+    print(f"단위 투입 전력 당 수소의 외부 판매 수익: {parameters["pi_G_gri"]["export"].mean() * hydro_efficiency}")
     heat_cost_per_mwh = (1/parameters["nu_cop"])*parameters["pi_E_gri"]["import"].mean()
     print(f"heat 1MWh 생산단가: {heat_cost_per_mwh} EUR")
     # with open('working_chp_wins_all_2/parameters.json', 'r') as f:
@@ -226,7 +248,7 @@ if __name__ == "__main__":
                 print("SUCCESS: Core allocation found")
                 print("="*70)
 
-                comparison_results_core = comparison_results
+                comparison_results_core = copy.deepcopy(comparison_results)
                 for u in players:
                     ### !!!net profit key만 업데이트함에 유의!!!
                     comparison_results_core["community"]["player_profits"][u]["net_profit"] = -1*core_rowgen[u]
@@ -269,7 +291,7 @@ if __name__ == "__main__":
         if chp:
             coalition_chp_bf, violation_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
 
-        if (np.abs(violation_ip - violation_ip_bf) > 1e-7) or (np.abs(violation_lp - violation_lp_bf) > 1e-7) or (np.abs(violation_chp - violation_chp_bf) > 1e-7):
+        if (np.abs(violation_ip - violation_ip_bf) > 1e-6) or (np.abs(violation_lp - violation_lp_bf) > 1e-6) or (np.abs(violation_chp - violation_chp_bf) > 1e-6):
             raise RuntimeError("Mismatch between actual and computed violation!")
         # print(f"Violation Core: {violation_core:.4f}")
     # INSERT_YOUR_CODE

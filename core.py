@@ -182,18 +182,18 @@ class SeparationProblem(LocalEnergyMarket):
                     self.model.addCons(self.fl_d[u,'heat',t] <= M * z_u,
                                       name=f"bigm_fl_d_heat_{u}_{t}")
                 # # Non-flexible dmeand: 아래 modify에서 처리함.
-                # if (u, 'elec', t) in self.nfl_d:
-                #     M = M_default
-                #     self.model.addCons(self.nfl_d[u,'elec',t] <= M * z_u,
-                #                       name=f"bigm_nfl_d_elec_{u}_{t}")
-                # if (u, 'hydro', t) in self.nfl_d:
-                #     M = M_default
-                #     self.model.addCons(self.nfl_d[u,'hydro',t] <= M * z_u,
-                #                       name=f"bigm_nfl_d_hydro_{u}_{t}")
-                # if (u, 'heat', t) in self.nfl_d:
-                #     M = M_default
-                #     self.model.addCons(self.nfl_d[u,'heat',t] <= M * z_u,
-                #                       name=f"bigm_nfl_d_heat_{u}_{t}")
+                if (u, 'elec', t) in self.nfl_d:
+                    M = M_default
+                    self.model.addCons(self.nfl_d[u,'elec',t] <= M * z_u,
+                                      name=f"bigm_nfl_d_elec_{u}_{t}")
+                if (u, 'hydro', t) in self.nfl_d:
+                    M = M_default
+                    self.model.addCons(self.nfl_d[u,'hydro',t] <= M * z_u,
+                                      name=f"bigm_nfl_d_hydro_{u}_{t}")
+                if (u, 'heat', t) in self.nfl_d:
+                    M = M_default
+                    self.model.addCons(self.nfl_d[u,'heat',t] <= M * z_u,
+                                      name=f"bigm_nfl_d_heat_{u}_{t}")
                 # Storage variables - Electricity
                 if (u, t) in self.s_E:
                     M = self.params.get('storage_capacity', M_default)
@@ -279,10 +279,6 @@ class SeparationProblem(LocalEnergyMarket):
         --- for Storage ---
         Original: s_E, s_G, s_H at time 6 == initial SOC of E, G, H
         Modified: s_E, s_G, s_H at time 6 : s == initial SOC * z[i]
-
-        --- for Electrolyzer unit commitments ---
-        Original: z_on_G + z_off_G + z_sb_G == 1
-        Modified: z_on_G + z_off_G + z_sb_G == z[u]
 
         나머지 제약식은 위의 bigm_constraints에서 변수가 0이 되므로 modify할 필요 없을 것으로 판단됨.
         Heap Pump commitment도 필요 없음.

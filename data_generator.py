@@ -108,13 +108,13 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         storage_power_ratio_E = 0.25
         storage_power_ratio_G = 0.25
         storage_power_ratio_H = 0.25
-        storage_capacity_ratio_E = 3.0 #3.0 -> storage_power의 3배가 총 storage 용량
+        storage_capacity_ratio_E = 0.0 #3.0 -> storage_power의 3배가 총 storage 용량
         storage_capacity_ratio_G = 0.0 
         storage_capacity_ratio_H = 0.0 
         initial_soc_ratio_E = 0.2
         initial_soc_ratio_G = 0.2
         initial_soc_ratio_H = 0.2
-        day = 29
+        day = 28
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
@@ -259,18 +259,32 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["i_H_cap"] = np.max(heat_demand_mwh)
     parameters["i_G_cap"] = np.max(hydro_demand_kg)
 
-    for u in parameters['players_with_solar']:
-        total_solar_cap = np.max(pv_production)
-        parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_solar_cap
-        parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_solar_cap
-        parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
-        parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
-    for u in parameters['players_with_wind']:
-        total_wind_cap = np.max(wind_production)
-        parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_wind_cap
-        parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_wind_cap
-        parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
-        parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
+
+    for u in parameters['players_with_renewables']:
+        if u in parameters['players_with_solar']:
+            total_solar_cap = np.max(pv_production)
+            parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_solar_cap
+            if u in parameters['players_with_elec_storage']:
+                parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_solar_cap
+                parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
+                parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
+        elif u in parameters['players_with_wind']:
+            total_wind_cap = np.max(wind_production)
+            parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_wind_cap
+            if u in parameters['players_with_elec_storage']:
+                parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_wind_cap
+                parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
+                parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
+        else:
+            raise ValueError(f"Player {u} is not in any of the renewable or demand players")
+    for u in parameters['players_with_nfl_elec_demand']:
+        if u not in parameters['players_with_renewables']:
+            if u in parameters['players_with_elec_storage']:
+                total_elec_cap = np.max(elec_demand_mwh)
+                parameters[f"e_E_cap_{u}"] = parameters["e_E_cap_ratio"] * total_elec_cap
+                parameters[f"storage_power_E_{u}"] = parameters["storage_power_ratio_E"] * total_elec_cap
+                parameters[f"storage_capacity_E_{u}"] = parameters["storage_capacity_ratio_E"] * parameters[f"storage_power_E_{u}"]
+                parameters[f"initial_soc_E_{u}"] = parameters["initial_soc_ratio_E"] * parameters[f"storage_capacity_E_{u}"]
     if set(parameters['players_with_solar']) & set(parameters['players_with_wind']):
         raise ValueError("Solar and wind players cannot be the same")
     # total_elec_cap = np.max(wind_production)
@@ -290,11 +304,14 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters["initial_soc_H"] = parameters["initial_soc_ratio_H"] * parameters["storage_capacity_H"]
     # Pure Consumer Utility Function
     N_E = len(parameters['players_with_nfl_elec_demand'])
-    factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)
+    if N_E > 0:
+        factor_E = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_E), size=N_E)
     N_H = len(parameters['players_with_nfl_heat_demand'])
-    factor_H = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_H), size=N_H)
+    if N_H > 0:
+        factor_H = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_H), size=N_H)
     N_G = len(parameters['players_with_nfl_hydro_demand'])
-    factor_G = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_G), size=N_G)
+    if N_G > 0:
+        factor_G = np.random.uniform(low=1.0, high=1.0+epsilon_log(N_G), size=N_G)
     for t in time_periods:
         for i,u in enumerate(parameters['players_with_nfl_elec_demand']):
             u_E = parameters[f"pi_E_gri_import_{t}"] * factor_E[i]

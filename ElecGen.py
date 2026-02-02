@@ -260,11 +260,11 @@ class ElectricityProdGenerator:
         arrs = np.array(arrs)
 
         data = data[data['Day'] == day].reset_index(drop=True)
-        arrs = [data["CP"].values/data["CP"].max() * 1 for _ in range(2)]
+        arrs = [data["CP"].values/data["CP"].max() * self.wind_cap_mw for _ in range(2)]
         import matplotlib.pyplot as plt
 
         plt.figure(figsize=(10, 4))
-        plt.plot(data["CP"].values/data["CP"], marker='o', linestyle='-', color='b')
+        plt.plot(data["CP"].values/data["CP"].max()*self.wind_cap_mw, marker='o', linestyle='-', color='b')
         plt.xlabel("Index")
         plt.ylabel("CP")
         plt.title("Wind CP Profile")

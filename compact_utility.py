@@ -389,9 +389,9 @@ class LocalEnergyMarket:
         self.players_with_fl_hydro_demand = [u for u in self.params.get('players_with_fl_hydro_demand', []) if u in self.players]
         self.players_with_fl_heat_demand = [u for u in self.params.get('players_with_fl_heat_demand', []) if u in self.players]
         # Combined sets for energy types
-        self.U_E = list(set(self.players_with_renewables + self.players_with_elec_storage))  # Players with electricity assets
-        self.U_G = list(set(self.players_with_electrolyzers + self.players_with_hydro_storage))  # Players with hydro assets
-        self.U_H = list(set(self.players_with_heatpumps + self.players_with_heat_storage))  # Players with heat assets
+        self.U_E = list(set(self.players_with_renewables))  # Players with electricity assets
+        self.U_G = list(set(self.players_with_electrolyzers))  # Players with hydro assets
+        self.U_H = list(set(self.players_with_heatpumps))  # Players with heat assets
         ## 추후에 non-flexible demand를 가진 player들이 storage를 가지고 있다고 고려할 수도 있음.
         self.U_E_nfl = list(set(self.players_with_nfl_elec_demand))
         self.U_G_nfl = list(set(self.players_with_nfl_hydro_demand))
@@ -399,6 +399,10 @@ class LocalEnergyMarket:
         self.U_E_fl = list(set(self.players_with_fl_elec_demand))
         self.U_G_fl = list(set(self.players_with_fl_hydro_demand))
         self.U_H_fl = list(set(self.players_with_fl_heat_demand))
+        # Combined sets for storage
+        self.U_E_sto = list(set(self.players_with_elec_storage))
+        self.U_G_sto = list(set(self.players_with_hydro_storage))
+        self.U_H_sto = list(set(self.players_with_heat_storage))
         # Store community balance constraints for dual access
         self.community_elec_balance_cons = {}
         self.community_heat_balance_cons = {}
