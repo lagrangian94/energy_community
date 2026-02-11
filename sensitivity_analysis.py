@@ -36,12 +36,12 @@ if __name__ == "__main__":
         'use_tou_elec': [False],#,, False],
         'import_factor': [1.5],
         'month': [1],
-        'hp_cap': [0.4],
+        'hp_cap': [0.8],
         'els_cap': [1],
         'num_households': [700], #적정, oversupply, undersupply
         'nu_cop': [3.28],
-        'c_su_G': [100],
-        'c_su_H': [50],
+        'c_su_G': [50],
+        'c_su_H': [10],
         'base_h2_price_eur': [5000/1500], #AS-IS, TO-BE
         'e_E_cap_ratio': [1.0],
         'e_H_cap_ratio': [1.0],
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         'initial_soc_ratio_E': [0.2],
         'initial_soc_ratio_G': [0.2],
         'initial_soc_ratio_H': [0.2],
-        'day': [1, 24, 27,  29],
+        'day': list(range(1, 32))
     }
 
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     ip, lp_relax, chp = True, True, True
     brute_force = True
 
-    lp_relax, chp = False, False
+    lp_relax, chp = False, True
 
     for i, values in enumerate(itertools.product(*param_values)):
         # Enum a single config
@@ -172,26 +172,25 @@ if __name__ == "__main__":
         )
         time_end = time.time()
         time_rowgen = time_end - time_start
-        _, violation_rowgen = core_comp.measure_stability_violation(core_rowgen)
+        _, violation_rowgen, isimp_rowgen = core_comp.measure_stability_violation(core_rowgen)
         profit_rowgen = {u: -1*core_rowgen[u] for u in players}
         if violation_rowgen > 1e-6:
             raise RuntimeError("core not exists")
-        print(1)
-        # if ip:
-        #     cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
-        #     _,violation_ip = core_comp.measure_stability_violation(cost_ip)
-        #     print(f"Violation IP: {violation_ip:.4f}")
+        if ip:
+            cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
+            _,violation_ip, isimp_ip = core_comp.measure_stability_violation(cost_ip)
+            print(f"Violation IP: {violation_ip:.4f}")
 
         #     cost_pca = {u: -1*price for (u,price) in profit_pca.items()}
-        #     _,violation_pca = core_comp.measure_stability_violation(cost_pca)
+        #     _,violation_pca, isimp_pca = core_comp.measure_stability_violation(cost_pca)
         #     print(f"Violation PCA: {violation_pca:.4f}")
         # if lp_relax:
         #     cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-        #     _,violation_lp = core_comp.measure_stability_violation(cost_lp)
+        #     _,violation_lp, isimp_lp = core_comp.measure_stability_violation(cost_lp)
         #     print(f"Violation LP: {violation_lp:.4f}")
         # if chp:
         #     cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
-        #     _,violation_chp = core_comp.measure_stability_violation(cost_chp)
+        #     _,violation_chp, isimp_chp = core_comp.measure_stability_violation(cost_chp)
         #     print(f"Violation CHP: {violation_chp:.4f}")
         # result_row = {
         #     'sensitivity_analysis': sensitivity_analysis,
@@ -231,11 +230,11 @@ if __name__ == "__main__":
         #     coalition_rowgen, violation_rowgen = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
         #     ## IP, LP, CHP도 다시 검증
         #     if ip:
-        #         coalition_ip_bf, violation_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
+        #         coalition_ip_bf, violation_ip_bf, isimp_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
         #     if lp_relax:
-        #         coalition_lp_bf, violation_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
+        #         coalition_lp_bf, violation_lp_bf, isimp_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
         #     if chp:
-        #         coalition_chp_bf, violation_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
+        #         coalition_chp_bf, violation_chp_bf, isimp_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
 
         #     if (np.abs(violation_ip - violation_ip_bf) > 1e-6) or (np.abs(violation_lp - violation_lp_bf) > 1e-6) or (np.abs(violation_chp - violation_chp_bf) > 1e-6):
         #         raise RuntimeError("Mismatch between actual and computed violation!")

@@ -55,7 +55,7 @@ if __name__ == "__main__":
     # parameters["c_su_u7"] = parameters["c_su_G"]*2
     # Create and solve model with Restricted Pricing
     ip, chp = True, True
-    lp_relax = True
+    lp_relax = False
     compute_core = True
     brute_force = True
     analyze_revenue = False
@@ -146,6 +146,8 @@ if __name__ == "__main__":
         print("\n" + "="*80)
         print("PLAYER BENEFIT ANALYSIS")
         print("="*80)
+    else:
+        community_prices_lp = None
     ## ========================================
     ## Convex Hull Pricing
     ## ========================================
@@ -191,26 +193,31 @@ if __name__ == "__main__":
             print("\n" + "="*80)
             print("COMPLETED SUCCESSFULLY")
             print("="*80)
-
+    else:
+        community_prices_chp = None
     ## ========================================
     ## Visualize Community Prices Comparison
     ## ========================================
     plot_community_prices_comparison(community_prices, community_prices_lp, community_prices_chp, market_prices, save_path=f'{base_path}/community_prices_comparison.png')
     with open(f'{base_path}/comparison_results.json', 'w') as f:
         json.dump(comparison_results, f, indent=2)
-    with open(f'{base_path}/comparison_results_lp.json', 'w') as f:
-        json.dump(comparison_results_lp, f, indent=2)
-    with open(f'{base_path}/comparison_results_chp.json', 'w') as f:
-        json.dump(comparison_results_chp, f, indent=2)
+    if lp_relax:
+        with open(f'{base_path}/comparison_results_lp.json', 'w') as f:
+            json.dump(comparison_results_lp, f, indent=2)
+    if chp:
+        with open(f'{base_path}/comparison_results_chp.json', 'w') as f:
+            json.dump(comparison_results_chp, f, indent=2)
 
     import pickle
     # Save with pickle instead of json because results may contain tuples.
     with open(f'{base_path}/results_ip.pkl', 'wb') as f:
         pickle.dump(results_complete_ip, f)
-    with open(f'{base_path}/results_lp.pkl', 'wb') as f:
-        pickle.dump(results_complete_lp, f)
-    with open(f'{base_path}/results_chp.pkl', 'wb') as f:
-        pickle.dump(results_chp, f)
+    if lp_relax:
+        with open(f'{base_path}/results_lp.pkl', 'wb') as f:
+            pickle.dump(results_complete_lp, f)
+    if chp:
+        with open(f'{base_path}/results_chp.pkl', 'wb') as f:
+            pickle.dump(results_chp, f)
     
     # # results_ip.pkl 읽는 코드
     # import pickle
@@ -242,7 +249,7 @@ if __name__ == "__main__":
         print(f"Time taken: {time_rowgen:.2f} seconds")
         if core_rowgen:
             print("double check the stability of the found core allocation")
-            coalition_rowgen, violation_rowgen = core_comp.measure_stability_violation(core_rowgen)
+            coalition_rowgen, violation_rowgen, isimp_rowgen = core_comp.measure_stability_violation(core_rowgen)
             if violation_rowgen <= 1e-6:    
                 print("\n" + "="*70)
                 print("SUCCESS: Core allocation found")
@@ -261,37 +268,41 @@ if __name__ == "__main__":
             print("="*70)
     if ip:
         cost_ip = {u: -1*price for (u,price) in profit_ip.items()}
-        coalition_ip, violation_ip = core_comp.measure_stability_violation(cost_ip)
+        coalition_ip, violation_ip, isimp_ip = core_comp.measure_stability_violation(cost_ip)
         print(f"Violation IP: {violation_ip:.4f}")
 
         cost_pca = {u: -1*price for (u,price) in profit_pca.items()}
-        coalition_pca, violation_pca = core_comp.measure_stability_violation(cost_pca)
+        coalition_pca, violation_pca, isimp_pca = core_comp.measure_stability_violation(cost_pca)
         print(f"Violation PCA: {violation_pca:.4f}")
     if lp_relax:
         cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-        coalition_lp, violation_lp = core_comp.measure_stability_violation(cost_lp)
+        coalition_lp, violation_lp, isimp_lp = core_comp.measure_stability_violation(cost_lp)
         print(f"Violation LP: {violation_lp:.4f}")
     if chp:
         cost_chp = {u: -1*price for (u,price) in profit_chp.items()}
-        coalition_chp, violation_chp = core_comp.measure_stability_violation(cost_chp)
+        coalition_chp, violation_chp, isimp_chp = core_comp.measure_stability_violation(cost_chp)
         print(f"Violation CHP: {violation_chp:.4f}")
     if brute_force:
         ## find all core
         time_start = time.time()
-        coalition_core, violation_core = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
+        coalition_core, violation_core, isimp_core = core_comp.measure_stability_violation(core_rowgen, brute_force=True)
         time_end = time.time()
         time_core_bf = time_end - time_start
         print(f"Time taken: {time_core_bf:.2f} seconds")
 
         ## IP, LP, CHP도 다시 검증
+        temp = 0
         if ip:
-            coalition_ip_bf, violation_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
+            coalition_ip_bf, violation_ip_bf, isimp_ip_bf = core_comp.measure_stability_violation(cost_ip, brute_force=True)
+            temp += np.abs(violation_ip - violation_ip_bf)
         if lp_relax:
-            coalition_lp_bf, violation_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
+            coalition_lp_bf, violation_lp_bf, isimp_lp_bf = core_comp.measure_stability_violation(cost_lp, brute_force=True)
+            temp += np.abs(violation_lp - violation_lp_bf)
         if chp:
-            coalition_chp_bf, violation_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
+            coalition_chp_bf, violation_chp_bf, isimp_chp_bf = core_comp.measure_stability_violation(cost_chp, brute_force=True)
+            temp += np.abs(violation_chp - violation_chp_bf)
 
-        if (np.abs(violation_ip - violation_ip_bf) > 1e-6) or (np.abs(violation_lp - violation_lp_bf) > 1e-6) or (np.abs(violation_chp - violation_chp_bf) > 1e-6):
+        if temp > 1e-6:
             raise RuntimeError("Mismatch between actual and computed violation!")
         # print(f"Violation Core: {violation_core:.4f}")
     # INSERT_YOUR_CODE

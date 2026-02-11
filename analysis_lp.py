@@ -92,7 +92,7 @@ if __name__ == "__main__":
         print(f"Time taken: {time_core:.2f} seconds")
         if core_allocation:
             print("double check the stability of the found core allocation")
-            violation_found_core = core_comp.measure_stability_violation(core_allocation)
+            coalition_found_core, violation_found_core, isimp_found_core = core_comp.measure_stability_violation(core_allocation)
             if violation_found_core <= 1e-6:    
                 print("\n" + "="*70)
                 print("SUCCESS: Core allocation found")
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             print("="*70)
     
     cost_lp = {u: -1*price for (u,price) in profit_lp.items()}
-    violation_lp = core_comp.measure_stability_violation(cost_lp)
+    coalition_lp, violation_lp, isimp_lp = core_comp.measure_stability_violation(cost_lp)
     print(f"Violation LP: {violation_lp:.4f}")
     # if compute_core:
     #     ## find all core

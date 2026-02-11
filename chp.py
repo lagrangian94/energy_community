@@ -78,6 +78,7 @@ class ColumnGenerationSolver:
         self.master.model.setHeuristics(SCIP_PARAMSETTING.OFF)
         self.master.model.setSeparating(SCIP_PARAMSETTING.OFF)
         self.master.model.disablePropagation()
+        self.master.model.setParam("limits/time", 1800)
         # Create pricer
         pricer = LEMPricer(
             subproblems=self.subproblems,

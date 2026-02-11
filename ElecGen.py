@@ -75,9 +75,12 @@ class ElectricityPriceGenerator:
             data = data[data['Month'] == month].reset_index(drop=True)
             ## time_horizon이 8760이라면, 아래 isin()을 적절히 계산해야.
             plot_price_profile(data)
+            
+            ## use medoids ##
             medoid_profiles, medoid_days, labels, cluster_sizes = find_k_medoids_price(data, k=2)
             arr = medoid_profiles/1500*1000 ## exchange rate: kor to eur, 한국데이터는 kWh 단위이므로 MWh로 변환하려고 1000 곱해줌.
             arr = arr[0]
+            
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
@@ -237,7 +240,29 @@ class ElectricityProdGenerator:
             data = self.wind_data[self.wind_data['Month'] == month].reset_index(drop=True)
         else:
             data = self.wind_data
-        
+        # INSERT_YOUR_CODE
+
+        # # 모든 day별로 wind production 값 구해서 31일치 모두 플롯
+        # import matplotlib.pyplot as plt
+        # unique_days = sorted(data['Day'].unique())
+        # fig, axs = plt.subplots(6, 6, figsize=(20, 14))  # 6x6 grid (36칸, 31일까지 커버), 남는칸은 숨김
+        # axs = axs.flatten()
+        # for idx, day_val in enumerate(unique_days):
+        #     daily = data[data['Day'] == day_val].reset_index(drop=True)
+        #     wind_profile = daily["CP"].values / daily["CP"].max() * self.wind_cap_mw
+        #     ax = axs[idx]
+        #     ax.plot(wind_profile, marker='o', linestyle='-')
+        #     ax.set_title(f"Day {day_val}", fontsize=9)
+        #     ax.set_xticks([])
+        #     ax.set_yticks([])
+
+        # for free_idx in range(len(unique_days), len(axs)):
+        #     axs[free_idx].axis('off')
+        # plt.suptitle("Wind CP Profiles for All Days (Normalized)", fontsize=16)
+        # plt.tight_layout(rect=[0, 0, 1, 0.97])
+        # plt.savefig("wind_cp_all_days_grid.png", dpi=300)
+        # plt.close()
+
         
         """
         wind profile 시각화하고싶으면 아래 주석 제거
@@ -272,6 +297,8 @@ class ElectricityProdGenerator:
         plt.tight_layout()
         plt.savefig("wind_cp_profile.png", dpi=300)
         plt.close()
+
+        
         return arrs
     def generate_solar_production(self, month: int=1, time_horizon: int = 24):
         """

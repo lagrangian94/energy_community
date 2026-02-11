@@ -88,7 +88,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     else:
         use_korean_price = True
         use_tou_elec = False
-        import_factor = 1.5 # market import price가 export 대비 몇배 더 큰지
+        import_factor = 3.0 # [1.5, 2.0] market import price가 export 대비 몇배 더 큰지
         month = 1
         hp_cap = 0.8 #MW [0.6, 0.8, 1.0]
         els_cap = 1 #MW
@@ -96,7 +96,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         nu_cop = 3.28
         c_su_G = 50
         c_su_H = 10 
-        base_h2_price_eur = 5000/1500 #2.1*1.5 # [2.1*0.75, 2.1, 2.1*2]
+        base_h2_price_eur = 3000/1500 #2.1*1.5 # [3000/1500, 4000/1500, 6000/1500]
         e_E_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
         e_H_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
         e_G_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
@@ -108,13 +108,13 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         storage_power_ratio_E = 0.25
         storage_power_ratio_G = 0.25
         storage_power_ratio_H = 0.25
-        storage_capacity_ratio_E = 0.0 #3.0 -> storage_power의 3배가 총 storage 용량
+        storage_capacity_ratio_E = 3.0 #3.0 -> storage_power의 3배가 총 storage 용량
         storage_capacity_ratio_G = 0.0 
         storage_capacity_ratio_H = 0.0 
         initial_soc_ratio_E = 0.2
         initial_soc_ratio_G = 0.2
         initial_soc_ratio_H = 0.2
-        day = 28
+        day = 1
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],

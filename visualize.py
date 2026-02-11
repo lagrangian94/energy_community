@@ -21,8 +21,10 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         Path to save figure
     """
     community_prices = {k:v for k,v in community_prices.items() if k in ['electricity', 'heat', 'hydrogen']}
-    community_prices_lp = {k:v for k,v in community_prices_lp.items() if k in ['electricity', 'heat', 'hydrogen']}
-    community_prices_chp = {k:v for k,v in community_prices_chp.items() if k in ['electricity', 'heat', 'hydrogen']}
+    if community_prices_lp is not None:
+        community_prices_lp = {k:v for k,v in community_prices_lp.items() if k in ['electricity', 'heat', 'hydrogen']}
+    if community_prices_chp is not None:
+        community_prices_chp = {k:v for k,v in community_prices_chp.items() if k in ['electricity', 'heat', 'hydrogen']}
     # Convert dictionaries to arrays
     def dict_to_array(price_dict):
         """Convert {0: val, 1: val, ...} to numpy array"""
@@ -38,8 +40,10 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     # Get all energy types (union of all three dicts)
     energy_types = set()
     energy_types.update(community_prices.keys())
-    energy_types.update(community_prices_lp.keys())
-    energy_types.update(community_prices_chp.keys())
+    if community_prices_lp is not None:
+        energy_types.update(community_prices_lp.keys())
+    if community_prices_chp is not None:
+        energy_types.update(community_prices_chp.keys())
     # Add energy types from market prices if provided
     if market_prices and 'import' in market_prices:
         energy_types.update(market_prices['import'].keys())
@@ -51,10 +55,12 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     data = {}
     for energy_type in energy_types:
         data[energy_type] = {
-            'IP': dict_to_array(community_prices.get(energy_type, {})),
-            'LP': dict_to_array(community_prices_lp.get(energy_type, {})),
-            'CHP': dict_to_array(community_prices_chp.get(energy_type, {}))
+            'IP': dict_to_array(community_prices.get(energy_type, {}))
         }
+        if community_prices_lp is not None:
+            data[energy_type]['LP'] = dict_to_array(community_prices_lp.get(energy_type, {}))
+        if community_prices_chp is not None:
+            data[energy_type]['CHP'] = dict_to_array(community_prices_chp.get(energy_type, {}))
         # Add market import price if available
         if market_prices and 'import' in market_prices:
             if energy_type in market_prices['import']:
@@ -89,8 +95,14 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         
         # Get data for this energy type
         ip_data = data[energy_type]['IP']
-        lp_data = data[energy_type]['LP']
-        chp_data = data[energy_type]['CHP']
+        if community_prices_lp is not None:
+            lp_data = data[energy_type]['LP']
+        else:
+            lp_data = np.array([])
+        if community_prices_chp is not None:
+            chp_data = data[energy_type]['CHP']
+        else:
+            chp_data = np.array([])
         market_import_data = data[energy_type]['Market Import']
         market_export_data = data[energy_type]['Market Export']
         # Determine time length
@@ -259,8 +271,8 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         print(f"{'='*80}")
         
         ip_data = data[energy_type]['IP']
-        lp_data = data[energy_type]['LP']
-        chp_data = data[energy_type]['CHP']
+        lp_data = data[energy_type]['LP'] if community_prices_lp is not None else np.array([])
+        chp_data = data[energy_type]['CHP'] if community_prices_chp is not None else np.array([])
         
         # Print statistics table
         print(f"{'Method':<10} | {'Mean':>12} | {'Std':>12} | {'Min':>12} | {'Max':>12} | {'NonZero':>8}")

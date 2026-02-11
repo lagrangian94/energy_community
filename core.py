@@ -724,14 +724,14 @@ class CoreComputation:
             ## First, check whether the cost allocation is the imputation (at least no worse than the individually played cost)
             is_imputation = self.check_imputation(payoffs)
             if not is_imputation:
-                violation = np.inf
+                # violation = np.inf
                 print("Cost allocation is not an imputation")
-                return [], violation
+                # return [], violation
             if not brute_force:
                 coalition, violation = self.find_violated_coalition(payoffs)
             else:
                 coalition, violation = self._measure_violation_brute_force(payoffs)
-            return coalition, violation
+            return coalition, violation, is_imputation
     def check_imputation(self, payoffs: Dict[str, float]) -> bool:
         """
         Check whether the cost allocation is the imputation (at least no worse than the individually played cost)
