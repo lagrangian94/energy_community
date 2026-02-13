@@ -166,7 +166,7 @@ if __name__ == "__main__":
         parameters=parameters
         )
         time_start = time.time()
-        core_rowgen = core_comp.compute_core(
+        core_rowgen, success = core_comp.compute_core(
             max_iterations=1e+8,
             tolerance=1e-6
         )

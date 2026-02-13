@@ -130,12 +130,99 @@ def fix_violations(df, pricing='ip'):
 
     return fixed
 
+def compute_core_for_both_failed(df):
+    """
+    isimp_ip=False AND isimp_chp=False인 row에 대해
+    row generation으로 core allocation을 직접 계산.
+
+    새 칼럼 추가:
+        - profit_core_u1 ~ u6
+        - violation_core
+        - blocking_coalition_core
+        - isimp_core
+        - solve_time_core
+    """
+    mask = (df['isimp_ip'] == False) & (df['isimp_chp'] == False)
+    targets = df[mask].index.tolist()
+
+    if len(targets) == 0:
+        print("  No rows where both IP and CHP fail imputation. Skipping.")
+        return 0
+
+    print(f"  Found {len(targets)} rows where both fail: "
+          f"days {df.loc[targets, 'day'].tolist()}")
+
+    # 새 칼럼 초기화
+    for u in PLAYERS:
+        if f'profit_rowgen_{u}' not in df.columns:
+            df[f'profit_rowgen_{u}'] = np.nan
+    for col in ['violation_rowgen', 'blocking_coalition_rowgen', 'isimp_rowgen', 'solve_time_rowgen']:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    computed = 0
+    for idx in targets:
+        row = df.loc[idx]
+        day = int(row['day'])
+        print(f"\n  --- Computing core via row generation: day {day} ---")
+
+        # 1. parameters 복원
+        sa = row_to_sa(row)
+        parameters = setup_lem_parameters(
+            PLAYERS, CONFIGURATION, TIME_PERIODS, sa
+        )
+
+        # 2. Row generation으로 core 계산
+        core_comp = CoreComputation(PLAYERS, 'mip', TIME_PERIODS, parameters)
+        t0 = time.time()
+
+        core_rowgen, success = core_comp.compute_core_brute_force()
+        solve_time = time.time() - t0
+        # core_rowgen, success = core_comp.compute_core(
+        #     max_iterations=int(1e+8),
+        #     tolerance=1e-6
+        # )
+        # solve_time = time.time() - t0
+
+        # 3. Core allocation의 violation 측정
+        if success:
+            violation = 0.0
+            coalition = []
+            is_imp = True
+            for u in PLAYERS:
+                df.at[idx, f'profit_rowgen_{u}'] = -1 * core_rowgen[u]  # cost → profit
+                df.at[idx, 'violation_rowgen'] = violation
+                df.at[idx, 'blocking_coalition_rowgen'] = str(coalition) if coalition else ''
+                df.at[idx, 'isimp_rowgen'] = is_imp
+                df.at[idx, 'solve_time_rowgen'] = solve_time
+        else:
+            violation = core_rowgen
+            coalition = np.nan
+            is_imp = np.nan
+            for u in PLAYERS:
+                df.at[idx, f'profit_rowgen_{u}'] = np.nan
+                df.at[idx, 'violation_rowgen'] = violation
+                df.at[idx, 'blocking_coalition_rowgen'] = np.nan
+                df.at[idx, 'isimp_rowgen'] = np.nan
+                df.at[idx, 'solve_time_rowgen'] = solve_time
+                
+
+        print(f"    core allocation: {core_rowgen}")
+        print(f"    violation: {violation:.6f}")
+        print(f"    is_imputation: {is_imp}")
+        print(f"    time: {solve_time:.1f}s")
+
+        computed += 1
+
+
+    return computed
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, default='results_53/export_cap_050_t.csv',
+    parser.add_argument('--input', type=str, default='results_53/low_h2_margin.csv',
                         help='입력 CSV 경로')
-    parser.add_argument('--output', type=str, default='results_53/export_cap_050_t_fixed.csv',
+    parser.add_argument('--output', type=str, default='results_53/low_h2_margin.csv',
                         help='출력 CSV 경로 (기본: 입력 파일 덮어쓰기)')
     args = parser.parse_args()
 
@@ -156,11 +243,18 @@ def main():
     print("Fixing CHP violations...")
     print(f"{'='*50}")
     n_chp = fix_violations(df, 'chp')
+    print(f"Fixed: {n_ip} IP rows, {n_chp} CHP rows")
+
+    # # Row generation
+    # print(f"\n{'='*50}")
+    # print("Computing core via row generation...")
+    # print(f"{'='*50}")
+    # n_rowgen = compute_core_for_both_failed(df)
+    # print(f"Fixed: {n_rowgen} rows")
 
     # 저장
     df.to_csv(outpath, index=False)
     print(f"\nSaved: {outpath}")
-    print(f"Fixed: {n_ip} IP rows, {n_chp} CHP rows")
 
 
 if __name__ == "__main__":

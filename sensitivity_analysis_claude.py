@@ -168,7 +168,7 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
     print(f"\nScenario: {scenario_name}")
     print(f"Total runs: {total_runs}")
 
-    outpath = os.path.join(output_dir, f'{scenario_name}.csv')  # ← 여기
+    outpath = os.path.join(output_dir, f'{scenario_name}_fixed.csv')  # ← 여기
     
     for i, values in enumerate(itertools.product(*param_values)):
         sensitivity_analysis = dict(zip(param_names, values))
@@ -262,6 +262,18 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
                 row['violation_chp'] = np.nan
                 row['blocking_coalition_chp'] = np.nan
                 row['isimp_chp'] = np.nan
+
+            if ip and chp:
+                if (violation_ip > 1e-6) and (violation_chp > 1e-6):
+                    core_comp = CoreComputation(players, 'mip', time_periods, parameters)
+                    core_bf, success = core_comp.compute_core_brute_force()
+                    if success:
+                        row['violation_bf'] = 0.0
+                        row['blocking_coalition_bf'] = []
+                        row['isimp_bf'] = True
+                    else:
+                        row['violation_bf'] = core_bf
+                        row['blocking_coalition_bf'] = np.nan
         # 로그
         flag = " *** IP VIOLATED ***" if row.get('violation_ip', 0) > 1e-6 else ""
         print(f"  IP: {row.get('violation_ip', 0):.4f}{flag} | "
@@ -339,9 +351,9 @@ if __name__ == "__main__":
         "players_with_elec_storage": ['u1'],
         "players_with_hydro_storage": ['u2'],
         "players_with_heat_storage": ['u3'],
-        "players_with_nfl_elec_demand": ['u1'],
-        "players_with_nfl_hydro_demand": ['u2'],
-        "players_with_nfl_heat_demand": ['u3'],
+        "players_with_nfl_elec_demand": ['u4'],
+        "players_with_nfl_hydro_demand": ['u5'],
+        "players_with_nfl_heat_demand": ['u6'],
         "players_with_fl_elec_demand": ['u2', 'u3'],
         "players_with_fl_hydro_demand": [],
         "players_with_fl_heat_demand": [],
@@ -349,7 +361,7 @@ if __name__ == "__main__":
 
     # --- 5.3.4 특수 처리: cap ratio를 동시에 맞추기 ---
     if args.scenario == 'export_cap':
-        for ratio in [0.2, 0.5]:
+        for ratio in [0.2]:
             sub_name = f'export_cap_{int(ratio*100):03d}'
             candidates = make_scenario({
                 'e_E_cap_ratio': [ratio],
@@ -362,11 +374,13 @@ if __name__ == "__main__":
     elif args.scenario == 'all':
         for name in ['low_h2_margin',
                       'full_storage', 'community_size']:
+            if name == 'low_h2_margin':
+                continue
             candidates = SCENARIOS[name]
             run_experiment(candidates, players, configuration,
                            time_periods, name, args.output)
         # 5.3.4는 별도 처리
-        for ratio in [0.2, 0.5]:
+        for ratio in [0.2]:
             sub_name = f'export_cap_{int(ratio*100):03d}'
             candidates = make_scenario({
                 'e_E_cap_ratio': [ratio],

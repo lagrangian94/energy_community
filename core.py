@@ -665,7 +665,7 @@ class CoreComputation:
                 print(f"CORE IS EMPTY")
                 print(f"Slack variable v = {slack:.6f} > {tolerance}")
                 print(f"{'='*70}\n")
-                return None
+                return slack, False
             
             # Step 4: Find violated coalition
             coalition, violation = self.find_violated_coalition(payoffs)
@@ -683,7 +683,7 @@ class CoreComputation:
                     total_payoff += payoffs[i]
                 print(f"  Total: {total_payoff:.4f}")
                 print(f"{'='*70}\n")
-                return payoffs
+                return payoffs, True
             
             # Step 6: Add violated coalition constraint
             print(f"\nAdding violated coalition {coalition} to master problem")
@@ -692,7 +692,7 @@ class CoreComputation:
         print(f"\n{'='*70}")
         print(f"WARNING: Maximum iterations ({max_iterations}) reached")
         print(f"{'='*70}\n")
-        return payoffs
+        return payoffs, False
     def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False) -> float:
             """
             Measure the maximum stability violation for a given payoff allocation
@@ -740,6 +740,64 @@ class CoreComputation:
             if payoffs[player] - self.coalition_costs[tuple([player])] >= 1e-6:
                 return False
         return True
+    def compute_core_brute_force(self) -> Tuple[Dict[str, float], bool]:
+        """
+        Compute core allocation by solving LP with all coalition constraints
+        """
+        print("\n" + "="*70)
+        print("COMPUTING CORE ALLOCATION BY BRUTE FORCE")
+        print("="*70)
+        lp_model = Model("ViolationLP")
+        if len(self.coalition_costs) < (2**len(self.players) - 1):
+            print("\nComputing all coalition costs...")
+            self.find_all_coalitions(verbose=False)
+        else:
+            print(f"\n✓ Using cached coalition costs ({len(self.coalition_costs)} coalitions)")
+        # Create slack variable v
+        v = lp_model.addVar(vtype="C", name="v", lb=0, obj=1.0)
+        payoff_dict = {player: None for player in self.players}
+        for player in self.players:
+            payoff_dict[player] = lp_model.addVar(vtype="C", name=f"chi_{player}", lb=-float('inf'))
+        
+        # Add constraint for each coalition
+        num_constraints = 0
+        for coalition_tuple, cost in self.coalition_costs.items():
+            coalition = list(coalition_tuple)
+                        
+            # Constraint: Σ_{i∈S} payoffs[i] <= c(S) + v
+            lhs = sum(payoff_dict[i] for i in coalition)
+            if len(coalition) != len(self.players):
+                lp_model.addCons(lhs <= cost + v, 
+                                name=f"stability_{'_'.join(sorted(coalition))}")
+            else:
+                lp_model.addCons(lhs == cost, 
+                                name=f"stability_{'_'.join(sorted(coalition))}")
+            num_constraints += 1
+        
+        print(f"✓ Added {num_constraints} stability constraints")
+        
+        # Solve LP
+        print("\nSolving LP...")
+        lp_model.optimize()
+        
+        status = lp_model.getStatus()
+        if status != "optimal":
+            print(f"WARNING: LP failed with status {status}")
+            return float('inf')
+        
+        violation = lp_model.getVal(v)
+        for player in self.players:
+            payoff_dict[player] = lp_model.getVal(payoff_dict[player])
+        
+        print(f"\n✓ Optimal solution found")
+        print(f"  Maximum violation (slack v): {violation:.6f}")
+        
+        if violation <= 1e-6:
+            print(f"  → Payoff IS in the core (stable)")
+            return payoff_dict, True
+        else:
+            print(f"  → Payoff is NOT in the core (violation = {violation:.6f})")
+            return payoff_dict, False
     def _measure_violation_brute_force(self, payoffs: Dict[str, float]) -> float:
         """
         Measure violation by solving LP with all coalition constraints

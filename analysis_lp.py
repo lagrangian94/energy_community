@@ -83,14 +83,15 @@ if __name__ == "__main__":
     compute_core = False
     if compute_core:
         time_start = time.time()
-        core_allocation = core_comp.compute_core(
+        # fail일 경우 첫번째 인자 core_allocation이 violation이 됨.
+        core_allocation, success = core_comp.compute_core(
             max_iterations=500,
             tolerance=1e-6
         )
         time_end = time.time()
         time_core = time_end - time_start
         print(f"Time taken: {time_core:.2f} seconds")
-        if core_allocation:
+        if success:
             print("double check the stability of the found core allocation")
             coalition_found_core, violation_found_core, isimp_found_core = core_comp.measure_stability_violation(core_allocation)
             if violation_found_core <= 1e-6:    

@@ -240,14 +240,14 @@ if __name__ == "__main__":
     # Compute core allocation
     if compute_core:
         time_start = time.time()
-        core_rowgen = core_comp.compute_core(
+        core_rowgen, success = core_comp.compute_core(
             max_iterations=1e+8,
             tolerance=1e-6
         )
         time_end = time.time()
         time_rowgen = time_end - time_start
         print(f"Time taken: {time_rowgen:.2f} seconds")
-        if core_rowgen:
+        if success:
             print("double check the stability of the found core allocation")
             coalition_rowgen, violation_rowgen, isimp_rowgen = core_comp.measure_stability_violation(core_rowgen)
             if violation_rowgen <= 1e-6:    
