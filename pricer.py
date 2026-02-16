@@ -233,7 +233,10 @@ class LEMPricer(Pricer):
         """
         if farkas:
             return
-        self.lb = max(self.lb, np.sum(obj_val_list))
+        try:
+            self.lb = max(self.lb, np.sum(obj_val_list))
+        except:
+            print("stop")
         return
 
     # ===================================================================
@@ -330,7 +333,7 @@ class LEMPricer(Pricer):
             return base_alpha
 
         gap = Z_RM - self.L_bar
-        if gap < 1e-6:
+        if gap < 1e-2:
             # Gap이 충분히 작으면 standard CG로 전환
             return 1.0
 

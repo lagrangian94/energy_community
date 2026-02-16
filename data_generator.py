@@ -92,14 +92,14 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         month = 1
         hp_cap = 0.8 #MW [0.6, 0.8, 1.0]
         els_cap = 1 #MW
-        num_households = 1000
+        num_households = 700
         nu_cop = 3.28
         c_su_G = 50
         c_su_H = 10 
         base_h2_price_eur = 5000/1500 #2.1*1.5 # [3000/1500, 4000/1500, 6000/1500]
-        e_E_cap_ratio = 0.2 # [0.2, 0.7, 1.0]
-        e_H_cap_ratio = 0.2 # [0.2, 0.7, 1.0]
-        e_G_cap_ratio = 0.2 # [0.2, 0.7, 1.0]
+        e_E_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
+        e_H_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
+        e_G_cap_ratio = 1.0 # [0.2, 0.7, 1.0]
         eff_type = 1
         segments = 6
         peak_penalty_ratio = 0.0
@@ -114,7 +114,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         initial_soc_ratio_E = 0.2
         initial_soc_ratio_G = 0.2
         initial_soc_ratio_H = 0.2
-        day = 5
+        day = 9
     # Example parameters with proper bounds and storage types
     parameters = {
         'players_with_renewables': configuration['players_with_renewables'],
