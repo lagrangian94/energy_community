@@ -22,7 +22,7 @@ class ColumnGenerationSolver:
     Main column generation solver for Local Energy Market
     Implements Dantzig-Wolfe decomposition to compute convex hull prices
     """
-    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict, model_type: str, init_sol: Dict = None):
+    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict, model_type: str, init_sol: Dict = None, smoothing: bool = False):
         """
         Initialize column generation solver
         
@@ -35,6 +35,7 @@ class ColumnGenerationSolver:
         self.time_periods = time_periods
         self.parameters = parameters
         self.init_sol = init_sol
+        self.smoothing = smoothing
         # Create subproblems for each player
         print("=== Creating Subproblems ===")
         self.subproblems = {}
@@ -83,9 +84,24 @@ class ColumnGenerationSolver:
         pricer = LEMPricer(
             subproblems=self.subproblems,
             time_periods=self.time_periods,
-            players=self.players
+            players=self.players,
+            smoothing=self.smoothing
         )
-        
+
+        # Set incumbent value for smoothing
+        if self.smoothing and self.init_sol is not None:
+            from solver import calculate_column_cost
+            Z_INC = sum(
+                calculate_column_cost(
+                    p,
+                    {k: {key: val for key, val in self.init_sol[k].items() if key[0] == p} for k in self.init_sol},
+                    self.subproblems[p].parameters,
+                    self.time_periods
+                )
+                for p in self.players
+            )
+            pricer.Z_INC = Z_INC
+
         # Include pricer in master problem
         self.master.model.includePricer(
             pricer,
