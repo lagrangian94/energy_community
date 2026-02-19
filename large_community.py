@@ -143,13 +143,14 @@ def apply_15player_overrides(parameters, time_periods):
 # Main experiment runner
 # ============================================================
 
-def run_single_day(sensitivity_analysis, players, configuration,
-                   time_periods, scenario_name, run_id, total_runs):
+def run_single_day_pricing(sensitivity_analysis, players, configuration,
+                           time_periods, scenario_name, run_id, total_runs):
     """
-    Run IP → CHP → CHP Smoothing → Core violation for a single parameter combo.
-    Returns a dict with all results for this run.
+    Run IP → CHP → CHP Smoothing + core violation check for a single parameter combo.
+    (Pricing only — no row generation.)
+    Returns a dict with all pricing results for this run.
     """
-    print(f"\n--- Run {run_id + 1}/{total_runs} | Day {sensitivity_analysis.get('day', '?')} ---")
+    print(f"\n--- [Pricing] Run {run_id + 1}/{total_runs} | Day {sensitivity_analysis.get('day', '?')} ---")
 
     parameters = setup_lem_parameters(
         players, configuration, time_periods, sensitivity_analysis
@@ -282,10 +283,44 @@ def run_single_day(sensitivity_analysis, players, configuration,
     del cg_smooth
     gc.collect()
 
-    # --- Row Generation (Core) ---
+    # Log
+    flag = " *** IP VIOLATED ***" if row.get('violation_ip', 0) > 1e-6 else ""
+    print(f"  IP: {row.get('violation_ip', 0):.4f}{flag} | "
+          f"CHP: {row.get('violation_chp', 0):.4f} | "
+          f"CHP_S: {row.get('violation_chp_smooth', 0):.4f} | "
+          f"t_IP={row.get('solve_time_ip', 0):.1f}s "
+          f"t_CHP={row.get('solve_time_chp', 0):.1f}s "
+          f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s "
+          f"speedup={row.get('speedup_chp_smooth', 0):.2f}x")
+
+    return row
+
+
+def run_single_day_rowgen(sensitivity_analysis, players, configuration,
+                          time_periods, scenario_name, run_id, total_runs,
+                          time_limit=3600):
+    """
+    Run Row Generation (Core computation) for a single parameter combo.
+    Returns a dict with rowgen results for this run.
+    """
+    print(f"\n--- [RowGen] Run {run_id + 1}/{total_runs} | Day {sensitivity_analysis.get('day', '?')} ---")
+
+    parameters = setup_lem_parameters(
+        players, configuration, time_periods, sensitivity_analysis
+    )
+    parameters = apply_15player_overrides(parameters, time_periods)
+
+    row = {
+        'scenario': scenario_name,
+        'run_id': run_id,
+        **{k: v for k, v in sensitivity_analysis.items()},
+    }
+
+    core_comp = CoreComputation(players, 'mip', time_periods, parameters)
+
     t0 = time.time()
     core_rowgen, success_rowgen = core_comp.compute_core(
-        max_iterations=int(1e8), tolerance=1e-6
+        max_iterations=int(1e8), tolerance=1e-6, time_limit=time_limit
     )
     row['solve_time_rowgen'] = time.time() - t0
     print(f"Row generation time: {row['solve_time_rowgen']:.2f}s")
@@ -299,7 +334,7 @@ def run_single_day(sensitivity_analysis, players, configuration,
         for u in players:
             row[f'profit_rowgen_{u}'] = -1 * core_rowgen[u]
     else:
-        print("Row generation: core is empty")
+        print("Row generation: core not found (empty or time limit)")
         row['violation_rowgen'] = np.nan
         row['blocking_coalition_rowgen'] = ''
         row['isimp_rowgen'] = np.nan
@@ -307,25 +342,16 @@ def run_single_day(sensitivity_analysis, players, configuration,
             row[f'profit_rowgen_{u}'] = np.nan
     gc.collect()
 
-    # Log
-    flag = " *** IP VIOLATED ***" if row.get('violation_ip', 0) > 1e-6 else ""
-    print(f"  IP: {row.get('violation_ip', 0):.4f}{flag} | "
-          f"CHP: {row.get('violation_chp', 0):.4f} | "
-          f"CHP_S: {row.get('violation_chp_smooth', 0):.4f} | "
-          f"RG: {row.get('violation_rowgen', 'N/A')} | "
-          f"t_IP={row.get('solve_time_ip', 0):.1f}s "
-          f"t_CHP={row.get('solve_time_chp', 0):.1f}s "
-          f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s "
-          f"t_RG={row.get('solve_time_rowgen', 0):.1f}s "
-          f"speedup={row.get('speedup_chp_smooth', 0):.2f}x")
+    print(f"  RG: {row.get('violation_rowgen', 'N/A')} | "
+          f"t_RG={row.get('solve_time_rowgen', 0):.1f}s")
 
     return row
 
 
-def run_experiment(sensitivity_analysis_candidates, players, configuration,
-                   time_periods, scenario_name, output_dir='results_15p'):
+def run_experiment_pricing(sensitivity_analysis_candidates, players, configuration,
+                           time_periods, scenario_name, output_dir='results_15p'):
     """
-    Run all parameter combinations for a given scenario.
+    Phase 1: Run all pricing (IP → CHP → CHP Smoothing) for all parameter combinations.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -335,16 +361,16 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
     total_runs = 1
     for v in param_values:
         total_runs *= len(v)
-    print(f"\nScenario: {scenario_name}")
+    print(f"\n[Phase 1: Pricing] Scenario: {scenario_name}")
     print(f"Total runs: {total_runs}")
     print(f"Players: {len(players)}")
 
-    outpath = os.path.join(output_dir, f'{scenario_name}.csv')
+    outpath = os.path.join(output_dir, f'{scenario_name}_pricing.csv')
     results_summary = []
 
     for i, values in enumerate(itertools.product(*param_values)):
         sensitivity_analysis = dict(zip(param_names, values))
-        row = run_single_day(
+        row = run_single_day_pricing(
             sensitivity_analysis, players, configuration,
             time_periods, scenario_name, i, total_runs
         )
@@ -355,6 +381,77 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
         df.to_csv(outpath, index=False)
 
     df = pd.DataFrame(results_summary)
+    print(f"\nPricing results saved to {outpath}")
+    return df
+
+
+def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuration,
+                          time_periods, scenario_name, output_dir='results_15p',
+                          time_limit=3600):
+    """
+    Phase 2: Run row generation (core computation) for all parameter combinations.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    param_names = list(sensitivity_analysis_candidates.keys())
+    param_values = [sensitivity_analysis_candidates[name] for name in param_names]
+
+    total_runs = 1
+    for v in param_values:
+        total_runs *= len(v)
+    print(f"\n[Phase 2: RowGen] Scenario: {scenario_name}")
+    print(f"Total runs: {total_runs}")
+    print(f"Players: {len(players)}")
+    print(f"Time limit per run: {time_limit}s")
+
+    outpath = os.path.join(output_dir, f'{scenario_name}_rowgen.csv')
+    results_summary = []
+
+    for i, values in enumerate(itertools.product(*param_values)):
+        sensitivity_analysis = dict(zip(param_names, values))
+        row = run_single_day_rowgen(
+            sensitivity_analysis, players, configuration,
+            time_periods, scenario_name, i, total_runs,
+            time_limit=time_limit
+        )
+        results_summary.append(row)
+
+        # Incremental save after each run
+        df = pd.DataFrame(results_summary)
+        df.to_csv(outpath, index=False)
+
+    df = pd.DataFrame(results_summary)
+    print(f"\nRowGen results saved to {outpath}")
+    return df
+
+
+def run_experiment(sensitivity_analysis_candidates, players, configuration,
+                   time_periods, scenario_name, output_dir='results_15p',
+                   time_limit=3600):
+    """
+    Run both phases sequentially: pricing first, then row generation.
+    Results are saved separately and merged at the end.
+    """
+    # Phase 1: Pricing
+    df_pricing = run_experiment_pricing(
+        sensitivity_analysis_candidates, players, configuration,
+        time_periods, scenario_name, output_dir
+    )
+
+    # Phase 2: Row Generation
+    df_rowgen = run_experiment_rowgen(
+        sensitivity_analysis_candidates, players, configuration,
+        time_periods, scenario_name, output_dir, time_limit=time_limit
+    )
+
+    # Merge on shared keys
+    merge_keys = ['scenario', 'run_id'] + list(sensitivity_analysis_candidates.keys())
+    df = df_pricing.merge(df_rowgen, on=merge_keys, how='left')
+
+    outpath = os.path.join(output_dir, f'{scenario_name}.csv')
+    df.to_csv(outpath, index=False)
+    print(f"\nMerged results saved to {outpath}")
+
     print_scenario_summary(df, scenario_name)
     return df
 
@@ -407,10 +504,17 @@ def print_scenario_summary(df, scenario_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='15-Player Energy Community Experiment')
-    parser.add_argument('--day', type=int, nargs='+', default=[1],
+    parser.add_argument('--day', type=int, nargs='+', default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27, 28, 29, 30, 31],
                         help='Day(s) to run (e.g. --day 1 or --day 1 2 3)')
     parser.add_argument('--output', type=str, default='results_15p',
                         help='Output directory')
+    parser.add_argument('--phase', type=str, default='all',
+                        choices=['all', 'pricing', 'rowgen'],
+                        help='Which phase to run: pricing only, rowgen only, or all (default: all)')
+    parser.add_argument('--time-limit', type=float, default=3600,
+                        help='Row generation time limit in seconds (default: 3600)')
     args = parser.parse_args()
 
     time_periods = list(range(24))
@@ -418,11 +522,21 @@ if __name__ == "__main__":
     candidates = dict(BASELINE_CANDIDATES_15)
     candidates['day'] = args.day
 
-    run_experiment(
-        candidates,
-        PLAYERS_15,
-        CONFIGURATION_15,
-        time_periods,
-        scenario_name='15player_baseline',
-        output_dir=args.output,
-    )
+    if args.phase == 'pricing':
+        run_experiment_pricing(
+            candidates, PLAYERS_15, CONFIGURATION_15,
+            time_periods, scenario_name='15player_baseline',
+            output_dir=args.output,
+        )
+    elif args.phase == 'rowgen':
+        run_experiment_rowgen(
+            candidates, PLAYERS_15, CONFIGURATION_15,
+            time_periods, scenario_name='15player_baseline',
+            output_dir=args.output, time_limit=args.time_limit,
+        )
+    else:
+        run_experiment(
+            candidates, PLAYERS_15, CONFIGURATION_15,
+            time_periods, scenario_name='15player_baseline',
+            output_dir=args.output, time_limit=args.time_limit,
+        )

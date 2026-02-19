@@ -627,31 +627,50 @@ class CoreComputation:
         
         return coalition, violation
     
-    def compute_core(self, 
+    def compute_core(self,
                      max_iterations: int = 100,
-                     tolerance: float = 1e-6) -> Optional[Dict[str, float]]:
+                     tolerance: float = 1e-6,
+                     time_limit: float = 3600) -> Optional[Dict[str, float]]:
         """
         Main row generation algorithm to compute core allocation
-        
+
         Args:
             max_iterations: Maximum number of iterations
             tolerance: Convergence tolerance
-            
+            time_limit: Time limit in seconds (default: 3600 = 1 hour)
+
         Returns:
             Dict[str, float]: Core allocation if exists, None otherwise
         """
+        import time
+
         print("\n" + "="*70)
         print("STARTING ROW GENERATION ALGORITHM")
+        print(f"Time limit: {time_limit:.0f} seconds")
         print("="*70)
-        
+
+        start_time = time.time()
+
         # Step 1: Initialize with singleton coalitions
         initial_coalitions = [[player] for player in self.players]
         self.initialize_master_problem(initial_coalitions)
-        
+
         iteration = 0
-        
+
         while iteration < max_iterations:
             iteration += 1
+
+            # Check time limit every 10 iterations
+            if iteration % 10 == 0:
+                elapsed = time.time() - start_time
+                print(f"  [Time check at iteration {iteration}] Elapsed: {elapsed:.1f}s / {time_limit:.0f}s")
+                if elapsed > time_limit:
+                    print(f"\n{'='*70}")
+                    print(f"TIME LIMIT EXCEEDED ({elapsed:.1f}s > {time_limit:.0f}s)")
+                    print(f"Stopped after {iteration} iterations")
+                    print(f"{'='*70}\n")
+                    return payoffs if 'payoffs' in dir() else None, False
+
             print(f"\n{'='*70}")
             print(f"ITERATION {iteration}")
             print(f"{'='*70}")
