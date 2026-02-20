@@ -192,48 +192,48 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
     del lem
     gc.collect()
 
-    # --- CHP ---
-    cg = ColumnGenerationSolver(
-        players, time_periods, parameters,
-        model_type='mip', init_sol=results_ip
-    )
-    t0 = time.time()
-    status_chp, results_chp, obj_val, solution_by_player = cg.solve()
-    row['solve_time_chp'] = time.time() - t0
-    print(f"CHP time: {row['solve_time_chp']:.2f}s")
+    # # --- CHP ---
+    # cg = ColumnGenerationSolver(
+    #     players, time_periods, parameters,
+    #     model_type='mip', init_sol=results_ip
+    # )
+    # t0 = time.time()
+    # status_chp, results_chp, obj_val, solution_by_player = cg.solve()
+    # row['solve_time_chp'] = time.time() - t0
+    # print(f"CHP time: {row['solve_time_chp']:.2f}s")
 
-    if status_chp == "optimal":
-        print(f"CHP optimal objective: {obj_val:.2f} EUR")
-        community_prices_chp = results_chp.get('convex_hull_prices', {})
-        if "capacity_prices" in results_chp:
-            community_prices_chp = community_prices_chp | results_chp['capacity_prices']
-        synergy_results = cg.analyze_synergy_with_convex_hull_prices(
-            results_ip, obj_val, community_prices_chp
-        )
-        profit_chp = {u: synergy_results['community_profits'][u]['net_profit'] for u in players}
-    else:
-        print(f"CHP failed: {status_chp}")
-        profit_chp = {u: np.nan for u in players}
+    # if status_chp == "optimal":
+    #     print(f"CHP optimal objective: {obj_val:.2f} EUR")
+    #     community_prices_chp = results_chp.get('convex_hull_prices', {})
+    #     if "capacity_prices" in results_chp:
+    #         community_prices_chp = community_prices_chp | results_chp['capacity_prices']
+    #     synergy_results = cg.analyze_synergy_with_convex_hull_prices(
+    #         results_ip, obj_val, community_prices_chp
+    #     )
+    #     profit_chp = {u: synergy_results['community_profits'][u]['net_profit'] for u in players}
+    # else:
+    #     print(f"CHP failed: {status_chp}")
+    #     profit_chp = {u: np.nan for u in players}
 
-    for u in players:
-        row[f'profit_chp_{u}'] = profit_chp[u]
+    # for u in players:
+    #     row[f'profit_chp_{u}'] = profit_chp[u]
 
-    if status_chp == "optimal":
-        cost_chp = {u: -1 * profit_chp[u] for u in players}
-        coalition_chp, violation_chp, isimp_chp = core_comp.measure_stability_violation(cost_chp)
-        row['violation_chp'] = violation_chp
-        row['blocking_coalition_chp'] = str(coalition_chp) if violation_chp > 1e-6 else ''
-        row['isimp_chp'] = isimp_chp
-        for carrier in ['electricity', 'heat', 'hydrogen']:
-            if carrier in community_prices_chp:
-                for t in time_periods:
-                    row[f'chp_price_{carrier}_{t}'] = community_prices_chp[carrier][t]
-    else:
-        row['violation_chp'] = np.nan
-        row['blocking_coalition_chp'] = np.nan
-        row['isimp_chp'] = np.nan
-    del cg
-    gc.collect()
+    # if status_chp == "optimal":
+    #     cost_chp = {u: -1 * profit_chp[u] for u in players}
+    #     coalition_chp, violation_chp, isimp_chp = core_comp.measure_stability_violation(cost_chp)
+    #     row['violation_chp'] = violation_chp
+    #     row['blocking_coalition_chp'] = str(coalition_chp) if violation_chp > 1e-6 else ''
+    #     row['isimp_chp'] = isimp_chp
+    #     for carrier in ['electricity', 'heat', 'hydrogen']:
+    #         if carrier in community_prices_chp:
+    #             for t in time_periods:
+    #                 row[f'chp_price_{carrier}_{t}'] = community_prices_chp[carrier][t]
+    # else:
+    #     row['violation_chp'] = np.nan
+    #     row['blocking_coalition_chp'] = np.nan
+    #     row['isimp_chp'] = np.nan
+    # del cg
+    # gc.collect()
 
     # --- CHP Smoothing ---
     cg_smooth = ColumnGenerationSolver(
@@ -271,15 +271,15 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
         row['blocking_coalition_chp_smooth'] = np.nan
         row['isimp_chp_smooth'] = np.nan
 
-    # Performance comparison
-    if row.get('solve_time_chp_smooth', 0) > 0:
-        row['speedup_chp_smooth'] = row.get('solve_time_chp', 0) / row['solve_time_chp_smooth']
-    else:
-        row['speedup_chp_smooth'] = np.nan
-    if status_chp == "optimal" and status_smooth == "optimal":
-        row['obj_diff_chp_smooth'] = abs(obj_val - obj_val_smooth)
-    else:
-        row['obj_diff_chp_smooth'] = np.nan
+    # # Performance comparison
+    # if row.get('solve_time_chp_smooth', 0) > 0:
+    #     row['speedup_chp_smooth'] = row.get('solve_time_chp', 0) / row['solve_time_chp_smooth']
+    # else:
+    #     row['speedup_chp_smooth'] = np.nan
+    # if status_chp == "optimal" and status_smooth == "optimal":
+    #     row['obj_diff_chp_smooth'] = abs(obj_val - obj_val_smooth)
+    # else:
+    #     row['obj_diff_chp_smooth'] = np.nan
     del cg_smooth
     gc.collect()
 
@@ -348,6 +348,22 @@ def run_single_day_rowgen(sensitivity_analysis, players, configuration,
     return row
 
 
+def _save_with_day_update(outpath, new_df, day_values):
+    """
+    If outpath exists, replace rows matching day_values and keep the rest.
+    If a day doesn't exist yet, the new rows are inserted.
+    Result is sorted by day.
+    """
+    if os.path.exists(outpath):
+        existing_df = pd.read_csv(outpath)
+        keep = existing_df[~existing_df['day'].isin(day_values)]
+        merged = pd.concat([keep, new_df], ignore_index=True)
+        merged.sort_values('day', inplace=True)
+        merged.to_csv(outpath, index=False)
+    else:
+        new_df.to_csv(outpath, index=False)
+
+
 def run_experiment_pricing(sensitivity_analysis_candidates, players, configuration,
                            time_periods, scenario_name, output_dir='results_15p'):
     """
@@ -366,6 +382,7 @@ def run_experiment_pricing(sensitivity_analysis_candidates, players, configurati
     print(f"Players: {len(players)}")
 
     outpath = os.path.join(output_dir, f'{scenario_name}_pricing.csv')
+    day_values = sensitivity_analysis_candidates.get('day', [])
     results_summary = []
 
     for i, values in enumerate(itertools.product(*param_values)):
@@ -376,9 +393,9 @@ def run_experiment_pricing(sensitivity_analysis_candidates, players, configurati
         )
         results_summary.append(row)
 
-        # Incremental save after each run
-        df = pd.DataFrame(results_summary)
-        df.to_csv(outpath, index=False)
+        # Incremental save — overwrite current days, keep others
+        df_new = pd.DataFrame(results_summary)
+        _save_with_day_update(outpath, df_new, day_values)
 
     df = pd.DataFrame(results_summary)
     print(f"\nPricing results saved to {outpath}")
@@ -405,6 +422,7 @@ def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuratio
     print(f"Time limit per run: {time_limit}s")
 
     outpath = os.path.join(output_dir, f'{scenario_name}_rowgen.csv')
+    day_values = sensitivity_analysis_candidates.get('day', [])
     results_summary = []
 
     for i, values in enumerate(itertools.product(*param_values)):
@@ -416,9 +434,9 @@ def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuratio
         )
         results_summary.append(row)
 
-        # Incremental save after each run
-        df = pd.DataFrame(results_summary)
-        df.to_csv(outpath, index=False)
+        # Incremental save — overwrite current days, keep others
+        df_new = pd.DataFrame(results_summary)
+        _save_with_day_update(outpath, df_new, day_values)
 
     df = pd.DataFrame(results_summary)
     print(f"\nRowGen results saved to {outpath}")
@@ -504,13 +522,11 @@ def print_scenario_summary(df, scenario_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='15-Player Energy Community Experiment')
-    parser.add_argument('--day', type=int, nargs='+', default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-    11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-    25, 26, 27, 28, 29, 30, 31],
+    parser.add_argument('--day', type=int, nargs='+', default=[31],
                         help='Day(s) to run (e.g. --day 1 or --day 1 2 3)')
     parser.add_argument('--output', type=str, default='results_15p',
                         help='Output directory')
-    parser.add_argument('--phase', type=str, default='all',
+    parser.add_argument('--phase', type=str, default='pricing',
                         choices=['all', 'pricing', 'rowgen'],
                         help='Which phase to run: pricing only, rowgen only, or all (default: all)')
     parser.add_argument('--time-limit', type=float, default=3600,

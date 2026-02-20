@@ -257,8 +257,8 @@ class LEMPricer(Pricer):
         pi_ST_hydro = {t: alpha * pi_RM_hydro[t] + (1 - alpha) * self.pi_bar_hydro[t] for t in self.time_periods}
         pi_ST_conv = {p: alpha * pi_RM_conv[p] + (1 - alpha) * self.pi_bar_conv[p] for p in self.players}
 
-        # Step 4: π^ST로 모든 player pricing
-        columns_added = 0
+        # Step 6 (moved up): L(π^ST) 계산 및 π̄ 업데이트
+        # π^ST로 pricing하여 Lagrangean bound를 먼저 계산
         st_solutions = {}
         st_obj_vals = {}
         for player in self.players:
@@ -267,17 +267,6 @@ class LEMPricer(Pricer):
             st_solutions[player] = sol
             st_obj_vals[player] = obj_val
 
-        # Step 5: 각 column에 대해 π^RM 기준 reduced cost 재계산 (subproblem re-solve 없이)
-        misprice = False
-        for player in self.players:
-            if st_solutions[player] is not None:
-                rc_rm = self._recalculate_reduced_cost_wrt_pi_RM(
-                    player, st_solutions[player], pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
-                if rc_rm < -1e-8:
-                    self._add_column(player, st_solutions[player])
-                    columns_added += 1
-
-        # Step 6: L(π^ST) 계산 및 π̄ 업데이트
         L_pi_ST = self._compute_lagrangean_bound(st_obj_vals, pi_ST_conv)
         if L_pi_ST > self.L_bar:
             self.L_bar = L_pi_ST
@@ -289,13 +278,31 @@ class LEMPricer(Pricer):
         # Also update the standard Lagrangian bound for consistency
         self.lb = max(self.lb, L_pi_ST)
 
+        # Early termination: LB가 LP objective에 충분히 가까우면 column 추가 없이 종료
+        if self.lb > Z_RM - 1e-7:
+            print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | L_bar: {self.L_bar:12.2f} | "
+                  f"α: {alpha:.2f} | EARLY TERMINATION (LB ≥ Z_RM)")
+            print("\n>>> Column generation converged: LB reached LP objective <<<\n")
+            return {"result": SCIP_RESULT.SUCCESS}
+
+        # Step 4→5: 각 column에 대해 π^RM 기준 reduced cost 재계산 (subproblem re-solve 없이)
+        columns_added = 0
+        misprice = False
+        for player in self.players:
+            if st_solutions[player] is not None:
+                rc_rm = self._recalculate_reduced_cost_wrt_pi_RM(
+                    player, st_solutions[player], pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
+                if rc_rm < -1e-8:
+                    self._add_column(player, st_solutions[player])
+                    columns_added += 1
+
         # Step 7: Misprice fallback — π^RM으로 재pricing
         if columns_added == 0:
             misprice = True
             for player in self.players:
                 rc_rm, sol, obj_val = self.subproblems[player].solve_pricing(
                     pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
-                if rc_rm < -1e-8:
+                if rc_rm < -1e-7:
                     self._add_column(player, sol)
                     columns_added += 1
 
