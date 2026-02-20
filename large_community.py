@@ -44,14 +44,15 @@ PLAYERS_15 = [
 
 CONFIGURATION_15 = {
     # u11 in solar with cap=0 (workaround for Pure ESS to get export vars)
+    # 만약 다른 pure hydro/heat storage player가 들어온다면 얘네도 players_with_electrolyzers, players_with_heatpumps에 추가해야 함; cap=0으로 두고.
     "players_with_renewables": ['u1', 'u7', 'u10', 'u11'],
     "players_with_solar": ['u7', 'u11'],          # u11: cap=0
     "players_with_wind": ['u1', 'u10'],
     "players_with_electrolyzers": ['u2', 'u8', 'u10'],
     "players_with_heatpumps": ['u3', 'u9'],
     "players_with_elec_storage": ['u1', 'u7', 'u10', 'u11'],
-    "players_with_hydro_storage": ['u2', 'u10'],
-    "players_with_heat_storage": ['u3'],
+    "players_with_hydro_storage": ['u8', 'u10'],
+    "players_with_heat_storage": ['u9'],
     # u11 in nfl_elec_demand with demand=0 (workaround for import vars)
     "players_with_nfl_elec_demand": ['u4', 'u11', 'u12', 'u15'],
     "players_with_nfl_hydro_demand": ['u5', 'u13', 'u15'],
@@ -87,7 +88,7 @@ BASELINE_CANDIDATES_15 = {
     'storage_power_ratio_H': [0.25],
     'storage_capacity_ratio_E': [3.0],
     'storage_capacity_ratio_G': [3.0],
-    'storage_capacity_ratio_H': [0.0],
+    'storage_capacity_ratio_H': [3.0],
     'initial_soc_ratio_E': [0.2],
     'initial_soc_ratio_G': [0.2],
     'initial_soc_ratio_H': [0.2],
