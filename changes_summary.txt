@@ -1,0 +1,45 @@
+30-Player Community 설정 수정사항 (2026-02-22)
+================================================
+
+1. els_cap per-player 지원 추가
+   - data_generator.py: electrolyzer별 els_cap_{u} 파라미터 생성 추가
+   - compact_utility.py: 3곳(line 534, 1013, 1255)에서 global els_cap만 읽던 것을
+     els_cap_{u} → els_cap fallback 패턴으로 변경 (hp_cap과 동일 방식)
+   - 효과: apply_30player_overrides의 u18(1.2x), u19(0.6x), u21(0.8x) 오버라이드가
+     이제 실제로 적용됨 (기존에는 dead code였음)
+
+2. 소비자별 수요 차별화 (large_community.py - apply_30player_overrides)
+   - 기존: 모든 소비자가 동일한 수요 프로필 사용
+   - 변경: 공급 성장 비율에 맞춰 새 소비자(u23~u30) 수요 스케일링
+
+   전기 수요 (공급 성장 2.18x에 맞춤):
+     u23: 0.5x (residential prosumer, 소규모)
+     u24: 0.8x (residential + ESS)
+     u25: 0.6x (residential, 소규모)
+     u28: 0.9x (industrial, 대규모)
+     u29: 0.7x (industrial + ESS)
+     → 15p 대비 총 수요 성장: ~2.17x
+
+   수소 수요 (공급 성장 1.87x에 맞춤):
+     u26: 0.6x (refueling station with solar)
+     u27: 0.5x (small refueling station)
+     u28: 0.5x (industrial)
+     u29: 0.4x (industrial, 소규모 H2)
+     → 15p 대비 총 수요 성장: ~2.0x
+
+   열 수요 (공급 성장 1.43x에 맞춤):
+     u23: 0.4x (residential)
+     u24: 0.3x (residential, 소규모)
+     u25: 0.3x (residential, 소규모)
+     u30: 0.3x (heat consumer, 소규모)
+     → 15p 대비 총 수요 성장: ~1.43x
+
+   - utility도 demand에 비례해서 동일 비율로 스케일링
+
+3. copy-paste 버그 수정 (compact_utility.py:3534)
+   - 수정 전: c_sto_H = self.params.get('c_sto_G', np.inf)
+   - 수정 후: c_sto_H = self.params.get('c_sto_H', np.inf)
+   - 현재 c_sto 값이 모두 0.0이라 실제 결과 영향은 없음
+
+4. u24, u29에 ESS 추가 (CONFIGURATION_30)
+   - players_with_elec_storage에 u24, u29 추가

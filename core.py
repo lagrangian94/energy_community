@@ -630,7 +630,7 @@ class CoreComputation:
     def compute_core(self,
                      max_iterations: int = 100,
                      tolerance: float = 1e-6,
-                     time_limit: float = 3600) -> Optional[Dict[str, float]]:
+                     time_limit: float = 36000) -> Optional[Dict[str, float]]:
         """
         Main row generation algorithm to compute core allocation
 

@@ -516,7 +516,7 @@ class LocalEnergyMarket:
                     self.p[u,'res',t] = self.model.addVar(vtype="C", name=f"p_res_{u}_{t}", 
                                                         lb=0, ub=renewable_cap, obj=c_res)
                 if u in self.players_with_heatpumps:  # Heat pumps
-                    hp_cap = self.params.get(f'hp_cap', -np.inf)  # Default 100 kW thermal
+                    hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
                     c_hp = self.params.get(f'c_hp_{u}', np.inf)
                     self.p[u,'hp',t] = self.model.addVar(vtype="C", name=f"p_hp_{u}_{t}", 
                                                        lb=0, ub=hp_cap, obj=c_hp)
@@ -531,7 +531,7 @@ class LocalEnergyMarket:
                         # self.z_ru_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_ru_H_{u}_{t}")
 
                 if u in self.players_with_electrolyzers:  # Electrolyzers
-                    els_cap = self.params.get(f'els_cap', -np.inf)  # Default 1 MW
+                    els_cap = self.params.get(f'els_cap_{u}', self.params.get(f'els_cap', -np.inf))
                     c_els = self.params.get(f'c_els_{u}', 0)
                     El = self.params.get("El", None)
                     eff_type = El['eff_type']
@@ -1010,7 +1010,7 @@ class LocalEnergyMarket:
         El = self.params.get("El", None)
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
-            els_cap = self.params.get(f'els_cap', -np.inf)
+            els_cap = self.params.get(f'els_cap_{u}', self.params.get(f'els_cap', -np.inf))
             c_sb = self.params.get(f'c_sb_G', -np.inf)
             c_min = self.params.get(f'c_min_G', -np.inf)
             c_max = self.params.get(f'c_max_G', -np.inf)
@@ -1175,7 +1175,7 @@ class LocalEnergyMarket:
                     self.electrolyzer_cons[f"electrolyzer_minimum_down_time_{u}_{t}"] = cons
     def _add_heat_nonconvex_cons_mip(self):
         for u in self.players_with_heatpumps:
-            hp_cap = self.params.get(f'hp_cap', -np.inf)
+            hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
             c_min = self.params.get(f'c_min_H', -np.inf)
             c_max = self.params.get(f'c_max_H', -np.inf)
             c_RU_H = self.params.get(f'c_RU_H', -np.inf)
@@ -1252,7 +1252,7 @@ class LocalEnergyMarket:
     def _add_hydro_nonconvex_cons_lp_relax(self):
         # Electrolyzer coupling constraint (constraint 15)
         for u in self.players_with_electrolyzers:
-            els_cap = self.params.get(f'els_cap', -np.inf)
+            els_cap = self.params.get(f'els_cap_{u}', self.params.get(f'els_cap', -np.inf))
             El = self.params.get("El", None)
             c_max = self.params.get(f'c_max_G', -np.inf)
             for t in self.time_periods:
@@ -3531,7 +3531,7 @@ class LocalEnergyMarket:
                 # 4. 저장 비용
                 c_sto_E = self.params.get('c_sto_E', np.inf)
                 c_sto_G = self.params.get('c_sto_G', np.inf)
-                c_sto_H = self.params.get('c_sto_G', np.inf)
+                c_sto_H = self.params.get('c_sto_H', np.inf)
                 nu_ch = self.params.get('nu_ch', 0.9)
                 nu_dis = self.params.get('nu_dis', 0.9)
                 

@@ -208,9 +208,11 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         parameters[f'c_hp_{u}'] = parameters['c_hp']
         parameters[f'nu_cop_{u}'] = parameters['nu_cop']
         parameters[f'c_su_H_{u}'] = parameters['c_su_H']
+        parameters[f'hp_cap_{u}'] = parameters['hp_cap']
     for i,u in enumerate(parameters['players_with_electrolyzers']):
         parameters[f'c_els_{u}'] = parameters['c_els']
         parameters[f'c_su_G_{u}'] = parameters['c_su_G']
+        parameters[f'els_cap_{u}'] = parameters['els_cap']
     for u in parameters['players_with_heatpumps']:
         parameters[f'c_su_H_{u}'] = parameters['c_su_H']
     for u in parameters['players_with_elec_storage']:

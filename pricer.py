@@ -299,12 +299,18 @@ class LEMPricer(Pricer):
         # Step 7: Misprice fallback — π^RM으로 재pricing
         if columns_added == 0:
             misprice = True
+            rm_solutions = {}
+            rm_obj_vals = {}
             for player in self.players:
                 rc_rm, sol, obj_val = self.subproblems[player].solve_pricing(
                     pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
                 if rc_rm < -1e-7:
                     self._add_column(player, sol)
                     columns_added += 1
+                rm_solutions[player] = sol
+                rm_obj_vals[player] = obj_val
+            L_pi_RM = self._compute_lagrangean_bound(rm_obj_vals, pi_RM_conv)
+            self.lb = max(self.lb, L_pi_RM)
 
         # Logging
         if alpha < 1.0:
