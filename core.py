@@ -12,6 +12,8 @@ from pyscipopt import Model, quicksum
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Set
 import sys
+import os
+import tempfile
 sys.path.append('/mnt/project')
 # from compact import LocalEnergyMarket
 from compact_utility import LocalEnergyMarket
@@ -25,25 +27,28 @@ class SeparationProblem(LocalEnergyMarket):
     where z[i] ∈ {0,1} indicates if player i is in the selected coalition
     """
     
-    def __init__(self, 
+    def __init__(self,
                  players: List[str],
                  time_periods: List[int],
                  model_type: str,
                  parameters: Dict,
-                 current_payoffs: Dict[str, float]):
+                 current_payoffs: Dict[str, float],
+                 mipsolver: Optional[str] = None):
         """
         Initialize separation problem
-        
+
         Args:
             players: List of all player IDs
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
             current_payoffs: Current payoff allocation {player_id: payoff}
+            mipsolver: MIP solver to use. None for SCIP (default), 'highs' for HiGHS
         """
         self.current_payoffs = current_payoffs
-        
+        self.mipsolver = mipsolver
+
         # Initialize parent class
-        super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False)
+        super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False, mipsolver=mipsolver)
         
         # Add binary selection variables and constraints
         self._add_selection_variables()
@@ -333,7 +338,7 @@ class SeparationProblem(LocalEnergyMarket):
     def solve_separation(self):
         """
         Solve the separation problem
-        
+
         Returns:
             tuple: (selected_coalition, violation)
                 - selected_coalition: list of selected player IDs
@@ -341,36 +346,93 @@ class SeparationProblem(LocalEnergyMarket):
         """
         print("\n" + "="*60)
         print("Solving separation problem...")
-        
+
         # Model minimizes: -Σ payoffs[i]*z[i] + cost
         # This is equivalent to maximizing: Σ payoffs[i]*z[i] - cost
         # So we keep the default minimize objective
-        
-        # Solve
-        status = self.solve()
-        
-        if status != "optimal":
-            raise RuntimeError(f"Separation problem failed with status: {status}")
-        
-        obj_val = self.model.getObjVal()
-        
-        # Extract selected coalition
-        selected_coalition = []
-        for i in self.players:
-            z_val = self.model.getVal(self.z[i])
-            if z_val > 0.5:  # Binary variable threshold
-                selected_coalition.append(i)
-        
+
+        if self.mipsolver and self.mipsolver.lower() == 'highs':
+            obj_val, selected_coalition = self._solve_with_highs()
+        else:
+            # Solve with SCIP (default)
+            status = self.solve()
+
+            if status != "optimal":
+                raise RuntimeError(f"Separation problem failed with status: {status}")
+
+            obj_val = self.model.getObjVal()
+
+            # Extract selected coalition
+            selected_coalition = []
+            for i in self.players:
+                z_val = self.model.getVal(self.z[i])
+                if z_val > 0.5:  # Binary variable threshold
+                    selected_coalition.append(i)
+
         # Compute violation: Σ payoffs[i] - cost(S)
         # The objective value is: -Σ payoffs[i] + cost(S)
         # So violation = -obj_val
         violation = -obj_val
-        
+
         print(f"Selected coalition: {selected_coalition}")
         print(f"Violation (Σ payoffs - cost): {violation:.4f}")
         print("="*60)
-        
+
         return selected_coalition, violation
+
+    def _solve_with_highs(self):
+        """
+        Export SCIP model to .mps, then solve with HiGHS via highspy.
+
+        Returns:
+            tuple: (obj_val, selected_coalition)
+        """
+        import highspy
+
+        # Export SCIP model to temporary .mps file
+        mps_path = os.path.join(tempfile.gettempdir(), "separation_problem.mps")
+        self.model.writeProblem(mps_path)
+        print(f"  Exported SCIP model to {mps_path}")
+
+        # Solve with HiGHS
+        h = highspy.Highs()
+        h.setOptionValue("output_flag", True)
+        h.readModel(mps_path)
+        h.run()
+
+        status = h.getInfoValue("primal_solution_status")[1]
+        # primal_solution_status: 2 = feasible
+        if h.getModelStatus() != highspy.HighsModelStatus.kOptimal:
+            raise RuntimeError(
+                f"HiGHS separation problem failed with status: {h.getModelStatus()}"
+            )
+
+        obj_val = h.getInfoValue("objective_function_value")[1]
+
+        # Map HiGHS column indices back to z variable names to extract coalition
+        # Get column names from the model
+        num_cols = h.getNumCol()
+        sol = h.getSolution()
+        col_values = sol.col_value
+
+        selected_coalition = []
+        for j in range(num_cols):
+            col_name = h.getColName(j)[1]
+            if col_name.startswith("z_"):
+                player_id = col_name[2:]  # strip "z_" prefix
+                if player_id in [p for p in self.players]:
+                    if col_values[j] > 0.5:
+                        selected_coalition.append(player_id)
+
+        print(f"  HiGHS objective: {obj_val:.4f}")
+
+        # Clean up temp file
+        try:
+            os.remove(mps_path)
+        except OSError:
+            pass
+
+        return obj_val, selected_coalition
 
 
 class CoreComputation:
@@ -378,19 +440,22 @@ class CoreComputation:
     Main class for computing core allocations using row generation algorithm
     """
     
-    def __init__(self, 
+    def __init__(self,
                  players: List[str],
                  model_type: str,
                  time_periods: List[int],
-                 parameters: Dict):
+                 parameters: Dict,
+                 mipsolver: Optional[str] = None):
         """
         Initialize core computation
-        
+
         Args:
             players: List of all player IDs
             model_type: Type of model to use ('mip' or 'lp')
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
+            mipsolver: MIP solver to use for separation problem.
+                       None for SCIP (default), 'highs' for HiGHS
         """
         self.players = players
         if model_type not in ('mip', 'lp'):
@@ -398,6 +463,7 @@ class CoreComputation:
         self.model_type = model_type
         self.time_periods = time_periods
         self.params = parameters
+        self.mipsolver = mipsolver
         
         # Cache for coalition costs
         self.coalition_costs = {}
@@ -593,7 +659,8 @@ class CoreComputation:
             time_periods=self.time_periods,
             model_type=self.model_type,
             parameters=self.params,
-            current_payoffs=payoffs
+            current_payoffs=payoffs,
+            mipsolver=self.mipsolver
         )
         model = sep_problem.model
         ## debug: z_3=z_6=1, 나머지 0으로 고정

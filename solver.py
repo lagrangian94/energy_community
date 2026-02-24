@@ -7,8 +7,10 @@ from pyscipopt import Model, quicksum
 import sys
 sys.path.append('/mnt/project')
 import numpy as np
+import tempfile
+import os
 # from compact import LocalEnergyMarket, solve_and_extract_results
-from compact_utility import LocalEnergyMarket, solve_and_extract_results
+from compact_utility import LocalEnergyMarket, solve_and_extract_results, solve_and_extract_results_highs
 from typing import Dict, List, Tuple
 
 
@@ -17,7 +19,7 @@ class PlayerSubproblem:
     Individual player's subproblem for column generation
     Reuses LocalEnergyMarket class with single player
     """
-    def __init__(self, player: str, time_periods: List[int], parameters: Dict, model_type: str):
+    def __init__(self, player: str, time_periods: List[int], parameters: Dict, model_type: str, mipsolver: str = None):
         """
         Create subproblem for a single player
         
@@ -46,9 +48,240 @@ class PlayerSubproblem:
         self.model = self.lem.model
         # Disable output for subproblems
         self.model.hideOutput()
-        
-    def solve_pricing(self, dual_elec: Dict[int, float], 
-                      dual_heat: Dict[int, float], 
+
+        self.mipsolver = mipsolver
+        if mipsolver == 'highs':
+            self._init_highs_model()
+
+    def _init_highs_model(self):
+        """
+        Export SCIP model to MPS once, load into HiGHS, and build column maps
+        for efficient objective updates in subsequent pricing iterations.
+        """
+        import highspy
+
+        # Export SCIP model to MPS (need to optimize once first to have a valid problem)
+        mps_path = tempfile.mktemp(suffix='.mps')
+        self.model.writeProblem(mps_path)
+
+        # Create HiGHS instance and load MPS
+        h = highspy.Highs()
+        h.setOptionValue("output_flag", False)
+        h.readModel(mps_path)
+
+        # Clean up temp file
+        os.remove(mps_path)
+
+        # Build SCIP variable name → HiGHS column index map
+        num_cols = h.getNumCol()
+        self._highs_col_map = {}
+        for j in range(num_cols):
+            name = h.getColName(j)
+            if isinstance(name, tuple):
+                name = name[1]
+            self._highs_col_map[name] = j
+
+        self._highs_num_cols = num_cols
+
+        # Build community variable column indices for fast access
+        u = self.player
+        self._com_col_indices = {}
+        com_var_types = ['e_E_com', 'i_E_com', 'e_H_com', 'i_H_com', 'e_G_com', 'i_G_com']
+        for var_type in com_var_types:
+            lem_dict = getattr(self.lem, var_type)
+            for t in self.time_periods:
+                if (u, t) in lem_dict:
+                    scip_var = lem_dict[u, t]
+                    scip_name = scip_var.name
+                    if scip_name in self._highs_col_map:
+                        self._com_col_indices[(var_type, t)] = self._highs_col_map[scip_name]
+
+        # Build base cost vector from SCIP model's objective coefficients
+        # We need to solve the pricing once with zero duals using SCIP to get the objective set
+        # Instead, compute base costs directly from parameters (matching solve_pricing logic)
+        self._compute_highs_base_costs(h)
+
+        self._highs = h
+        self._last_was_farkas = False
+
+    def _compute_highs_base_costs(self, h):
+        """
+        Compute base objective costs for all variables from parameters,
+        matching the non-farkas, non-dual portion of solve_pricing.
+        """
+        u = self.player
+        costs = np.zeros(self._highs_num_cols)
+
+        def _set_cost(var_dict, key, cost_val):
+            if key in var_dict:
+                scip_name = var_dict[key].name
+                if scip_name in self._highs_col_map:
+                    idx = self._highs_col_map[scip_name]
+                    costs[idx] += cost_val
+
+        for t in self.time_periods:
+            # Grid costs
+            if (u, t) in self.lem.i_E_gri:
+                _set_cost(self.lem.i_E_gri, (u, t), self.parameters.get(f'pi_E_gri_import_{t}', np.inf))
+            if (u, t) in self.lem.e_E_gri:
+                _set_cost(self.lem.e_E_gri, (u, t), -self.parameters.get(f'pi_E_gri_export_{t}', np.inf))
+            if (u, 'elec', t) in self.lem.nfl_d:
+                _set_cost(self.lem.nfl_d, (u, 'elec', t), -self.parameters.get(f'u_E_{u}_{t}', 0.0))
+
+            if (u, t) in self.lem.i_H_gri:
+                _set_cost(self.lem.i_H_gri, (u, t), self.parameters.get(f'pi_H_gri_import_{t}', np.inf))
+            if (u, t) in self.lem.e_H_gri:
+                _set_cost(self.lem.e_H_gri, (u, t), -self.parameters.get(f'pi_H_gri_export_{t}', np.inf))
+            if (u, 'heat', t) in self.lem.nfl_d:
+                _set_cost(self.lem.nfl_d, (u, 'heat', t), -self.parameters.get(f'u_H_{u}_{t}', 0.0))
+
+            if (u, t) in self.lem.i_G_gri:
+                _set_cost(self.lem.i_G_gri, (u, t), self.parameters.get(f'pi_G_gri_import_{t}', np.inf))
+            if (u, t) in self.lem.e_G_gri:
+                _set_cost(self.lem.e_G_gri, (u, t), -self.parameters.get(f'pi_G_gri_export_{t}', np.inf))
+            if (u, 'hydro', t) in self.lem.nfl_d:
+                _set_cost(self.lem.nfl_d, (u, 'hydro', t), -self.parameters.get(f'u_G_{u}_{t}', 0.0))
+
+            # Production costs
+            if (u, 'res', t) in self.lem.p:
+                _set_cost(self.lem.p, (u, 'res', t), self.parameters.get(f'c_res_{u}', np.inf))
+            if (u, 'hp', t) in self.lem.p:
+                _set_cost(self.lem.p, (u, 'hp', t), self.parameters.get(f'c_hp_{u}', np.inf))
+            if (u, 'els', t) in self.lem.p:
+                _set_cost(self.lem.p, (u, 'els', t), self.parameters.get(f'c_els_{u}', np.inf))
+
+            # Startup costs
+            if (u, t) in self.lem.z_su_G:
+                _set_cost(self.lem.z_su_G, (u, t), self.parameters.get(f'c_su_G_{u}', np.inf))
+            if (u, t) in self.lem.z_su_H:
+                _set_cost(self.lem.z_su_H, (u, t), self.parameters.get(f'c_su_H_{u}', np.inf))
+
+            # Storage costs
+            if u in self.lem.params["players_with_elec_storage"]:
+                c_sto_E = self.parameters.get(f'c_sto_E_{u}', np.inf)
+                nu_ch = self.parameters.get(f'nu_ch_E', np.inf)
+                nu_dis = self.parameters.get(f'nu_dis_E', np.inf)
+                if (u, t) in self.lem.b_ch_E:
+                    _set_cost(self.lem.b_ch_E, (u, t), c_sto_E * nu_ch)
+                if (u, t) in self.lem.b_dis_E:
+                    _set_cost(self.lem.b_dis_E, (u, t), c_sto_E * (1/nu_dis))
+
+            if u in self.lem.params["players_with_hydro_storage"]:
+                c_sto_G = self.parameters.get(f'c_sto_G_{u}', np.inf)
+                nu_ch = self.parameters.get(f'nu_ch_G', np.inf)
+                nu_dis = self.parameters.get(f'nu_dis_G', np.inf)
+                if (u, t) in self.lem.b_ch_G:
+                    _set_cost(self.lem.b_ch_G, (u, t), c_sto_G * nu_ch)
+                if (u, t) in self.lem.b_dis_G:
+                    _set_cost(self.lem.b_dis_G, (u, t), c_sto_G * (1/nu_dis))
+
+            if u in self.lem.params["players_with_heat_storage"]:
+                c_sto_H = self.parameters.get(f'c_sto_H_{u}', np.inf)
+                nu_ch = self.parameters.get(f'nu_ch_H', np.inf)
+                nu_dis = self.parameters.get(f'nu_dis_H', np.inf)
+                if (u, t) in self.lem.b_ch_H:
+                    _set_cost(self.lem.b_ch_H, (u, t), c_sto_H * nu_ch)
+                if (u, t) in self.lem.b_dis_H:
+                    _set_cost(self.lem.b_dis_H, (u, t), c_sto_H * (1/nu_dis))
+
+        self._highs_base_costs = costs
+
+    def _solve_pricing_highs(self, dual_elec, dual_heat, dual_hydro, dual_convexity, farkas=False):
+        """
+        Solve pricing subproblem using HiGHS with efficient objective updates.
+        Only community variable costs change per iteration; base costs are precomputed.
+        """
+        from highspy import HighsModelStatus
+
+        h = self._highs
+        u = self.player
+
+        if farkas:
+            # Farkas mode: set all costs to 0, then only apply dual terms on community vars
+            if not self._last_was_farkas:
+                # Reset all columns to zero cost
+                zero_costs = np.zeros(self._highs_num_cols, dtype=np.float64)
+                indices = np.arange(self._highs_num_cols, dtype=np.int32)
+                h.changeColsCost(self._highs_num_cols, indices, zero_costs)
+            self._last_was_farkas = True
+
+            # Apply dual terms on community variables only
+            for t in self.time_periods:
+                # i_E_com: coefficient is -dual (import from community)
+                key = ('i_E_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], -dual_elec[t])
+                # e_E_com: coefficient is +dual (export to community)
+                key = ('e_E_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], dual_elec[t])
+
+                key = ('i_H_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], -dual_heat[t])
+                key = ('e_H_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], dual_heat[t])
+
+                key = ('i_G_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], -dual_hydro[t])
+                key = ('e_G_com', t)
+                if key in self._com_col_indices:
+                    h.changeColCost(self._com_col_indices[key], dual_hydro[t])
+        else:
+            if self._last_was_farkas:
+                # Restore all base costs after farkas mode
+                indices = np.arange(self._highs_num_cols, dtype=np.int32)
+                h.changeColsCost(self._highs_num_cols, indices, self._highs_base_costs.copy())
+            self._last_was_farkas = False
+
+            # Update community variable costs: base_cost + dual_term
+            for t in self.time_periods:
+                key = ('i_E_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] - dual_elec[t])
+                key = ('e_E_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] + dual_elec[t])
+
+                key = ('i_H_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] - dual_heat[t])
+                key = ('e_H_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] + dual_heat[t])
+
+                key = ('i_G_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] - dual_hydro[t])
+                key = ('e_G_com', t)
+                if key in self._com_col_indices:
+                    idx = self._com_col_indices[key]
+                    h.changeColCost(idx, self._highs_base_costs[idx] + dual_hydro[t])
+
+        # Solve
+        h.run()
+        model_status = h.getModelStatus()
+
+        if model_status == HighsModelStatus.kOptimal:
+            obj_val = h.getInfoValue("objective_function_value")[1]
+            reduced_cost = obj_val - dual_convexity
+
+            # Extract results using existing helper
+            _, results = solve_and_extract_results_highs(self.model, h)
+
+            return reduced_cost, results, obj_val
+        else:
+            return float('inf'), None, None
+
+    def solve_pricing(self, dual_elec: Dict[int, float],
+                      dual_heat: Dict[int, float],
                       dual_hydro: Dict[int, float],
                       dual_convexity: float,
                       farkas: bool=False) -> Tuple[float, Dict]:
@@ -64,6 +297,9 @@ class PlayerSubproblem:
         Returns:
             tuple: (reduced_cost, solution_dict)
         """
+        if self.mipsolver == 'highs':
+            return self._solve_pricing_highs(dual_elec, dual_heat, dual_hydro, dual_convexity, farkas)
+
         # Free transform to allow objective modification
         self.model.freeTransform()
         

@@ -22,7 +22,7 @@ class ColumnGenerationSolver:
     Main column generation solver for Local Energy Market
     Implements Dantzig-Wolfe decomposition to compute convex hull prices
     """
-    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict, model_type: str, init_sol: Dict = None, smoothing: bool = False):
+    def __init__(self, players: List[str], time_periods: List[int], parameters: Dict, model_type: str, init_sol: Dict = None, smoothing: bool = False, mipsolver: str = None):
         """
         Initialize column generation solver
         
@@ -45,7 +45,8 @@ class ColumnGenerationSolver:
                 player=player,
                 time_periods=time_periods,
                 parameters=parameters,
-                model_type=model_type
+                model_type=model_type,
+                mipsolver=mipsolver
             )
         
         # Create master problem

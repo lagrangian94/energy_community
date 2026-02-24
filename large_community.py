@@ -410,7 +410,7 @@ def apply_30player_overrides(parameters, time_periods):
 
 def run_single_day_pricing(sensitivity_analysis, players, configuration,
                            time_periods, scenario_name, run_id, total_runs,
-                           override_fn=None):
+                           override_fn=None, mipsolver=None):
     """
     Run IP → CHP → CHP Smoothing + core violation check for a single parameter combo.
     (Pricing only — no row generation.)
@@ -431,7 +431,7 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
     }
 
     # --- IP ---
-    lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip')
+    lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip', mipsolver=mipsolver)
     t0 = time.time()
     status, results_ip, _, community_prices, _ = lem.solve_complete_model(
         analyze_revenue=False
@@ -449,8 +449,10 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
     for u in players:
         row[f'profit_ip_{u}'] = profit_ip[u]
 
+    
+
     # IP core violation (separation only — brute force infeasible for 15 players)
-    core_comp = CoreComputation(players, 'mip', time_periods, parameters)
+    core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
     cost_ip = {u: -1 * profit_ip[u] for u in players}
     coalition_ip, violation_ip, isimp_ip = core_comp.measure_stability_violation(cost_ip)
     row['violation_ip'] = violation_ip
@@ -505,12 +507,12 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
     # --- CHP Smoothing ---
     cg_smooth = ColumnGenerationSolver(
         players, time_periods, parameters,
-        model_type='mip', init_sol=results_ip, smoothing=True
+        model_type='mip', init_sol=results_ip, smoothing=True, mipsolver=mipsolver
     )
     t0 = time.time()
     status_smooth, results_chp_smooth, obj_val_smooth, _ = cg_smooth.solve()
     row['solve_time_chp_smooth'] = time.time() - t0
-
+    row['solve_time_chp_smooth_total'] = row['solve_time_ip'] + row['solve_time_chp_smooth']
     if status_smooth == "optimal":
         community_prices_chp_smooth = results_chp_smooth.get('convex_hull_prices', {})
         if "capacity_prices" in results_chp_smooth:
@@ -565,7 +567,7 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
 
 def run_single_day_rowgen(sensitivity_analysis, players, configuration,
                           time_periods, scenario_name, run_id, total_runs,
-                          time_limit=3600, override_fn=None):
+                          time_limit=3600, override_fn=None, mipsolver=None):
     """
     Run Row Generation (Core computation) for a single parameter combo.
     Returns a dict with rowgen results for this run.
@@ -584,7 +586,7 @@ def run_single_day_rowgen(sensitivity_analysis, players, configuration,
         **{k: v for k, v in sensitivity_analysis.items()},
     }
 
-    core_comp = CoreComputation(players, 'mip', time_periods, parameters)
+    core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
 
     t0 = time.time()
     core_rowgen, success_rowgen = core_comp.compute_core(
@@ -634,7 +636,7 @@ def _save_with_day_update(outpath, new_df, day_values):
 
 def run_experiment_pricing(sensitivity_analysis_candidates, players, configuration,
                            time_periods, scenario_name, output_dir='results_15p',
-                           override_fn=None):
+                           override_fn=None, mipsolver=None):
     """
     Phase 1: Run all pricing (IP → CHP → CHP Smoothing) for all parameter combinations.
     """
@@ -659,7 +661,7 @@ def run_experiment_pricing(sensitivity_analysis_candidates, players, configurati
         row = run_single_day_pricing(
             sensitivity_analysis, players, configuration,
             time_periods, scenario_name, i, total_runs,
-            override_fn=override_fn,
+            override_fn=override_fn, mipsolver=mipsolver,
         )
         results_summary.append(row)
 
@@ -674,7 +676,7 @@ def run_experiment_pricing(sensitivity_analysis_candidates, players, configurati
 
 def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuration,
                           time_periods, scenario_name, output_dir='results_15p',
-                          time_limit=3600, override_fn=None):
+                          time_limit=3600, override_fn=None, mipsolver=None):
     """
     Phase 2: Run row generation (core computation) for all parameter combinations.
     """
@@ -700,7 +702,7 @@ def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuratio
         row = run_single_day_rowgen(
             sensitivity_analysis, players, configuration,
             time_periods, scenario_name, i, total_runs,
-            time_limit=time_limit, override_fn=override_fn,
+            time_limit=time_limit, override_fn=override_fn, mipsolver=mipsolver,
         )
         results_summary.append(row)
 
@@ -715,7 +717,7 @@ def run_experiment_rowgen(sensitivity_analysis_candidates, players, configuratio
 
 def run_experiment(sensitivity_analysis_candidates, players, configuration,
                    time_periods, scenario_name, output_dir='results_15p',
-                   time_limit=3600, override_fn=None):
+                   time_limit=3600, override_fn=None, mipsolver=None):
     """
     Run both phases sequentially: pricing first, then row generation.
     Results are saved separately and merged at the end.
@@ -724,13 +726,14 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
     df_pricing = run_experiment_pricing(
         sensitivity_analysis_candidates, players, configuration,
         time_periods, scenario_name, output_dir, override_fn=override_fn,
+        mipsolver=mipsolver,
     )
 
     # Phase 2: Row Generation
     df_rowgen = run_experiment_rowgen(
         sensitivity_analysis_candidates, players, configuration,
         time_periods, scenario_name, output_dir, time_limit=time_limit,
-        override_fn=override_fn,
+        override_fn=override_fn, mipsolver=mipsolver,
     )
 
     # Merge on shared keys
@@ -793,17 +796,19 @@ def print_scenario_summary(df, scenario_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='15/30-Player Energy Community Experiment')
-    parser.add_argument('--day', type=int, nargs='+', default=list(range(1,2)),
+    parser.add_argument('--day', type=int, nargs='+', default=list(range(1,32)),
                         help='Day(s) to run (e.g. --day 1 or --day 1 2 3)')
     parser.add_argument('--output', type=str, default=None,
                         help='Output directory (default: results_15p or results_30p)')
-    parser.add_argument('--phase', type=str, default='pricing',
+    parser.add_argument('--phase', type=str, default='rowgen',
                         choices=['all', 'pricing', 'rowgen'],
                         help='Which phase to run: pricing only, rowgen only, or all (default: pricing)')
     parser.add_argument('--time-limit', type=float, default=36000,
                         help='Row generation time limit in seconds (default: 3600)')
-    parser.add_argument('--players', type=int, default=30, choices=[15, 30],
+    parser.add_argument('--players', type=int, default=15, choices=[15, 30],
                         help='Number of players: 15 or 30 (default: 15)')
+    parser.add_argument('--mipsolver', type=str, default='highs', choices=[None, 'highs'],
+                        help='MIP solver for separation problem: None (SCIP, default) or highs (HiGHS)')
     args = parser.parse_args()
 
     time_periods = list(range(24))
@@ -831,18 +836,19 @@ if __name__ == "__main__":
             candidates, players, configuration,
             time_periods, scenario_name=scenario_name,
             output_dir=output_dir, override_fn=override_fn,
+            mipsolver=args.mipsolver,
         )
     elif args.phase == 'rowgen':
         run_experiment_rowgen(
             candidates, players, configuration,
             time_periods, scenario_name=scenario_name,
             output_dir=output_dir, time_limit=args.time_limit,
-            override_fn=override_fn,
+            override_fn=override_fn, mipsolver=args.mipsolver,
         )
     else:
         run_experiment(
             candidates, players, configuration,
             time_periods, scenario_name=scenario_name,
             output_dir=output_dir, time_limit=args.time_limit,
-            override_fn=override_fn,
+            override_fn=override_fn, mipsolver=args.mipsolver,
         )

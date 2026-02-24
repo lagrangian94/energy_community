@@ -321,6 +321,68 @@ def solve_and_extract_results(model):
         print(f"Model not solved to optimality. Status: {status}")
         return status, None
 
+
+def solve_and_extract_results_highs(model, highs_solver):
+    """
+    HiGHS로 풀린 결과를 SCIP model.data 구조에 맞춰 추출합니다.
+    highs_solver: 이미 solve된 highspy.Highs 인스턴스
+    model: SCIP Model (변수 이름 매핑용)
+
+    Returns:
+    --------
+    status : str
+    results : dict (solve_and_extract_results와 동일 구조)
+    """
+    from highspy import HighsModelStatus
+
+    model_status = highs_solver.getModelStatus()
+    if model_status not in (HighsModelStatus.kOptimal,
+                            HighsModelStatus.kObjectiveBound,
+                            HighsModelStatus.kObjectiveTarget):
+        print(f"HiGHS model not solved to optimality. Status: {model_status}")
+        return "not_optimal", None
+
+    # HiGHS 변수 이름 → 값 매핑 구축
+    sol = highs_solver.getSolution()
+    col_values = sol.col_value
+    num_cols = highs_solver.getNumCol()
+    highs_val_map = {}
+    for i in range(num_cols):
+        name = highs_solver.getColName(i)
+        if isinstance(name, tuple):
+            name = name[1]
+        highs_val_map[name] = col_values[i]
+
+    # model.data 구조에 맞춰 결과 추출
+    results = {}
+    if model.data is not None:
+        for var_name, var_dict in model.data["vars"].items():
+            if isinstance(var_dict, dict):
+                result_dict = {}
+                for key, var in var_dict.items():
+                    try:
+                        if not isinstance(var, list):
+                            scip_name = var.name
+                            result_dict[key] = highs_val_map.get(scip_name, 0.0)
+                        else:
+                            result_dict[key] = [
+                                highs_val_map.get(v.name, 0.0) for v in var
+                            ]
+                    except Exception:
+                        print(f"Could not get HiGHS value for {var_name}_{key}")
+                results[var_name] = result_dict
+            else:
+                try:
+                    scip_name = var_dict.name
+                    results[var_name] = highs_val_map.get(scip_name, 0.0)
+                except Exception:
+                    print(f"Could not get HiGHS value for {var_name}")
+    else:
+        raise Exception("Model data is None. Cannot extract results.")
+
+    return "optimal", results
+
+
 def process_cons_arr(arr, process_func):
     """
     Recursively process arrays of constraint objects
@@ -346,21 +408,23 @@ def process_cons_arr(arr, process_func):
     return new_arr
 
 class LocalEnergyMarket:
-    def __init__(self, 
+    def __init__(self,
                  players: List[str],
                  time_periods: List[int],
                  parameters: Dict,
                  model_type: str = 'mip',
                  dwr: bool = False,
-                 binary_values: Optional[Dict] = None):
+                 binary_values: Optional[Dict] = None,
+                 mipsolver: str = None):
         """
         Initialize the Local Energy Market optimization model
-        
+
         Args:
             players: List of player IDs
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
             model_type: 'mip': Mixed-integer Community Games, 'lp': Linear Community Games, 'mip_fix_binaries': MIP game with fixed binary variables
+            mipsolver: None for SCIP (default), 'highs' to export MPS and solve with HiGHS
         """
         self.players = players
         self.time_periods = time_periods
@@ -371,6 +435,7 @@ class LocalEnergyMarket:
         self.model_type = model_type
         self.dwr = dwr
         self.binary_values = binary_values
+        self.mipsolver = mipsolver
         # Initialize model.data dictionary to store variables and constraints
         self.model.data = {"vars": {}, "cons": {}}
         
@@ -1306,16 +1371,37 @@ class LocalEnergyMarket:
         # self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
         # self.model.disablePropagation()
         # self.model.setSeparating(SCIP_PARAMSETTING.OFF)
-        status = self.solve()
-        
-        if status != "optimal":
-            print(f"Optimization failed with status: {status}")
-            return status, None, None
-        
-        print("Model solved successfully. Extracting results and analyzing revenue...")
-        
-        # Extract results using existing function
-        status, results = solve_and_extract_results(self.model)
+        if self.mipsolver is not None:
+            # HiGHS 경로: MPS로 내보내고 HiGHS로 풀기
+            import tempfile, os, time as _time
+            import highspy
+            mps_path = tempfile.mktemp(suffix=".mps")
+            self.model.writeProblem(mps_path)
+            h = highspy.Highs()
+            h.setOptionValue("output_flag", True)
+            h.readModel(mps_path)
+            t_highs_start = _time.time()
+            h.run()
+            t_highs_elapsed = _time.time() - t_highs_start
+            print(f"[HiGHS] model_status={h.getModelStatus()}, "
+                  f"obj={h.getInfoValue('objective_function_value')[1]:.4f}, "
+                  f"time={t_highs_elapsed:.2f}s")
+            os.remove(mps_path)
+
+            status, results = solve_and_extract_results_highs(self.model, h)
+            del h
+        else:
+            # 기존 SCIP 경로
+            status = self.solve()
+
+            if status != "optimal":
+                print(f"Optimization failed with status: {status}")
+                return status, None, None
+
+            print("Model solved successfully. Extracting results and analyzing revenue...")
+
+            # Extract results using existing function
+            status, results = solve_and_extract_results(self.model)
         
         if status != "optimal":
             print(f"Failed to extract results. Status: {status}")
@@ -1329,7 +1415,9 @@ class LocalEnergyMarket:
             flow_analysis = self._analyze_energy_flows(results)
 
         if self.model_type == 'mip':
-            ip_status, ip_results, prices = self.solve_with_restricted_pricing()
+            ip_status, ip_results, prices = self.solve_with_restricted_pricing(
+                mip_results=results if self.mipsolver is not None else None
+            )
             if ip_status != "optimal":
                 print(f"IP optimization failed with status: {ip_status}")
                 return ip_status, None, None, None
@@ -1791,7 +1879,10 @@ class LocalEnergyMarket:
         # print(f"  Solver objective:     {self.model.getObjVal():10.6f}")
         # print(f"  Difference:           {abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())):10.10f}")
         
-        if abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())) > 1e-6:
+        if self.mipsolver is not None:
+            # HiGHS로 풀었을 때는 SCIP에 solution이 없으므로 verification skip
+            print("  (HiGHS solver used — objective verification skipped)")
+        elif abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())) > 1e-6:
             print("  ⚠️  WARNING: Calculated profit doesn't match solver objective value!")
         else:
             print("  ✓  Verification passed!")
@@ -2690,11 +2781,15 @@ class LocalEnergyMarket:
                 total_community_hydro += val
         
         return total_community_hydro
-    def solve_with_restricted_pricing(self):
+    def solve_with_restricted_pricing(self, mip_results=None):
         """
         Solve with Restricted Pricing mechanism:
         1. First get optimal binary variables from solved MIP model
         2. Create new LP model with fixed binary variables to get shadow prices
+
+        Args:
+            mip_results: optional pre-extracted results dict (e.g. from HiGHS solve).
+                         If provided, binary values are read from this dict instead of self.model.getVal().
         
         Returns:
             tuple: (status, results, prices)
@@ -2710,29 +2805,30 @@ class LocalEnergyMarket:
         print("="*80)
         
         binary_values = {}
+        # mip_results가 있으면 (HiGHS 등 외부 솔버) results dict에서 값 추출
         for u in self.players_with_electrolyzers:
             for t in self.time_periods:
                 if (u,t) in self.z_su_G:
-                    binary_values[('z_su_G', u, t)] = self.model.getVal(self.z_su_G[u,t])
+                    binary_values[('z_su_G', u, t)] = mip_results['z_su_G'][(u,t)] if mip_results else self.model.getVal(self.z_su_G[u,t])
                 if (u,t) in self.z_on_G:
-                    binary_values[('z_on_G', u, t)] = self.model.getVal(self.z_on_G[u,t])
+                    binary_values[('z_on_G', u, t)] = mip_results['z_on_G'][(u,t)] if mip_results else self.model.getVal(self.z_on_G[u,t])
                 if (u,t) in self.z_off_G:
-                    binary_values[('z_off_G', u, t)] = self.model.getVal(self.z_off_G[u,t])
+                    binary_values[('z_off_G', u, t)] = mip_results['z_off_G'][(u,t)] if mip_results else self.model.getVal(self.z_off_G[u,t])
                 if (u,t) in self.z_sb_G:
-                    binary_values[('z_sb_G', u, t)] = self.model.getVal(self.z_sb_G[u,t])
+                    binary_values[('z_sb_G', u, t)] = mip_results['z_sb_G'][(u,t)] if mip_results else self.model.getVal(self.z_sb_G[u,t])
                 if (u,t) in self.z_sd_G:
-                    binary_values[('z_sd_G', u, t)] = self.model.getVal(self.z_sd_G[u,t])
+                    binary_values[('z_sd_G', u, t)] = mip_results['z_sd_G'][(u,t)] if mip_results else self.model.getVal(self.z_sd_G[u,t])
         for u in self.players_with_heatpumps:
             for t in self.time_periods:
                 if (u,t) in self.z_su_H:
-                    binary_values[('z_su_H', u, t)] = self.model.getVal(self.z_su_H[u,t])
+                    binary_values[('z_su_H', u, t)] = mip_results['z_su_H'][(u,t)] if mip_results else self.model.getVal(self.z_su_H[u,t])
                 if (u,t) in self.z_on_H:
-                    binary_values[('z_on_H', u, t)] = self.model.getVal(self.z_on_H[u,t])
+                    binary_values[('z_on_H', u, t)] = mip_results['z_on_H'][(u,t)] if mip_results else self.model.getVal(self.z_on_H[u,t])
                 if (u,t) in self.z_sd_H:
-                    binary_values[('z_sd_H', u, t)] = self.model.getVal(self.z_sd_H[u,t])
-                
+                    binary_values[('z_sd_H', u, t)] = mip_results['z_sd_H'][(u,t)] if mip_results else self.model.getVal(self.z_sd_H[u,t])
+
                 if (u,t) in self.z_ru_H:
-                    binary_values[('z_ru_H', u, t)] = self.model.getVal(self.z_ru_H[u,t])
+                    binary_values[('z_ru_H', u, t)] = mip_results['z_ru_H'][(u,t)] if mip_results else self.model.getVal(self.z_ru_H[u,t])
         print(f"✓ Extracted {len(binary_values)} binary variable values")
         
         # Step 3: Create new LP model with fixed binary variables
