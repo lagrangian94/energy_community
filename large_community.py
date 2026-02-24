@@ -796,7 +796,7 @@ def print_scenario_summary(df, scenario_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='15/30-Player Energy Community Experiment')
-    parser.add_argument('--day', type=int, nargs='+', default=list(range(1,32)),
+    parser.add_argument('--day', type=int, nargs='+', default=list(range(1,2)),
                         help='Day(s) to run (e.g. --day 1 or --day 1 2 3)')
     parser.add_argument('--output', type=str, default=None,
                         help='Output directory (default: results_15p or results_30p)')
@@ -805,7 +805,7 @@ if __name__ == "__main__":
                         help='Which phase to run: pricing only, rowgen only, or all (default: pricing)')
     parser.add_argument('--time-limit', type=float, default=36000,
                         help='Row generation time limit in seconds (default: 3600)')
-    parser.add_argument('--players', type=int, default=15, choices=[15, 30],
+    parser.add_argument('--players', type=int, default=30, choices=[15, 30],
                         help='Number of players: 15 or 30 (default: 15)')
     parser.add_argument('--mipsolver', type=str, default='highs', choices=[None, 'highs'],
                         help='MIP solver for separation problem: None (SCIP, default) or highs (HiGHS)')
