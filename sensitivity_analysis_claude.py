@@ -391,14 +391,22 @@ def print_scenario_summary(df, scenario_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Section 5.3 Scenario Experiments')
-    parser.add_argument('--scenario', type=str, default='all',
+    parser.add_argument('--scenario', type=str, default='baseline',
                         choices=['baseline', 'low_h2_margin',
                                  'full_storage', 'community_size',
                                  'export_cap', 'all'],
                         help='시나리오 선택')
+    parser.add_argument('--day', type=int, nargs='+', default=1,
+                        help='Day(s) to run (e.g. --day 1 or --day 1 2 3). Default: all 31 days')
     parser.add_argument('--output', type=str, default='results_53',
                         help='결과 저장 디렉토리')
     args = parser.parse_args()
+
+    # --day 옵션으로 baseline day 리스트 override
+    if args.day is not None:
+        BASELINE_CANDIDATES['day'] = args.day
+        for name in SCENARIOS:
+            SCENARIOS[name]['day'] = args.day
 
     # --- Player/Configuration은 기존 그대로 ---
     model_type = 'mip'
