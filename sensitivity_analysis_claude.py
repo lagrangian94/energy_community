@@ -140,16 +140,20 @@ from data_generator import setup_lem_parameters
 from core import CoreComputation
 from compact_utility import LocalEnergyMarket
 from chp import ColumnGenerationSolver
+from visualize import plot_community_prices_comparison
 import numpy as np
 import pandas as pd
 import time
 import itertools
 import argparse
 import gc
+import json
+import pickle
+import copy
 
 
 def run_experiment(sensitivity_analysis_candidates, players, configuration,
-                   time_periods, scenario_name, output_dir='results'):
+                   time_periods, scenario_name, output_dir='results', mipsolver=None):
     """
     하나의 시나리오(candidates dict)에 대해 전 조합 실행.
     기존 for loop와 동일하되, 결과를 scenario별로 저장.
@@ -187,9 +191,9 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
 
         # --- IP ---
         if ip:
-            lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip')
+            lem = LocalEnergyMarket(players, time_periods, parameters, model_type='mip', mipsolver=mipsolver)
             t0 = time.time()
-            status, results_ip, _, community_prices, _ = lem.solve_complete_model(
+            status, results_ip, _, community_prices, market_prices = lem.solve_complete_model(
                 analyze_revenue=False
             )
             row['solve_time_ip'] = time.time() - t0
@@ -206,80 +210,31 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
                 row[f'profit_ip_{u}'] = profit_ip[u]
 
             # IP core violation
-            core_comp = CoreComputation(players, 'mip', time_periods, parameters)
+            core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
             cost_ip = {u: -1 * profit_ip[u] for u in players}
             coalition_ip, violation_ip, isimp_ip = core_comp.measure_stability_violation(cost_ip)
             row['violation_ip'] = violation_ip
             row['blocking_coalition_ip'] = str(coalition_ip) if violation_ip > 1e-6 else ''
             row['isimp_ip'] = isimp_ip
-            del lem  # free SCIP model memory
-            gc.collect()
 
         # --- CHP ---
-        if chp:
-            cg = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=results_ip)
-            t0 = time.time()
-            status, results_chp, obj_val, solution_by_player = cg.solve()
-            row['solve_time_chp'] = time.time() - t0
-            welfare_chp = cg.master.model.getObjVal()
-            print(f"Time taken: {row['solve_time_chp']:.2f} seconds")
-            if status == "optimal":
-                print("\n" + "="*80)
-                print("COLUMN GENERATION - SUCCESSFUL")
-                print("="*80)
-                print(f"Optimal objective: {obj_val:.2f} EUR")
-                
-                # Print convex hull prices
-                if 'convex_hull_prices' in results_chp:
-                    print("\n" + "="*80)
-                    print("CONVEX HULL PRICES (Community Balance Shadow Prices)")
-                    print("="*80)
-                    community_prices_chp = results_chp['convex_hull_prices']
-                    if "capacity_prices" in results_chp:
-                        community_prices_chp = community_prices_chp | results_chp['capacity_prices']
-                    # Perform synergy analysis
-                    print("\n" + "="*80)
-                    print("PERFORMING SYNERGY ANALYSIS")
-                    print("="*80)
-                    synergy_results = cg.analyze_synergy_with_convex_hull_prices(results_ip, obj_val, community_prices_chp)
-                    profit_chp = {u: synergy_results['community_profits'][u]['net_profit'] for u in players}
-            else:
-                print(f"Column generation failed with status: {status}")
-                profit_chp = {u: np.nan for u in players}
-            for u in players:
-                row[f'profit_chp_{u}'] = profit_chp[u]
-
-            if status == "optimal":
-                cost_chp = {u: -1 * profit_chp[u] for u in players}
-                coalition_chp, violation_chp, isimp_chp = core_comp.measure_stability_violation(cost_chp)
-                row['violation_chp'] = violation_chp
-                row['blocking_coalition_chp'] = str(coalition_chp) if violation_chp > 1e-6 else ''
-                row['isimp_chp'] = isimp_chp
-                # CHP community prices 저장 (분석용)
-                for carrier in ['electricity', 'heat', 'hydrogen']:
-                    if carrier in community_prices_chp:
-                        for t in time_periods:
-                            row[f'chp_price_{carrier}_{t}'] = community_prices_chp[carrier][t]
-            else:
-                print(f"Column generation failed with status: {status}")
-                row['violation_chp'] = np.nan
-                row['blocking_coalition_chp'] = np.nan
-                row['isimp_chp'] = np.nan
-            del cg  # free SCIP model + pricer circular ref
-            gc.collect()
-
         # --- CHP Smoothing ---
         if chp:
-            cg_smooth = ColumnGenerationSolver(players, time_periods, parameters, model_type='mip', init_sol=results_ip, smoothing=True)
+            cg_smooth = ColumnGenerationSolver(
+                players, time_periods, parameters,
+                model_type='mip', init_sol=results_ip, smoothing=True, mipsolver=mipsolver
+            )
             t0 = time.time()
-            status_smooth, results_chp_smooth, obj_val_smooth, solution_by_player_smooth = cg_smooth.solve()
+            status_smooth, results_chp_smooth, obj_val_smooth, _ = cg_smooth.solve()
             row['solve_time_chp_smooth'] = time.time() - t0
-
+            row['solve_time_chp_smooth_total'] = row['solve_time_ip'] + row['solve_time_chp_smooth']
             if status_smooth == "optimal":
                 community_prices_chp_smooth = results_chp_smooth.get('convex_hull_prices', {})
                 if "capacity_prices" in results_chp_smooth:
                     community_prices_chp_smooth = community_prices_chp_smooth | results_chp_smooth['capacity_prices']
-                synergy_smooth = cg_smooth.analyze_synergy_with_convex_hull_prices(results_ip, obj_val_smooth, community_prices_chp_smooth)
+                synergy_smooth = cg_smooth.analyze_synergy_with_convex_hull_prices(
+                    results_ip, obj_val_smooth, community_prices_chp_smooth
+                )
                 profit_chp_smooth = {u: synergy_smooth['community_profits'][u]['net_profit'] for u in players}
             else:
                 profit_chp_smooth = {u: np.nan for u in players}
@@ -289,46 +244,67 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
 
             if status_smooth == "optimal":
                 cost_chp_smooth = {u: -1 * profit_chp_smooth[u] for u in players}
-                coalition_chp_smooth, violation_chp_smooth, isimp_chp_smooth = core_comp.measure_stability_violation(cost_chp_smooth)
-                row['violation_chp_smooth'] = violation_chp_smooth
-                row['blocking_coalition_chp_smooth'] = str(coalition_chp_smooth) if violation_chp_smooth > 1e-6 else ''
-                row['isimp_chp_smooth'] = isimp_chp_smooth
+                coalition_smooth, violation_smooth, isimp_smooth = core_comp.measure_stability_violation(
+                    cost_chp_smooth
+                )
+                row['violation_chp_smooth'] = violation_smooth
+                row['blocking_coalition_chp_smooth'] = str(coalition_smooth) if violation_smooth > 1e-6 else ''
+                row['isimp_chp_smooth'] = isimp_smooth
             else:
                 row['violation_chp_smooth'] = np.nan
                 row['blocking_coalition_chp_smooth'] = np.nan
                 row['isimp_chp_smooth'] = np.nan
-
-            # Performance comparison
-            if row.get('solve_time_chp_smooth', 0) > 0:
-                row['speedup_chp_smooth'] = row.get('solve_time_chp', 0) / row['solve_time_chp_smooth']
-            else:
-                row['speedup_chp_smooth'] = np.nan
-            if status == "optimal" and status_smooth == "optimal":
-                row['obj_diff_chp_smooth'] = abs(obj_val - obj_val_smooth)
-            else:
-                row['obj_diff_chp_smooth'] = np.nan
             del cg_smooth
             gc.collect()
 
-        if ip and chp:
-            if (violation_ip > 1e-6) and (violation_chp > 1e-6):
-                core_comp = CoreComputation(players, 'mip', time_periods, parameters)
-                core_bf, success = core_comp.compute_core_brute_force()
-                if success:
-                    row['violation_bf'] = 0.0
-                    row['blocking_coalition_bf'] = []
-                    row['isimp_bf'] = True
-                else:
-                    row['violation_bf'] = core_bf
-                    row['blocking_coalition_bf'] = np.nan
+        # --- Save outputs (like analysis_mip.py) ---
+        if ip and chp and status_smooth == "optimal":
+            # parameters.json
+            with open('parameters.json', 'w') as f:
+                json.dump(parameters, f, default=lambda x: x.tolist() if hasattr(x, 'tolist') else str(x), indent=2)
+
+            # synergy_analysis_ip.tex
+            lem.generate_beamer_synergy_table(comparison, players, filename='synergy_analysis_ip.tex')
+
+            # synergy_analysis_chp.tex
+            comparison_chp = copy.deepcopy(comparison)
+            for u in players:
+                comparison_chp["community"]["player_profits"][u]["net_profit"] = profit_chp_smooth[u]
+            comparison_chp["community"]["prices"] = community_prices_chp_smooth
+            lem.generate_beamer_synergy_table(comparison_chp, players, filename='synergy_analysis_chp.tex')
+
+            # community_prices_comparison.png
+            plot_community_prices_comparison(
+                community_prices, None, community_prices_chp_smooth, market_prices,
+                save_path='community_prices_comparison.png'
+            )
+
+            # comparison_results.json
+            with open('comparison_results.json', 'w') as f:
+                json.dump(comparison, f, indent=2)
+
+            # comparison_results_chp.json
+            with open('comparison_results_chp.json', 'w') as f:
+                json.dump(comparison_chp, f, indent=2)
+
+            # results_ip.pkl
+            with open('results_ip.pkl', 'wb') as f:
+                pickle.dump(results_ip, f)
+
+            # results_chp.pkl
+            with open('results_chp.pkl', 'wb') as f:
+                pickle.dump(results_chp_smooth, f)
+
+        if ip:
+            del lem
+            gc.collect()
+
         # 로그
         flag = " *** IP VIOLATED ***" if row.get('violation_ip', 0) > 1e-6 else ""
         print(f"  IP: {row.get('violation_ip', 0):.4f}{flag} | "
-              f"CHP: {row.get('violation_chp', 0):.4f} | "
               f"CHP_S: {row.get('violation_chp_smooth', 0):.4f} | "
-              f"t_IP={row.get('solve_time_ip', 0):.1f}s t_CHP={row.get('solve_time_chp', 0):.1f}s "
-              f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s "
-              f"speedup={row.get('speedup_chp_smooth', 0):.2f}x")
+              f"t_IP={row.get('solve_time_ip', 0):.1f}s "
+              f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s")
 
         results_summary.append(row)
 
@@ -353,10 +329,8 @@ def print_scenario_summary(df, scenario_name):
     print(f"{'='*60}")
     total = len(df)
     n_ip = (df['violation_ip'] > 1e-6).sum()
-    n_chp = (df['violation_chp'] > 1e-6).sum()
     print(f"  Total runs: {total}")
     print(f"  IP violations:  {n_ip}/{total} ({100*n_ip/total:.0f}%)")
-    print(f"  CHP violations: {n_chp}/{total} ({100*n_chp/total:.0f}%)")
     if 'violation_chp_smooth' in df.columns:
         n_chp_s = (df['violation_chp_smooth'] > 1e-6).sum()
         print(f"  CHP Smooth violations: {n_chp_s}/{total} ({100*n_chp_s/total:.0f}%)")
@@ -365,14 +339,6 @@ def print_scenario_summary(df, scenario_name):
         max_mag = df.loc[df['violation_ip'] > 1e-6, 'violation_ip'].max()
         print(f"  Avg IP violation magnitude: {avg_mag:.4f}")
         print(f"  Max IP violation magnitude: {max_mag:.4f}")
-    if 'speedup_chp_smooth' in df.columns:
-        avg_speedup = df['speedup_chp_smooth'].mean()
-        med_speedup = df['speedup_chp_smooth'].median()
-        print(f"  Avg smoothing speedup: {avg_speedup:.2f}x")
-        print(f"  Median smoothing speedup: {med_speedup:.2f}x")
-    if 'obj_diff_chp_smooth' in df.columns:
-        max_diff = df['obj_diff_chp_smooth'].max()
-        print(f"  Max obj diff (CHP vs CHP_smooth): {max_diff:.6f}")
 
     # 서브그룹별 (5.3.3은 num_households별, 5.3.4는 cap_ratio별)
     for col in ['num_households', 'e_E_cap_ratio', 'base_h2_price_eur', 'import_factor']:
@@ -382,7 +348,7 @@ def print_scenario_summary(df, scenario_name):
                 n = len(grp)
                 n_v = (grp['violation_ip'] > 1e-6).sum()
                 n_chp_s_grp = (grp['violation_chp_smooth'] > 1e-6).sum() if 'violation_chp_smooth' in grp.columns else 'N/A'
-                print(f"    {col}={val}: IP {n_v}/{n}, CHP {(grp['violation_chp']>1e-6).sum()}/{n}, CHP_S {n_chp_s_grp}/{n}")
+                print(f"    {col}={val}: IP {n_v}/{n}, CHP_S {n_chp_s_grp}/{n}")
 
 
 # =============================================================
@@ -396,8 +362,10 @@ if __name__ == "__main__":
                                  'full_storage', 'community_size',
                                  'export_cap', 'all'],
                         help='시나리오 선택')
-    parser.add_argument('--day', type=int, nargs='+', default=1,
+    parser.add_argument('--day', type=int, nargs='+', default=list(range(1,2)),
                         help='Day(s) to run (e.g. --day 1 or --day 1 2 3). Default: all 31 days')
+    parser.add_argument('--mipsolver', type=str, default='highs', choices=[None, 'highs'],
+                        help='MIP solver for separation problem: None (SCIP) or highs (HiGHS, default)')
     parser.add_argument('--output', type=str, default='results_53',
                         help='결과 저장 디렉토리')
     args = parser.parse_args()
@@ -439,7 +407,7 @@ if __name__ == "__main__":
                 'e_H_cap_ratio': [ratio],
             })
             run_experiment(candidates, players, configuration,
-                           time_periods, sub_name, args.output)
+                           time_periods, sub_name, args.output, mipsolver=args.mipsolver)
 
     elif args.scenario == 'all':
         for name in ['low_h2_margin',
@@ -448,7 +416,7 @@ if __name__ == "__main__":
                 continue
             candidates = SCENARIOS[name]
             run_experiment(candidates, players, configuration,
-                           time_periods, name, args.output)
+                           time_periods, name, args.output, mipsolver=args.mipsolver)
         # 5.3.4는 별도 처리
         for ratio in [0.2]:
             sub_name = f'export_cap_{int(ratio*100):03d}'
@@ -458,12 +426,12 @@ if __name__ == "__main__":
                 'e_H_cap_ratio': [ratio],
             })
             run_experiment(candidates, players, configuration,
-                           time_periods, sub_name, args.output)
+                           time_periods, sub_name, args.output, mipsolver=args.mipsolver)
 
     else:
         candidates = SCENARIOS[args.scenario]
         run_experiment(candidates, players, configuration,
-                       time_periods, args.scenario, args.output)
+                       time_periods, args.scenario, args.output, mipsolver=args.mipsolver)
 
 
 # =============================================================

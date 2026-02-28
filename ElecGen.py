@@ -290,9 +290,8 @@ class ElectricityProdGenerator:
 
         plt.figure(figsize=(10, 4))
         plt.plot(data["CP"].values/data["CP"].max()*self.wind_cap_mw, marker='o', linestyle='-', color='b')
-        plt.xlabel("Index")
-        plt.ylabel("CP")
-        plt.title("Wind CP Profile")
+        plt.xlabel("Time Period (hour)")
+        plt.ylabel("Wind Production (MWh)")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig("wind_cp_profile.png", dpi=300)
