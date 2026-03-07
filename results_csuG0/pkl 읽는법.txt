@@ -1,0 +1,11 @@
+  import pickle                                                                                                                                                        
+                                                                                                                                                                       
+  with open('results_csuG0/results_ip.pkl', 'rb') as f:
+      results_ip = pickle.load(f)                                                                                                                                      
+                  
+  with open('results_csuG0/results_chp.pkl', 'rb') as f:
+      results_chp = pickle.load(f)
+
+  # 내용 확인
+  print(type(results_ip))
+  print(results_ip.keys() if isinstance(results_ip, dict) else results_ip)
