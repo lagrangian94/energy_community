@@ -55,10 +55,10 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     data = {}
     for energy_type in energy_types:
         data[energy_type] = {
-            'IP': dict_to_array(community_prices.get(energy_type, {}))
+            'IPP': dict_to_array(community_prices.get(energy_type, {}))
         }
         if community_prices_lp is not None:
-            data[energy_type]['LP'] = dict_to_array(community_prices_lp.get(energy_type, {}))
+            data[energy_type]['MP'] = dict_to_array(community_prices_lp.get(energy_type, {}))
         if community_prices_chp is not None:
             data[energy_type]['CHP'] = dict_to_array(community_prices_chp.get(energy_type, {}))
         # Add market import price if available
@@ -81,8 +81,8 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     
     # Color scheme
     colors = {
-        'IP': '#2E86AB',     # Blue
-        'LP': '#A23B72',     # Purple
+        'IPP': '#2E86AB',     # Blue
+        'MP': '#A23B72',     # Purple
         'CHP': '#F18F01',    # Orange
         'Market_Import': '#000000',   # Black for external market
         'Market_Export': '#444444'   # Dark gray, distinct from black
@@ -94,9 +94,9 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
 
         
         # Get data for this energy type
-        ip_data = data[energy_type]['IP']
+        ip_data = data[energy_type]['IPP']
         if community_prices_lp is not None:
-            lp_data = data[energy_type]['LP']
+            lp_data = data[energy_type]['MP']
         else:
             lp_data = np.array([])
         if community_prices_chp is not None:
@@ -110,18 +110,18 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         hours = np.arange(T)
         
         # --- Time Series Plot ---
+        if len(lp_data) > 0:
+            ax_time.plot(hours[:len(lp_data)], lp_data, 's-',
+                        color=colors['MP'], linewidth=2.5, markersize=6,
+                        label='MP', alpha=0.6, zorder=1)
         if len(chp_data) > 0:
-            ax_time.plot(hours[:len(chp_data)], chp_data, '^-', 
+            ax_time.plot(hours[:len(chp_data)], chp_data, '^-',
                         color=colors['CHP'], linewidth=2.5, markersize=6,
                         label='CHP', alpha=0.6, zorder=2)
-        if len(lp_data) > 0:
-            ax_time.plot(hours[:len(lp_data)], lp_data, 's-', 
-                        color=colors['LP'], linewidth=2.5, markersize=6,
-                        label='LP', alpha=0.6, zorder=1)
         if len(ip_data) > 0:
-            ax_time.plot(hours[:len(ip_data)], ip_data, 'o-', 
-                        color=colors['IP'], linewidth=2.5, markersize=6,
-                        label='IP', alpha=0.6, zorder=1)
+            ax_time.plot(hours[:len(ip_data)], ip_data, 'o-',
+                        color=colors['IPP'], linewidth=2.5, markersize=6,
+                        label='IPP', alpha=0.6, zorder=1)
         
         
 
@@ -157,7 +157,11 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         ax_time.set_ylabel(f'Price ({_get_unit(energy_type)})', fontsize=12)
         ax_time.set_title(f'{energy_type.capitalize()} Community Prices', 
                          fontsize=14, pad=15)
-        ax_time.legend(fontsize=11, loc='best', framealpha=0.9)
+        if energy_type == 'hydrogen':
+            ax_time.legend(fontsize=11, loc='center', framealpha=0.9,
+                          bbox_to_anchor=(0.25, 0.35))
+        else:
+            ax_time.legend(fontsize=11, loc='best', framealpha=0.9)
         ax_time.set_xticks(hours)
         ax_time.grid(True, alpha=0.3, linestyle='--')
         
@@ -168,7 +172,7 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         mins = []
         maxs = []
         
-        for method, method_data in [('IP', ip_data), ('LP', lp_data), ('CHP', chp_data)]:
+        for method, method_data in [('IPP', ip_data), ('MP', lp_data), ('CHP', chp_data)]:
             if len(method_data) > 0:
                 methods.append(method)
                 means.append(np.mean(method_data))
@@ -219,9 +223,9 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
             lp_chp_diff = abs(lp_mean - chp_mean)
             
             comparison_text = (
-                f'IP vs LP: {ip_lp_diff:.4f}\n'
-                f'IP vs CHP: {ip_chp_diff:.4f}\n'
-                f'LP vs CHP: {lp_chp_diff:.4f}'
+                f'IPP vs MP: {ip_lp_diff:.4f}\n'
+                f'IPP vs CHP: {ip_chp_diff:.4f}\n'
+                f'MP vs CHP: {lp_chp_diff:.4f}'
             )
             
             # # Determine if methods are equivalent
@@ -254,10 +258,10 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
     # plt.tight_layout(rect=[0, 0.03, 1, 0.99])
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
         print(f"Figure saved to {save_path}")
     else:
-        plt.savefig('./community_prices_comparison.png', dpi=300, bbox_inches='tight')
+        plt.savefig('./community_prices_comparison.png', dpi=600, bbox_inches='tight')
     plt.show()
     
     # Print detailed statistics
@@ -270,15 +274,15 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         print(f"{energy_type.upper()}")
         print(f"{'='*80}")
         
-        ip_data = data[energy_type]['IP']
-        lp_data = data[energy_type]['LP'] if community_prices_lp is not None else np.array([])
+        ip_data = data[energy_type]['IPP']
+        lp_data = data[energy_type]['MP'] if community_prices_lp is not None else np.array([])
         chp_data = data[energy_type]['CHP'] if community_prices_chp is not None else np.array([])
-        
+
         # Print statistics table
         print(f"{'Method':<10} | {'Mean':>12} | {'Std':>12} | {'Min':>12} | {'Max':>12} | {'NonZero':>8}")
         print("-"*80)
-        
-        for method, method_data in [('IP', ip_data), ('LP', lp_data), ('CHP', chp_data)]:
+
+        for method, method_data in [('IPP', ip_data), ('MP', lp_data), ('CHP', chp_data)]:
             if len(method_data) > 0:
                 mean = np.mean(method_data)
                 std = np.std(method_data)
@@ -293,18 +297,18 @@ def plot_community_prices_comparison(community_prices, community_prices_lp, comm
         # Pairwise comparison
         if len(ip_data) > 0 and len(lp_data) > 0 and len(chp_data) > 0:
             print("\nPairwise Differences (Mean Absolute Error):")
-            print(f"  IP vs LP:  {np.mean(np.abs(ip_data - lp_data)):.6f}")
-            print(f"  IP vs CHP: {np.mean(np.abs(ip_data[:len(chp_data)] - chp_data)):.6f}")
+            print(f"  IPP vs LP:  {np.mean(np.abs(ip_data - lp_data)):.6f}")
+            print(f"  IPP vs CHP: {np.mean(np.abs(ip_data[:len(chp_data)] - chp_data)):.6f}")
             print(f"  LP vs CHP: {np.mean(np.abs(lp_data[:len(chp_data)] - chp_data)):.6f}")
             
             # Correlation
             print("\nCorrelation Coefficients:")
             if len(ip_data) == len(lp_data):
                 corr_ip_lp = np.corrcoef(ip_data, lp_data)[0, 1]
-                print(f"  IP vs LP:  {corr_ip_lp:.6f}")
+                print(f"  IPP vs LP:  {corr_ip_lp:.6f}")
             if len(ip_data) >= len(chp_data):
                 corr_ip_chp = np.corrcoef(ip_data[:len(chp_data)], chp_data)[0, 1]
-                print(f"  IP vs CHP: {corr_ip_chp:.6f}")
+                print(f"  IPP vs CHP: {corr_ip_chp:.6f}")
             if len(lp_data) >= len(chp_data):
                 corr_lp_chp = np.corrcoef(lp_data[:len(chp_data)], chp_data)[0, 1]
                 print(f"  LP vs CHP: {corr_lp_chp:.6f}")
