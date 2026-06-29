@@ -143,6 +143,7 @@ from chp import ColumnGenerationSolver
 from visualize import plot_community_prices_comparison
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import time
 import itertools
 import argparse
@@ -150,6 +151,21 @@ import gc
 import json
 import pickle
 import copy
+
+
+def _convert_keys_for_json(obj):
+    """Convert tuple keys to strings for JSON serialization."""
+    if isinstance(obj, dict):
+        return {str(k): _convert_keys_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_keys_for_json(item) for item in obj]
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, (np.int64, np.int32)):
+        return int(obj)
+    return obj
 
 
 def run_experiment(sensitivity_analysis_candidates, players, configuration,
@@ -164,7 +180,7 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
     param_values = [sensitivity_analysis_candidates[name] for name in param_names]
 
     results_summary = []
-    ip, chp = True, True
+    ip, chp, lp = True, True, True
     brute_force = False  # 5.3에서는 separation problem으로 충분
 
     total_runs = 1
@@ -209,6 +225,13 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
             for u in players:
                 row[f'profit_ip_{u}'] = profit_ip[u]
 
+            # PCA (Proportional Cost Allocation)
+            profit_pca = lem.proportional_cost_allocation(
+                comparison["individual"], comparison["community"]["total_profit"]
+            )
+            for u in players:
+                row[f'profit_pca_{u}'] = profit_pca[u]
+
             # IP core violation
             core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
             cost_ip = {u: -1 * profit_ip[u] for u in players}
@@ -216,6 +239,13 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
             row['violation_ip'] = violation_ip
             row['blocking_coalition_ip'] = str(coalition_ip) if violation_ip > 1e-6 else ''
             row['isimp_ip'] = isimp_ip
+
+            # PCA core violation
+            cost_pca = {u: -1 * profit_pca[u] for u in players}
+            coalition_pca, violation_pca, isimp_pca = core_comp.measure_stability_violation(cost_pca)
+            row['violation_pca'] = violation_pca
+            row['blocking_coalition_pca'] = str(coalition_pca) if violation_pca > 1e-6 else ''
+            row['isimp_pca'] = isimp_pca
 
         # --- CHP ---
         # --- CHP Smoothing ---
@@ -257,43 +287,127 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
             del cg_smooth
             gc.collect()
 
+        # --- LP ---
+        if lp:
+            # LP requires eff_type=2 for electrolyzer (linear approximation)
+            parameters_lp = copy.deepcopy(parameters)
+            parameters_lp['eff_type'] = 2
+            if 'El' in parameters_lp:
+                parameters_lp['El']['eff_type'] = 2
+            lem_lp = LocalEnergyMarket(players, time_periods, parameters_lp, model_type='lp')
+            t0 = time.time()
+            status_lp, results_lp, _, community_prices_lp, market_prices_lp = lem_lp.solve_complete_model(
+                analyze_revenue=False
+            )
+            row['solve_time_lp'] = time.time() - t0
+
+            player_profits_lp, prices_lp = lem_lp.calculate_player_profits_with_community_prices(
+                results_lp, community_prices_lp
+            )
+            comparison_lp = lem_lp.compare_individual_vs_community_profits(
+                results_lp, players, lem_lp.model_type, time_periods,
+                parameters_lp, player_profits_lp, community_prices_lp
+            )
+            profit_lp = {u: player_profits_lp[u]["net_profit"] for u in players}
+            for u in players:
+                row[f'profit_lp_{u}'] = profit_lp[u]
+
+            # LP core violation
+            core_comp_lp = CoreComputation(players, 'lp', time_periods, parameters_lp)
+            cost_lp = {u: -1 * profit_lp[u] for u in players}
+            coalition_lp, violation_lp, isimp_lp = core_comp_lp.measure_stability_violation(cost_lp)
+            row['violation_lp'] = violation_lp
+            row['blocking_coalition_lp'] = str(coalition_lp) if violation_lp > 1e-6 else ''
+            row['isimp_lp'] = isimp_lp
+            del core_comp_lp
+
         # --- Save outputs (like analysis_mip.py) ---
         if ip and chp and status_smooth == "optimal":
             # parameters.json
-            with open('parameters.json', 'w') as f:
+            with open(os.path.join(output_dir, 'parameters.json'), 'w') as f:
                 json.dump(parameters, f, default=lambda x: x.tolist() if hasattr(x, 'tolist') else str(x), indent=2)
 
             # synergy_analysis_ip.tex
-            lem.generate_beamer_synergy_table(comparison, players, filename='synergy_analysis_ip.tex')
+            lem.generate_beamer_synergy_table(comparison, players, filename=os.path.join(output_dir, 'synergy_analysis_ip.tex'))
+
+            # synergy_analysis_pca.tex
+            comparison_pca = copy.deepcopy(comparison)
+            for u in players:
+                comparison_pca["community"]["player_profits"][u]["net_profit"] = profit_pca[u]
+            lem.generate_beamer_synergy_table(comparison_pca, players, filename=os.path.join(output_dir, 'synergy_analysis_pca.tex'))
+
+            # comparison_results_pca.json
+            with open(os.path.join(output_dir, 'comparison_results_pca.json'), 'w') as f:
+                json.dump(comparison_pca, f, indent=2)
 
             # synergy_analysis_chp.tex
             comparison_chp = copy.deepcopy(comparison)
             for u in players:
                 comparison_chp["community"]["player_profits"][u]["net_profit"] = profit_chp_smooth[u]
             comparison_chp["community"]["prices"] = community_prices_chp_smooth
-            lem.generate_beamer_synergy_table(comparison_chp, players, filename='synergy_analysis_chp.tex')
+            lem.generate_beamer_synergy_table(comparison_chp, players, filename=os.path.join(output_dir, 'synergy_analysis_chp.tex'))
+
+            # wind_profile.png
+            wind_values = [parameters.get(f'renewable_cap_u1_{t}', 0) for t in time_periods]
+            plt.figure(figsize=(10, 4))
+            plt.plot(range(len(wind_values)), wind_values, marker='o', linestyle='-', color='b')
+            plt.xlabel("Time Period (hour)", fontsize=14)
+            plt.ylabel("Wind Production (MWh)", fontsize=14)
+            plt.xticks(range(len(wind_values)), fontsize=12)
+            plt.yticks(fontsize=12)
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'wind_profile.png'), dpi=600, bbox_inches='tight')
+            plt.close()
 
             # community_prices_comparison.png
             plot_community_prices_comparison(
                 community_prices, None, community_prices_chp_smooth, market_prices,
-                save_path='community_prices_comparison.png'
+                save_path=os.path.join(output_dir, 'community_prices_comparison.png')
             )
 
             # comparison_results.json
-            with open('comparison_results.json', 'w') as f:
+            with open(os.path.join(output_dir, 'comparison_results.json'), 'w') as f:
                 json.dump(comparison, f, indent=2)
 
             # comparison_results_chp.json
-            with open('comparison_results_chp.json', 'w') as f:
+            with open(os.path.join(output_dir, 'comparison_results_chp.json'), 'w') as f:
                 json.dump(comparison_chp, f, indent=2)
 
-            # results_ip.pkl
-            with open('results_ip.pkl', 'wb') as f:
-                pickle.dump(results_ip, f)
+            # results_ip.json
+            with open(os.path.join(output_dir, 'results_ip.json'), 'w') as f:
+                json.dump(_convert_keys_for_json(results_ip), f, indent=2)
 
-            # results_chp.pkl
-            with open('results_chp.pkl', 'wb') as f:
-                pickle.dump(results_chp_smooth, f)
+            # results_chp.json
+            with open(os.path.join(output_dir, 'results_chp.json'), 'w') as f:
+                json.dump(_convert_keys_for_json(results_chp_smooth), f, indent=2)
+
+        # --- Save LP outputs ---
+        if lp and ip:
+            # synergy_analysis_lp.tex
+            lem_lp.generate_beamer_synergy_table(comparison_lp, players, filename=os.path.join(output_dir, 'synergy_analysis_lp.tex'))
+
+            # community_prices_comparison with LP included
+            if chp and status_smooth == "optimal":
+                plot_community_prices_comparison(
+                    community_prices, community_prices_lp, community_prices_chp_smooth, market_prices,
+                    save_path=os.path.join(output_dir, 'community_prices_comparison_all.png')
+                )
+
+            # comparison_results_lp.json
+            with open(os.path.join(output_dir, 'comparison_results_lp.json'), 'w') as f:
+                json.dump(comparison_lp, f, indent=2)
+
+            # results_lp.json
+            with open(os.path.join(output_dir, 'results_lp.json'), 'w') as f:
+                json.dump(_convert_keys_for_json(results_lp), f, indent=2)
+
+            # prices_lp.json
+            with open(os.path.join(output_dir, 'prices_lp.json'), 'w') as f:
+                json.dump(_convert_keys_for_json(community_prices_lp), f, indent=2)
+
+            del lem_lp
+            gc.collect()
 
         if ip:
             del lem
@@ -302,9 +416,12 @@ def run_experiment(sensitivity_analysis_candidates, players, configuration,
         # 로그
         flag = " *** IP VIOLATED ***" if row.get('violation_ip', 0) > 1e-6 else ""
         print(f"  IP: {row.get('violation_ip', 0):.4f}{flag} | "
+              f"PCA: {row.get('violation_pca', 0):.4f} | "
               f"CHP_S: {row.get('violation_chp_smooth', 0):.4f} | "
+              f"LP: {row.get('violation_lp', 'N/A')} | "
               f"t_IP={row.get('solve_time_ip', 0):.1f}s "
-              f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s")
+              f"t_CHP_S={row.get('solve_time_chp_smooth', 0):.1f}s "
+              f"t_LP={row.get('solve_time_lp', 0):.1f}s")
 
         results_summary.append(row)
 

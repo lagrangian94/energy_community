@@ -289,9 +289,12 @@ class ElectricityProdGenerator:
         import matplotlib.pyplot as plt
 
         plt.figure(figsize=(10, 4))
-        plt.plot(data["CP"].values/data["CP"].max()*self.wind_cap_mw, marker='o', linestyle='-', color='b')
-        plt.xlabel("Time Period (hour)")
-        plt.ylabel("Wind Production (MWh)")
+        wind_values = data["CP"].values/data["CP"].max()*self.wind_cap_mw
+        plt.plot(range(len(wind_values)), wind_values, marker='o', linestyle='-', color='b')
+        plt.xlabel("Time Period (hour)", fontsize=14)
+        plt.ylabel("Wind Production (MWh)", fontsize=14)
+        plt.xticks(range(len(wind_values)), fontsize=12)
+        plt.yticks(fontsize=12)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig("wind_cp_profile.png", dpi=300)
@@ -680,11 +683,11 @@ def plot_wind_profile(data):
         plt.plot(day_data['Hour'], day_data['CP'], marker='o', markersize=3, 
                 linewidth=1.5, alpha=0.6, c=colors[idx], label=f'Day {day}')
     
-    plt.xlabel('Hour', fontsize=12)
-    plt.ylabel('CP', fontsize=12)
-    plt.title(f'Wind CP by Hour - All Days Overlaid (Month {month})', fontsize=14)
+    plt.xlabel('Time Period (hour)', fontsize=14)
+    plt.ylabel('Wind Production (MWh)', fontsize=14)
     plt.xlim(-0.5, 23.5)
-    plt.xticks(range(0, 24, 2))
+    plt.xticks(range(0, 24), fontsize=12)
+    plt.yticks(fontsize=12)
     plt.grid(True, alpha=0.3)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, ncol=2)
     plt.tight_layout()

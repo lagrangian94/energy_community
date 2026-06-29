@@ -1503,7 +1503,7 @@ class LocalEnergyMarket:
             plt.grid(True, alpha=0.3)
             plt.xticks(self.time_periods)
             plt.tight_layout()
-            plt.savefig('electricity_prices.png', dpi=300, bbox_inches='tight')
+            plt.savefig('electricity_prices.png', dpi=600, bbox_inches='tight')
             print("✓ Electricity price plot saved as 'electricity_prices.png'")
             plt.close()
             
@@ -1522,7 +1522,7 @@ class LocalEnergyMarket:
             plt.grid(True, alpha=0.3)
             plt.xticks(self.time_periods)
             plt.tight_layout()
-            plt.savefig('heat_prices.png', dpi=300, bbox_inches='tight')
+            plt.savefig('heat_prices.png', dpi=600, bbox_inches='tight')
             print("✓ Heat price plot saved as 'heat_prices.png'")
             plt.close()
             
@@ -1541,7 +1541,7 @@ class LocalEnergyMarket:
             plt.grid(True, alpha=0.3)
             plt.xticks(self.time_periods)
             plt.tight_layout()
-            plt.savefig('hydrogen_prices.png', dpi=300, bbox_inches='tight')
+            plt.savefig('hydrogen_prices.png', dpi=600, bbox_inches='tight')
             print("✓ Hydrogen price plot saved as 'hydrogen_prices.png'")
             plt.close()
             
@@ -1587,7 +1587,7 @@ class LocalEnergyMarket:
             ax3.set_xticks(self.time_periods)
             
             plt.tight_layout()
-            plt.savefig('combined_energy_prices.png', dpi=300, bbox_inches='tight')
+            plt.savefig('combined_energy_prices.png', dpi=600, bbox_inches='tight')
             print("✓ Combined energy prices plot saved as 'combined_energy_prices.png'")
             plt.close()
             
