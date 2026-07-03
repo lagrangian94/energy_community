@@ -1,0 +1,2020 @@
+ADMM-based decomposed DNN+RLT
+Relaxations for Completely Positive Models in
+Electricity Market Clearing
+Shudian Zhao, Mohammad Reza Karimi Gharigh, Jan Kronqvist,
+Mohammad Reza Hesamzadeh
+KTH Royal Institute of Technology, Stockholm, Sweden
+Abstract. The day-ahead electricity market clearing with nonconvex order types can
+be formulated as a mixed-integer linear program (MILP), but its LP relaxation may
+provide weak bounds, and exact solutions can become computationally intractable in
+large-scale or extended market settings. We study a welfare-maximizing clearing model
+with elementary hourly orders, block orders with logical acceptance constraints, and
+flexible hourly orders. Starting from a compact MILP formulation, we derive an equiv-
+alent  completely  positive  programming  (CPP)  reformulation  via  matrix  lifting  and
+propose relaxed CPP variants that further reduce the modeling burden while maintain-
+ing strong bounds. We then develop tractable doubly nonnegative (DNN) relaxations,
+including decomposed formulations that exploit the problem structure by using smaller
+positive  semidefinite  matrices.  To  further  strengthen  these  bounds,  we  introduce
+reformulation-linearization technique (RLT) inequalities tailored to the decomposed
+structure. To tackle the challenge of large-scale DNNs, we design an alternating di-
+rection method of multipliers (ADMM) with adaptive penalty updates and rigorous
+dual lower bounds, enabling certified early termination. Computational experiments
+on synthetic instances show that the proposed DNN+RLT relaxations substantially
+tighten LP bounds, while decomposition and first-order methods significantly reduce
+computational effort.
+Keywords:  completely  positive  program;  doubly  nonnegative  relaxation;  RLT;
+ADMM; market clearing; nonconvex orders.
+1 Introduction
+Day-ahead   electricity   market   clearing   is   typically   formulated   as   a   welfare-
+maximization problem over a finite time horizon, subject to market-balance conditions
+and product-specific feasibility constraints. In practical market designs, however, the
+1
+arXiv:2605.04891v1  [eess.SY]  6 May 2026
+presence of nonconvex order types—such as block bids, linked (child–parent) bids, ex-
+clusive groups, and flexible hourly products—introduces discrete decisions and logical
+constraints, leading naturally to large-scale mixed-integer linear programs (MILPs) [9].
+Although  many  operational  instances  can  be  solved  exactly  by  MILP  technology,
+strong  relaxations  remain  important  for  producing  informative  bounds,  supporting
+scalable algorithms, and enabling richer market models for which an exact solution
+may become computationally demanding.
+Conic relaxations provide stronger bounds than linear relaxations [12]. There have
+not  been  many  applications  of  conic  relaxations  in  market-clearing  problems,  but
+recent studies on unit commitment problems (problems that share very similar non-
+convexity  and  large-scale  nature)  show  the  modeling  power  of  semidefinite  positive
+(SDP) relaxations strengthened by RLT inequalities [5]. Moreover, Guo, Bodur, and
+Taylor [7] proposed a completely positive programming (CPP) reformulation for unit
+commitment in the U.S. market and, based on the strong duality of CPP, established
+a pricing scheme by calculating dual solutions.
+This paper develops doubly nonnegative relaxation frameworks for market clearing
+with nonconvex orders. Starting from a compact MILP formulation, we exploit matrix
+lifting to derive an equivalent completely positive programming (CPP) reformulation.
+This theoretical result provides a systematic way to encode binary structure and com-
+plementarity in a conic framework, which benefits from strong duality, an important
+feature  for  pricing  mechanisms.  Since  the  complete  positive  (CP)  cone  is  computa-
+tionally  intractable  in  general,  we  next  replace  the  CP  cone  with  tractable  outer
+approximations based on the doubly nonnegative (DNN) cone, leading to semidefinite
+relaxations that can be substantially tighter than the basic LP relaxation. The RLT
+technique  provides  valid  linear  inequalities  by  multiplying  existing  constraints  and
+then linearizing the resulting product terms. It has long been used to further tighten
+relaxations for nonconvex optimization problems [11].
+To improve scalability, we further exploit sparsity and temporal structure to decom-
+pose the lifted matrix into smaller clique matrices linked by consistency constraints.
+We then strengthen the resulting DNN relaxations with the reformulation-linearization
+technique  (RLT)  inequalities  tailored  to  the  logical  structure  of  market  orders.  Fi-
+nally, for the decomposed primal semidefinite relaxations, we develop an alternating
+direction method of multipliers (ADMM) scheme with adaptive penalty updates and
+computable dual lower bounds, allowing certified early termination.
+Contributions
+The main contributions of the paper are as follows:
+
+We derive an equivalent CPP reformulation of the market-clearing MILP using
+matrix  lifting,  and  introduce  relaxed  CPP  variants  that  are  better  suited  for
+scalable implementation.
+We propose a decomposition strategy that exploits temporal structure and order-
+type couplings, replacing a large lifted cone constraint with smaller conic blocks
+and consistency constraints.
+
+2
+
+We strengthen the resulting DNN relaxations by adding RLT inequalities derived
+from box constraints and market-order logic.
+We  design  a  practical  ADMM  method  for  the  decomposed  primal  semidefinite
+relaxations, with adaptive penalty updates and rigorous dual lower bounds for
+certified early termination.
+We  provide  numerical  evidence  showing  that  the  proposed  relaxations  sub-
+stantially tighten LP bounds and that decomposition, together with first-order
+methods, improves computational scalability.
+
+Outlines
+Section 2 introduces the welfare-maximizing market-clearing model and its MILP for-
+mulation.  Section  3  derives  the  exact  completely  positive  reformulation.  Section  4
+presents the relaxed and decomposed CPP formulations together with the SDP, DNN,
+and DNN+RLT relaxations. Section 5 introduces the ADMM method for the decom-
+posed  SDP  relaxation,  including  adaptive  penalty  updates  and  rigorous  dual  lower
+bounds. Section 6 reports numerical results, and Section 7 concludes.
+Notation
+For  a  finite  set O, |O|  denotes  its  cardinality.  Vector  inequalities  are  interpreted
+element-wise. For matrices, ⟨A,B⟩ = trace(A
+⊤
+B) denotes the Frobenius inner prod-
+uct, and∥·∥
+F
+denotes the Frobenius norm. The set of symmetric n×n real matrices is
+S
+n
+, the positive semidefinite cone is S
+n
++
+, and the nonnegative orthant isR
+n
++
+. Trading
+periods are indexed by t∈T  with a reference period t
+0
+.
+2 The welfare-maximizing market-clearing model
+We consider a day-ahead electricity market-clearing problem over a finite set of trading
+periods T   following  the  policy  in  the  Nordic  energy  market  [3],  and  we  omit  the
+transmission constraints to focus on 1-area cases.
+The  market  operator  determines  accepted  quantities  to  maximize  social  welfare
+subject to market-balance constraints and order-type-specific feasibility requirements.
+The model includes three classes of orders: elementary hourly orders, block orders with
+logical constraints, and flexible hourly bids. Continuous variables are used for divisible
+orders, while binary variables represent activation decisions for nonconvex orders.
+Let x
+E
+denote the acceptance variables for elementary hourly orders, let (x
+B
+, u
+PB
+)
+denote the variables associated with block and profile-block orders, and let x
+FHB
+de-
+note the binary activation variables for flexible hourly bids. The welfare-maximization
+3
+problem can then be written as the following MILP:
+max c
+⊤
+E
+x
+E
+
+c
+
+⊤
+B
+x
+B
+
+c
+
+⊤
+FHB
+x
+FHB
+s.t. A
+E
+x
+E
++ A
+B
+x
+B
++ A
+FHB
+x
+FHB
+= 0
+|T|
+,
+x
+E
+∈X
+E
+,
+(x
+B
+, u
+PB
+)∈X
+B
+,
+x
+FHB
+∈X
+FHB
+.
+(MILP)
+Here,  the  objective  coefficients c
+E
+, c
+B
+,  and c
+FHB
+encode  the  welfare  contribution
+of the three order classes, and the balance equation enforces market clearing in each
+trading  period.  The  feasible  sets X
+E
+, X
+B
+,  and X
+FHB
+capture  the  operational  and
+logical requirements associated with the different order types.
+For elementary hourly orders, the acceptance variables are continuous and bounded
+between  zero  and  one.  A  subset  of  supply  orders,  denoted  by O
+LG
+,  is  additionally
+subject to load-gradient constraints linking consecutive periods. Writing q
+i,t
+for the
+quantity associated with order i at time t, these constraints define
+X
+E
+:=
+
+
+
+
+
+x
+E
+∈ [0, 1]
+n
+E
+×|T|
+q
+i,t
+x
+i,t
+− q
+i,t−1
+x
+i,t−1
+≤ g
+up
+,
+q
+i,t−1
+x
+i,t−1
+− q
+i,t
+x
+i,t
+≤ g
+down
+,
+∀i∈O
+LG
+, ∀t∈T {t
+0
+}
+
+
+
+
+
+.
+These inequalities limit upward and downward changes in accepted quantities across
+adjacent periods.
+The set X
+B
+describes block and profile-block orders. These orders are nonconvex
+because binary activation decisions and logical relations govern their acceptance. We
+let u
+PB
+denote the relevant binary variables and write
+X
+B
+:=
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(x
+B
+, u
+PB
+)∈ [0, 1]
+n
+B
+×{0, 1}
+n
+P B
+Ru
+PB
+≤ x
+B
+≤ u
+PB
+,
+X
+i∈O
+eg
+x
+i
+≤ 1, ∀O
+eg
+⊆O
+B
+,
+x
+c
+≤
+X
+p∈P (c)
+x
+p
+, ∀c∈O
+L
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+The inequalities Ru
+PB
+≤ x
+B
+≤ u
+PB
+represent the profile-block structure, exclusivity
+is imposed over each exclusive groupO
+eg
+, and the child–parent logic is modeled by the
+linkage constraints indexed by the set O
+L
+of linked child orders, where P (c) denotes
+the parent set associated with child order c.
+Finally,  flexible  hourly  bids  are  modeled  using  binary  variables  that  indicate
+whether each bid is activated in each trading period. Since each flexible order can be
+accepted in at most one period, the feasible set is
+X
+FHB
+:=
+(
+x
+FHB
+∈{0, 1}
+n
+F HB
+×|T|
+X
+t∈T
+x
+i,t
+≤ 1, ∀i∈O
+FHB
+)
+.
+4
+The  model  (MILP)  provides  a  compact  MILP  representation  of  the  welfare-
+maximizing market-clearing problem considered in this paper. This formulation will
+serve as the starting point for the lifted completely positive program reformulations
+and the tractable conic relaxations developed in the following sections.
+3 The equivalent completely positive reformulation
+Burer [2] has proved that if a standard MIQP problem with only equations and non-
+negativity constraints satisfies key assumptions that the bounds [0, 1] are induced by
+other  constraints,  then  there  exists  an  equivalent  completely  positive  reformulation
+with standard conic relaxations techniques (squared equations and matrix lifting). We
+can apply the same technique to form an equivalent CPP formulation for the market-
+clearing problem (MILP) and reformulate it by introducing slack variables s for all
+inequality constraints, including upper bounds x≤ 1 for all variables.
+For  simplicity  of  notations  in  the  standard  reformulation  (MILP-std),  let x  :=
+
+x
+⊤
+E
+, x
+⊤
+B
+, u
+⊤
+PB
+, x
+⊤
+FHB
+, s
+⊤
+
+⊤
+collect all original variables together with slack variables:
+min − c
+⊤
+x
+s.t. a
+⊤
+t
+x = 0, ∀t∈T ,
+x∈X
+eq
+,
+x∈R
+n
+1
++
+×{0, 1}
+n
+2
+,
+(MILP-std)
+where c is the stacked objective vector,X
+eq
+denotes the polyhedral set induced by the
+equality-form market constraints X
+E
+, X
+B
+, and X
+FHB
+, and theR
+n
+1
++
+×{0, 1}
+n
+2
+defines
+the joint space of the nonnegative variables and binary variables.
+We first introduce the preliminary definitions of the completely positive program
+(CPP) before explaining the process of obtaining a CPP reformulation for (MILP-std).
+Definition 1 (complete positive cone).  The complete positive cone C
+∗n
+is the set of
+symmetric n× n real matrices:
+C
+∗n
+:={X ∈S
+n
+| X = BB
+⊤
+,∃ B ∈R
+n×m
++
+}.
+Note  that  a  matrix  in  cone C
+∗n
+therefore  admits  a  Gram  representation  using
+only  nonnegative  vectors.  This  property  is  the  key  device  that  allows  binary  and
+nonnegative continuous variables to be represented in a lifted conic model.
+The standard technique to formulate a CPP relaxation is obtained by lifting the
+vector x into a matrix variable X = xx
+⊤
+. In the lifted space, quadratic products of
+variables are represented by entries of X, while linear relations among components of
+x induce corresponding linear relations on X. In particular, the augmented matrix
+̄
+X :=
+
+1 x
+⊤
+x  X
+
+5
+is in the complete positive cone and we can relax X = xx
+⊤
+by X ∈ C
+∗n
+. Moreover,
+for all binary variables with index denoted asO
+Z
+, we can also derive from x
+2
+= x, the
+diagonal consistency conditions X
+ii
+= x
+i
+for all i ∈ O
+Z
+. Another step to formulate
+the CPP is that each market-clearing equality a
+⊤
+t
+x = 0 implies a
+⊤
+t
+xx
+⊤
+a
+t
+= 0, which,
+after lifting, becomes the linear constraint ⟨A
+t
+, X⟩ = 0, where A
+t
+:= a
+t
+a
+⊤
+t
+for each
+t ∈ T . Likewise, the equality-form constraints defining X
+eq
+generate a lifted feasible
+set for X, which we denote by
+̄
+X
+eq
+.
+We thus obtain the following exact completely positive programming reformulation
+of (MILP-std):
+min − c
+⊤
+x
+s.t. a
+⊤
+t
+x = 0, ∀t∈T ,
+⟨A
+t
+, X⟩ = 0, ∀t∈T ,
+x∈X
+eq
+, X∈
+̄
+X
+eq
+,
+
+1 x
+⊤
+x  X
+
+∈C
+∗(1+n
+1
++n
+2
+)
+,
+X
+ii
+= x
+i
+, ∀i∈O
+Z
+,
+(CPP-eq)
+where
+̄
+X
+eq
+denotes the collection of lifted linear constraints induced by the relations
+in X
+eq
+.
+We  omit  the  proof  of  the  key  assumption  here,  but  it  can  be  easily  verified  by
+Burer’s  theorem:  (CPP-eq)  is  equivalent  to  the  original  MILP  formulation.  If x  is
+feasible for (MILP-std), then setting X = xx
+⊤
+yields a feasible point of (CPP-eq), and
+both formulations have the same objective value. Conversely, any feasible solution of
+(CPP-eq) admits a completely positive lifted representation consistent with the binary
+diagonal  conditions,  which  recovers  a  feasible  solution  of  the  original  mixed-binary
+model.
+Although formulation (CPP-eq) is exact and convex, optimization over the com-
+pletely  positive  cone  is  computationally  intractable  in  general.  Its  main  value  here
+is  therefore  structural:  it  reveals  the  market-clearing  MILP  as  a  lifted  conic  pro-
+gram and provides a natural foundation for relaxation. In the next section, we exploit
+this structure to derive relaxed and decomposed conic formulations, and then replace
+complete positivity by tractable doubly nonnegative approximations strengthened by
+problem-specific valid inequalities.
+4 The decomposed CPP and strengthened conic
+relaxation
+The exact CPP formulation (CPP-eq) provides a useful lifted representation of the
+market-clearing MILP, but it remains computationally intractable in general. In this
+section, we therefore develop more tractable conic models. We first introduce a relaxed
+lifted CPP formulation that avoids the explicit use of slack-variable lifting, and then
+exploit problem structure to derive a decomposed CPP model based on smaller local
+6
+lifted matrices. We subsequently replace complete positivity by tractable semidefinite-
+based outer approximations and strengthen the resulting relaxations with DNN and
+problem-specific RLT inequalities.
+4.1 The decomposed CPP
+A first simplification is obtained by lifting only the original decision variables and re-
+taining the inequality equations of the feasible region. LetX
+ineq
+denote the polyhedral
+feasible set defined directly by the market-clearing constraints and the order-type in-
+equalities, without introducing additional slack variables into the lifted vector. The
+resulting relaxed lifted CPP formulation is
+min − c
+⊤
+x
+s.t. a
+⊤
+t
+x = 0, ∀t∈T ,
+⟨A
+t
+, X⟩ = 0, ∀t∈T ,
+x∈X
+ineq
+, X∈
+̄
+X
+ineq
+,
+
+1 x
+⊤
+x  X
+
+∈C
+∗(1+n
+1
++n
+2
+)
+,
+X
+ii
+= x
+i
+, ∀i∈O
+Z
+,
+X
+ii
+≤ x
+i
+, ∀i∈O
+R
+.
+(CPP-ineq)
+Here, O
+Z
+and O
+R
+denote the index sets of binary and continuous variables, respec-
+tively,  and
+̄
+X
+ineq
+denotes  the  lifted  relations  induced  by  the  inequalities  in X
+ineq
+.
+Relative to (CPP-eq), formulation (CPP-ineq) reduces modeling overhead by avoid-
+ing an explicit lifted representation of slack variables, while preserving the basic conic
+lifting structure.
+To further improve scalability, we exploit the sparsity induced by temporal coupling
+and order-type interactions. Commonly used techniques, such as chordal decomposi-
+tion, replace a large positive semidefinite constraint by a family of smaller clique-based
+constraints linked by consistency conditions, thereby reducing the memory and compu-
+tational requirements of both first-order and second-order methods  [1, 13]. Moreover,
+under  certain  sufficient  conditions,  the  chordal-decomposed  reformulation  has  the
+equivalent tightness as the original conic formulations [6, 4].
+Rather than imposing complete positivity on one global lifted matrix, we introduce
+several smaller lifted matrices associated with local variable groups. These groups are
+chosen to reflect the structure of the market-clearing model: period-wise balance con-
+straints, load-gradient constraints linking consecutive periods, and couplings between
+block orders and flexible hourly bids. For each trading period t∈T , let
+̄
+X
+t
+:=
+
+1  x
+⊤
+t
+x
+t
+X
+t
+
+∈C
+∗(1+|O
+E
+|+|O
+B
+|+|O
+F HB
+|+|O
+P B
+|)
+,
+7
+where x
+t
+collects the variables in period t. For each t∈T {t
+0
+}, we also introduce a
+lifted matrix associated with the load-gradient coupling between periods t− 1 and t:
+̄
+X
+LG,t
+:=
+
+
+
+
+
+
+1x
+⊤
+LG,t−1
+x
+⊤
+LG,t
+x
+⊤
+B
+u
+⊤
+PB
+x
+LG,t−1
+X
+LG,B,t
+x
+LG,t
+x
+B
+u
+PB
+
+
+
+
+
+
+∈C
+∗(1+2|O
+LG
+|+|O
+B
+|+|O
+P B
+|)
+,
+and, for each flexible hourly bid i ∈ O
+FHB
+, a lifted matrix capturing its interaction
+with block-order variables:
+̄
+X
+B,FHB,i
+:=
+
+
+
+
+1x
+⊤
+FHB,i
+x
+⊤
+B
+u
+⊤
+PB
+x
+FHB,i
+X
+B,FHB,i
+x
+B
+u
+PB
+
+
+
+
+∈C
+∗(1+|T|+|O
+B
+|+|O
+P B
+|)
+.
+The  local  lifted  matrices  overlap  on  shared  variables  and  lifted  entries.  Consis-
+tency is enforced through linear projection operators that identify the corresponding
+submatrices of a global matrix X and the decomposed CPP formulation:
+min − c
+⊤
+x
+s.t. a
+⊤
+t
+x = 0, ∀t∈T ,
+⟨A
+t
+, X⟩ = 0, ∀t∈T ,
+x∈X
+ineq
+, X∈
+̄
+X
+ineq
+,
+A
+t
+(
+̄
+X
+t
+) = X, ∀t∈T ,
+A
+LG,t
+(
+̄
+X
+LG,t
+) = X, ∀t∈T {t
+0
+},
+A
+B,FHB,i
+(
+̄
+X
+B,FHB,i
+) = X, ∀i∈O
+FHB
+,
+̄
+X
+t
+∈C
+∗
+, ∀t∈T ,
+̄
+X
+LG,t
+∈C
+∗
+, ∀t∈T {t
+0
+},
+̄
+X
+B,FHB,i
+∈C
+∗
+, ∀i∈O
+FHB
+,
+(CPP-ineq-decomposed)
+where A
+∗
+(·)  denote  various  linear  operators  mapping  between  the  decomposed
+submatrices and X .
+Formulation (CPP-ineq-decomposed) preserves the lifted conic logic of (CPP-ineq),
+but  relaxes  a  single  large  cone  constraint  by  a  family  of  smaller  cone  constraints
+coupled  through  consistency  relations.  This  decomposition  is  especially  preferable
+computationally, since it prepares the model for sparse semidefinite relaxations and
+paralleled first-order splitting methods.
+4.2 The RLT strengthened DNN relaxations
+The  complete  positive  cone  in  (CPP-eq),  (CPP-ineq),  and  (CPP-ineq-decomposed)
+are computationally intractable in general. We therefore relax those CP cones with
+8
+tractable outer approximations. Again, we start with the definition of related conic
+cones.
+Definition 2 (positive semidefinite cone).  The positive semidefinite (PSD) cone S
+n
++
+is the set of symmetric positive semidefinite matrices:
+S
+n
++
+:={X∈S
+n
+| X⪰ 0}.
+Definition  3  (doubly  nonnegative  cone).  The  doubly  nonnegative  (DNN)  cone  is
+the  set  of  symmetric  matrices  that  are  both  positive  semidefinite  and  elementwise
+nonnegative:
+DNN
+n
+:=S
+n
++
+∩R
+n×n
++
+={X∈S
+n
+| X⪰ 0, X≥ 0}.
+By the definition of the complete positive cone, it follows that C
+∗n
+⊆ DNN
+n
+⊆
+S
+n
++
+.  This  inclusion  relation  yields  a  hierarchy  of  tractable  relaxations  for  the  lifted
+formulations  introduced  above.  The  relaxation  providing  the  lowest  bounds  for  the
+minimization problem considered in this paper is obtained by retaining only positive
+semidefiniteness:
+X⪰ 0.(SDP)
+WederivebasicSDPrelaxationsof(CPP-eq),(CPP-ineq),and
+(CPP-ineq-decomposed)  by  relaxing  the  CP  cones  to  SDP  cones.  Although  this
+relaxation captures convex quadratic structure, it does not enforce the element-wise
+nonnegativity  that  is  intrinsic  to  complete  positivity.  A  stronger  approximation  is
+obtained  by  imposing  doubly  nonnegative  structure,  i.e.,  relaxing  the  CP  cones  to
+DNN cones:
+X∈DNN
+n
+or equivalently X⪰ 0,  X≥ 0.(DNN)
+Replacing   each   complete   positive   constraint   in   (CPP-eq),   (CPP-ineq),   and
+(CPP-ineq-decomposed) by the corresponding DNN constraint yields the DNN relax-
+ations studied in this paper. In particular, when applied to the decomposed formulation
+(CPP-ineq-decomposed),  this  replacement  yields  a  structured  primal  semidefinite
+program with multiple smaller PSD blocks and element-wise nonnegativity constraints.
+To further strengthen the DNN relaxation, we incorporate RLT inequalities. The
+basic idea is to multiply two valid linear inequalities and then replace the bilinear term
+xx
+⊤
+by the lifted matrix X. Specifically, suppose that a
+⊤
+1
+x−b
+1
+≥ 0 and a
+⊤
+2
+x−b
+2
+≥ 0.
+Then (a
+⊤
+1
+x−b
+1
+)(a
+⊤
+2
+x−b
+2
+)≥ 0, which expands to a
+⊤
+1
+xx
+⊤
+a
+2
+−(b
+1
+a
+2
++b
+2
+a
+1
+)
+⊤
+x+b
+1
+b
+2
+≥
+
+After lifting, this becomes a valid linear inequality:
+
+⟨a
+1
+a
+⊤
+2
+, X⟩− (b
+1
+a
+2
+
+b
+
+2
+a
+1
+)
+⊤
+x + b
+1
+b
+2
+≥ 0.
+We use this construction to derive several families of valid inequalities adapted to the
+market-clearing  structure.  First,  combining  the  bound  constraints  0 ≤ x
+i
+≤  1  and
+0≤ x
+j
+≤ 1 yields the pairwise lifted bounds:
+1− x
+i
+− x
+j
+≤ X
+ij
+≤ min{x
+i
+,x
+j
+}.(1)
+9
+These inequalities directly link lifted entries to the original decision variables, provid-
+ing a simple yet effective strengthening of the DNN relaxation. Second, we derive RLT
+inequalities from the inner product of block-order constraints collected in X
+B
+:
+W
+B
+X
+B
+≤ f
+B
+.(2)
+In  addition,  we  generate  RLT  inequalities  from  products  between  block-order  con-
+straints and 0≤ x≤ 1 constraints on the original variables:
+̄
+W
+B
+X
+t
+≤
+̄
+f
+B
+.(3)
+Such  inequalities  are  particularly  useful  in  the  decomposed  setting,  since  they
+strengthen local lifted submatrices without requiring a fully dense global lifted ma-
+trix. Finally, consider the big-M constraints r
+i
+u
+i
+≤ x
+i
+≤ u
+i
+, u
+2
+i
+= u
+i
+. After lifting,
+these relations imply the valid inequalities
+r
+i
+u
+i
+≤ X
+x
+i
+,u
+i
+≤ u
+i
+.(4)
+These constraints tighten the interaction between profile-block activation variables
+and accepted quantities beyond what is imposed by the basic DNN relaxation alone.
+In what follows, we refer to the model obtained by replacing complete positivity
+with (SDP) as the SDP, to the model obtained by replacing it with (DNN) as the DNN,
+and to the DNN relaxation strengthened with the RLT inequalities (1)–(4) together
+with the profile-block valid inequalities as the DNN+RLT. Among these, the DNN+RLT
+model provides the strongest tractable relaxation considered in this paper, while the
+decomposed  version  offers  the  most  favorable  balance  between  bound  quality  and
+computational scalability.
+5 The primal ADMM for the decomposed SDP
+relaxations
+ApplyingtheDNNrelaxationtothedecomposedliftedformulation
+(CPP-ineq-decomposed), with optional RLT strengthening, yields a structured conic
+program with multiple local matrix variables coupled through linear consistency con-
+straints. This structure is well-suited to operator-splitting methods. In this section,
+we  develop  an  ADMM  scheme  for  the  resulting  decomposed  DNN  and  DNN+RLT
+relaxations, together with an adaptive penalty update and computable rigorous lower
+bounds  for  certified  early  termination.  To  describe  the  algorithmic  framework,  we
+10
+write the decomposed DNN-type relaxations in the abstract form:
+min
+I
+X
+i=1
+⟨C
+i
+, X
+i
+⟩
+s.t.
+I
+X
+i=1
+A
+ij
+(X
+i
+) = Y
+j
+, ∀j ∈ J,
+(X
+1
+,..., X
+I
+)∈X,
+Y
+j
+∈DNN
+n
+j
+, ∀j ∈ J.
+(decomDNN-P)
+Here, each matrix variable X
+i
+corresponds to one local lifted block arising from the
+decomposition, the operators A
+ij
+extract and assemble overlapping submatrices, and
+the set X  collects all linear constraints, including the lifted balance equations, con-
+sistency relations, element-wise nonnegativity constraints, and, when applicable, the
+RLT  inequalities  introduced  in  Section  4.  The  auxiliary  variables Y
+j
+represent  the
+cone-constrained  blocks  on  which  positive  semidefiniteness  is  enforced.  Introducing
+dual multipliers Z
+j
+for the coupling constraints
+P
+I
+i=1
+A
+ij
+(X
+i
+) = Y
+j
+, for all j ∈ J , the
+augmented Lagrangian associated with (decomDNN-P) is
+L
+ρ
+({X
+i
+},{Y
+j
+};{Z
+j
+}) =
+I
+X
+i=1
+⟨C
+i
+, X
+i
+⟩ +
+X
+j∈J
+*
+Z
+j
+, Y
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+i
+)
++
++
+ρ
+2
+X
+j∈J
+Y
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+i
+)
+2
+F
+,
+(5)
+where ρ > 0 is the penalty parameter and ∥·∥
+F
+denotes the Frobenius norm . The
+corresponding  ADMM  iteration  alternates  between  minimizing  with  respect  to  the
+primal block variables X
+i
+and Y
+j
+with other variables fixed, and updating the dual
+multipliers Z
+i
+.  Given  iterates
+
+{X
+k
+i
+},{Y
+k
+j
+},{Z
+k
+j
+}
+
+,  the  ADMM  update  at  iteration
+k + 1 is defined by
+(X
+k+1
+i
+)
+I
+i=1
+:=arg min
+(X
+1
+,...,X
+I
+)∈X
+
+
+
+I
+X
+i=1
+⟨C
+i
+, X
+i
+⟩ +
+ρ
+k
+2
+X
+j∈J
+Y
+k
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+i
+) +
+1
+ρ
+k
+Z
+k
+j
+2
+F
+
+
+
+,
+(6a)
+Y
+k+1
+j
+:= Proj
+S
+n
+j
++
+I
+X
+i=1
+A
+ij
+(X
+k+1
+i
+)−
+1
+ρ
+k
+Z
+k
+j
+!
+, ∀j ∈ J,(6b)
+Z
+k+1
+j
+:=Z
+k
+j
+
+ρ
+k
+
+Y
+k+1
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+k+1
+i
+)
+!
+, ∀j ∈ J,(6c)
+where A
+∗
+are the adjoint operators of A and Proj
+⪰0
+(·) denotes the projection onto
+the PSD cone.
+11
+The X-update solves a convex quadratic program over the polyhedral setX , which
+includes the linear equalities, element-wise nonnegativity constraints, and, when used,
+the RLT inequalities. The Y-update consists of projections onto the positive semidef-
+inite  cones  associated  with  the  decomposed  blocks.  The Z-update  is  the  standard
+dual ascent step for the coupling constraints. Algorithm 1 summarizes the resulting
+ADMM procedure. To monitor convergence, we use the standard ADMM primal and
+Algorithm 1: ADMM for the decomposed DNN and DNN+RLT relaxations
+(decomDNN-P)
+Input: Penalty parameter ρ
+0
+∈ [ρ,
+̄
+ρ], tolerance ε > 0, and maximum iteration
+limit K
+max
+.
+Initialize: (X
+0
+i
+)
+I
+i=1
+, (Y
+0
+j
+)
+j∈J
+, (Z
+0
+j
+)
+j∈J
+, and set k ← 0
+while k < K
+max
+do
+(X
+k+1
+i
+)
+I
+i=1
+←
+arg min
+(X
+1
+,...,X
+I
+)∈X
+
+P
+I
+i=1
+⟨C
+i
+, X
+i
+⟩ +
+ρ
+k
+2
+P
+j∈J
+Y
+k
+j
+−
+P
+I
+i=1
+A
+ij
+(X
+i
+) +
+1
+ρ
+k
+Z
+k
+j
+2
+F
+
+.
+▷ X-update
+for j ∈ J do
+Y
+k+1
+j
+← Proj
+S
+n
+j
++
+
+P
+I
+i=1
+A
+ij
+(X
+k+1
+i
+)−
+1
+ρ
+k
+Z
+k
+j
+
+.▷ Y-update
+end
+for j ∈ J do
+Z
+k+1
+j
+← Z
+k
+j
+
+ρ
+k
+
+
+Y
+k+1
+j
+−
+P
+I
+i=1
+A
+ij
+(X
+k+1
+i
+)
+
+.▷ Z-update
+end
+Update ρ
+k+1
+according to (8).▷ Stepsize update
+Update r
+k+1
+and s
+k+1
+as (7)
+if  min{r
+k+1
+,s
+k+1
+} < ε then
+terminate.
+end
+k ← k + 1.
+end
+Output: (X
+k+1
+i
+)
+I
+i=1
+, (Y
+k+1
+j
+)
+j∈J
+, (Z
+k+1
+j
+)
+j∈J
+.
+dual residuals:
+r
+k+1
+:=
+Y
+k+1
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+k+1
+i
+)
+!
+j∈J
+,
+s
+k+1
+:=
+ρ
+k
+I
+X
+i=1
+A
+ij
+(X
+k+1
+i
+− X
+k
+i
+)
+!
+j∈J
+.
+(7)
+12
+The primal residual measures violation of the coupling constraints, whereas the dual
+residual measures successive changes in the primal block variables through the cou-
+pling operators. As a first-order method, ADMM approaches struggle to reach a high
+precision as interior point methods, and the practical performance (e.g., convergent
+efficiency)  of  ADMM  depends  strongly  on  the  choice  of  the  penalty  parameter.  To
+speed up the convergence, we use the adaptive stepsize rule proposed by Lorenz and
+Tran-Dinh [8]:
+ρ
+k
+:= (1− ω
+k
+)ρ
+k−1
+
+ω
+k
+
+Proj
+[ρ,  ̄ρ]
+
+∥u
+k
+∥
+p
+∥y
+k
+∥
+p
+
+,
+ω
+k
+:= 2
+−k/1000
+,
+(8)
+where [ρ
+,
+̄
+ρ] is a prescribed interval of admissible penalty values, and the quantities u
+k
+and y
+k
+are the iteration-dependent vectors entering the adaptive rule. In our imple-
+mentation, we use the ℓ
+2
+-norm. Moreover, to obtain a certificate for early termination,
+we compute a rigorous lower bound based on weak duality. Consider the Lagrangian
+associated with (decomDNN-P):
+L({X
+i
+},{Y
+j
+};{Z
+j
+}) =
+I
+X
+i=1
+⟨C
+i
+, X
+i
+⟩ +
+X
+j∈J
+*
+Z
+j
+, Y
+j
+−
+I
+X
+i=1
+A
+ij
+(X
+i
+)
++
+.
+The corresponding dual bound is obtained from
+max
+{Z
+j
+}
+min
+(X
+1
+,...,X
+I
+)∈X
+Y
+j
+∈S
+n
+j
++
+,j∈J
+L({X
+i
+},{Y
+j
+};{Z
+j
+}).
+(9)
+Since the cone constraints are imposed on the variables Y
+j
+, minimizing over Y
+j
+con-
+tributes the support function of the PSD cone, while minimizing over X produces a
+linear optimization problem over the polyhedral set X . Thus, any dual-feasible col-
+lection  of  multipliers {Z
+j
+}  yields  a  valid  lower  bound  on  the  optimal  value  of  the
+decomposed DNN-type relaxation under consideration, including both the DNN and
+DNN+RLT  models.  Following  the  approach  of  [10],  such  bounds  can  be  extracted
+from ADMM iterates with low precision and used to certify early stopping before full
+convergence is reached.
+Taken  together,  the  decomposed  formulation,  the  DNN  approximation,  the  op-
+tional RLT strengthening, the adaptive penalty update, and the rigorous lower-bound
+computation  yield  a  practical  first-order  solution  framework  for  the  structured
+relaxations studied in this paper.
+6 Numerical results
+This  section  reports  numerical  results  for  the  proposed  relaxations  and  first-order
+solution  method.  We  study  two  questions:  the  bound  quality  of  the  lifted  formu-
+lations  under  the  SDP,  DNN,  and  DNN+RLT  relaxations,  and  the  performance  of
+ADMM on the decomposed DNN and DNN+RLT models. All experiments are con-
+ducted on synthetic instances that reflect the logical structure of day-ahead electricity
+13
+market clearing, including elementary hourly bids, block orders, and flexible hourly
+bids.  Interior-point  SDP  and  DNN  models  are  solved  with  MOSEK.  The  ADMM
+experiments are implemented in Python.
+6.1 Comparison of CPP formulations and relaxations
+The  first  experiments  investigated  the  modeling  power  of  conic  relaxations  for  var-
+ious  CPP  formulations  and  tested  them  on  small-to-medium-sized  instances.  Those
+instances  contain |O
+E
+|  =  2  elementary  hourly  orders, |O
+RB
+|  =  4  profile  block  or-
+ders, |O
+PB
+| = 4 regular block orders, and |O
+FHB
+| = 4 flexible hourly bids. The time
+horizon  varies  over {2, 3, 6, 9, 12, 15, 18, 21, 24}.  Prices  and  quantities  are  generated
+synthetically. The optimal solutions and direct LP bounds are obtained by solving the
+MILP/LP problems in Gurobi, and Mosek solves the conic relaxations with precisions
+set as 10
+−6
+for primal and dual feasibility tolerance and 10
+−4
+for relative gap tolerance.
+In Table 1, we compare there level relaxations sdp, dnn, and dnn+rlt for the exact
+CPP  formulation  (CPP-eq),  the  relaxed  CPP  formulation  (CPP-ineq),  and  the  de-
+composed CPP formulation (CPP-ineq-decomposed)(denoted as as cpp
+eq, cppineq,
+and cppineqdecomp respectively). The optimal MILP solutions opt. and LP solu-
+tions lpb are given as reference, and the improvement of various conic relaxations
+relative to the LP lower bounds lpb is presented:
+1−
+|obj
+conic
+− obj
+MILP
+|
+|obj
+LP
+− obj
+MILP
+|
+.
+|T |      opt.       lpb
+cppeq                    cppineq                cppineqdecomp
+sdp      dnn   dnn+rlt     sdp      dnn   dnn+rlt     sdp      dnn   dnn+rlt
+2150 264676 582   0.69%   33.01%    99.78%   1.93%   19.95%    98.50%   1.89%   19.24%    98.51%
+3245 008940 736   0.85%   34.17%    99.80%   2.59%   24.39%    97.83%   2.54%   22.98%    97.82%
+6402 275   1 799 016   0.83%   43.33%    98.32%   2.74%   23.95%    97.76%   2.70%   22.85%    97.76%
+9456 080   2 287 084   1.01%   55.59%    99.71%   3.12%   27.59%    99.26%   3.08%   26.42%    99.26%
+12555 707   2 897 886   0.19%   21.48%    98.66%   0.66%    7.01%    97.45%   0.62%    6.69%    97.36%
+15656 434   3 543 771   1.05%   65.68%–   3.38%   28.85%    99.88%   3.35%   27.60%    99.88%
+18776 642   4 231 600   1.15%   68.84%–   3.50%   29.10%    99.90%   3.49%   27.91%    99.89%
+21896 022   4 871 736   1.28%   77.29%–   3.50%   31.31%    99.91%   3.49%   29.66%    99.90%
+24   1 019 784   5 655 408   0.25%––   0.69%    7.61%–   0.70%    7.56%    99.59%
+Table 1: Improvement over the LP bound under a 10-hour time limit.
+The  exact  CPP  reformulation  (CPP-eq)  has  the  strongest  modeling  power
+comparedtootherformulations(CPP-ineq)and(CPP-ineq-decomposed):
+cppeq+dnn+rlt has the best improvements, and similar performances are observed
+with dnn  bounds  for  all  formulations.  However,  it  is  worth  mentioning  that  the
+rank of cpp
+eqsdp, cppineqsdp, and cppineqdecompsdp might be contradict-
+ing  to  the  theoretical  analysis, cppeqsdp  has  the  least  improvements  among  all
+formulations  due  to  the  fact  that  the  diagonal  constraints X
+ii
+= x
+i
+on  the  lifted
+matrices  are  not  enforced  while  formulating  the  SDP  relaxation  on  the  CPP  cone.
+14
+cppineqdecompdnn+rlt  has  achieved  improvements  only  1  point  worse  than  the
+counterparts  with  a  huge  win  on  the  computational  efficiency:  all  the  instances  for
+(CPP-ineq-decomposed)  are  completed  within  the  time  limit  in  Table  1  while  the
+strengthened conic relaxations dnn and dnn + rlt   are computationally intractable
+when |T| ≥ 12; Figure 1 compares the computational times of dnn and dnn+rlt of
+all formulations, the reduction achieved by decomposed formulation is significant.
+This observation supports the decomposition strategy: it improves tractability with
+little loss in relaxation strength.
+Figure 1: The computation times (sec) of dnn and dnn+rlt by Mosek for |T| = 12
+6.2 The Primal ADMM for decomposed conic relaxations
+In this section, we focus on experiments involving larger-scale instances, using the two
+most  efficient  conic  bounds: cppineqdecompdnn  and cppineqdecompdnn+rlt.
+We implement the ADMM update scheme Algorithm 1 to illustrate the computational
+efficiency  of  ADMM  on  those  large-scale  instances  that  Mosek  fails  to  solve.  The
+tolerance of the stopping criteria are ε
+p
+= 10
+−3
+, ε
+d
+= 10
+−4
+and maximum iteration is
+20000|T|. The instances set is divided into 5 groups based on the sizes (see Table 2
+denoted by G
+1
+– G
+5
+, with time horizons |T| ∈ {4, 8, 12}). For each (|T|,G
+·
+), Table 3
+reports summarized results for the ADMM dual bounds, the improvement over the
+LP bound, and the solution time (sec).
+The improvement over the LP bound is computed as
+1−
+|obj
+ADMM
+− obj
+MILP
+|
+|obj
+LP
+− obj
+MILP
+|
+,
+and the higher values of which indicate stronger primal bounds returned by ADMM.
+Table  3  shows  a  clear  advantage  for  the dnn+rlt  bounds  over  the dnn  bounds.
+Across all tested horizons and instance groups, dnn+rlt bounds achieve substantially
+15
+Group    |O
+E
+|    |O
+RB
+|    |O
+P B
+|    |O
+F HB
+|   Total orders for each time interval
+G
+1
+244212
+G
+2
+244414
+G
+3
+288220
+G
+4
+288826
+G
+5
+444416
+Table 2: Instance groups used in the ADMM experiments.
+larger improvements over the lp bounds. For|T| = 4, the average improvement ranges
+from 49.15% to 72.06% under dnn+rlt, compared with 3.23% to 21.02% under DNN.
+For|T| = 8, the average dnn+rlt improvement lies between 33.43% and 80.63%, while
+the corresponding dnn bounds remain between 1.67% and 23.04%. For |T| = 12, the
+differences  becomes  even  more  pronounced: dnn+rlt  attains  average  improvements
+between 35.97% and 92.46%, whereas dnn remains between 1.41% and 28.25%.
+The  computational  times  show  that  the  cost  of  attaining  tighter  bounds  (e.g.,
+dnn+rlt)  is  much  higher.  This  difference  is  modest  for  the  smaller  instances,  but
+becomes substantial as the horizon and order counts increase. For example, at |T| =
+12, the average runtime for G
+4
+increases from 3 031.06 seconds under DNN to 54 627.62
+seconds under dnn+rlt. A similar trend appears for the other larger groups.
+Overall, Table 3 shows that the proposed ADMM framework remains effective on
+both decomposed models. The decomposed DNN relaxation provides a useful baseline
+for fast first-order computation, while the decomposed DNN+RLT relaxation offers
+much stronger solutions at a higher computational cost. Together, these results support
+the use of ADMM as a practical solution method for the decomposed conic relaxations
+developed in this paper.
+7 Conclusion
+This paper developed CPP-based relaxations for day-ahead electricity market-clearing
+with  nonconvex  orders.  Starting  from  a  compact  MILP  formulation,  we  derived  an
+equivalent  completely  positive  reformulation,  introduced  relaxed  and  decomposed
+lifted  variants,  and  constructed  SDP,  DNN,  and  DNN+RLT  relaxations.  The  nu-
+merical  results  show  that  DNN  yields  a  clear  strengthening  and  that  the  addition
+of  RLT  inequalities  substantially  improves  the  bounds,  often  closing  nearly  the  en-
+tire LP optimality gap. The decomposed formulation preserves essentially the same
+relaxation quality as the non-decomposed lifted model while significantly improving
+the computational tractability. For the decomposed models, we also proposed an effi-
+cient ADMM scheme with adaptive penalty updates and rigorous dual lower bounds,
+and  the  computational  results  indicate  that  it  is  effective  on  both  the  DNN  and
+DNN+RLT relaxations. These results show that decomposed conic relaxations provide
+a promising and scalable approach to obtain strong bounds for nonconvex electricity
+market-clearing models.
+16
+|T |   Group    Statistic           opt.          lpb
+ADMM dual boundImprovementComputational time (sec)
+dnn       dnn+rlt      dnn   dnn+rlt       dnn         dnn+rlt
+4
+G
+1
+Average571 188.34    1 975 759.17    1 866 048.79880 044.12    8.20%    72.06%270.521 090.69
+Minimum245 292.00    1 538 506.60    1 521 937.01361 010.00    0.00%    28.01%26.96279.67
+Maximum    1 038 940.99    2 377 674.75    2 267 757.68    1 400 429.21   26.14%   100.00%466.942 194.60
+Std. Dev.307 518.03322 080.00336 502.71479 120.77   10.26%    27.76%159.33837.34
+G
+2
+Average1 018 846.12    1 968 543.15    1 841 902.73    1 441 443.62   16.88%    49.19%277.391 225.15
+Minimum572 674.00    1 379 381.71887 314.90776 450.67    0.00%    11.79%30.66750.97
+Maximum    1 721 754.45    2 522 181.10    2 497 412.89    1 916 639.40   71.56%    87.69%674.301 852.54
+Std. Dev.448 070.21536 811.38692 352.25455 199.52   30.79%    31.65%266.28402.60
+G
+3
+Average3 426 854.18    5 329 690.11    5 207 919.46    3 777 861.39    5.61%    69.89%677.785 244.84
+Minimum1 424 330.29    3 375 627.77    3 234 799.67    1 595 048.95    0.10%    18.07%68.39870.19
+Maximum    7 558 643.89    7 712 377.20    7 712 171.91    7 684 600.64   12.90%    99.83%   1 048.037 333.06
+Std. Dev.2 534 936.29    1 855 924.47    1 932 341.44    2 367 057.92    5.49%    33.29%401.092 737.20
+G
+4
+Average5 784 187.64    6 629 556.33    6 596 811.52    6 180 807.88    3.23%    49.15%754.188 971.96
+Minimum3 933 002.30    5 145 142.98    4 987 930.05    4 668 035.82    0.00%    10.13%206.154 555.68
+Maximum    8 230 979.66    8 345 518.60    8 345 511.43    8 333 913.83   13.98%    80.21%   1 630.0718 171.26
+Std. Dev.1 876 012.12    1 249 728.71    1 298 052.54    1 550 081.40    6.07%    25.69%581.045 560.82
+G
+5
+Average1 885 767.60    2 681 821.83    2 491 007.53    2 205 704.89   21.02%    61.52%691.901 240.07
+Minimum666 232.80    1 521 135.00    1 402 664.30    1 298 573.42    5.97%    26.03%513.48419.43
+Maximum    3 163 162.77    3 894 304.40    3 778 390.08    3 489 174.69   58.96%    88.84%878.681 750.60
+Std. Dev.890 283.01848 809.40860 430.52798 321.69   21.53%    23.84%160.13582.69
+8
+G
+1
+Average1 486 958.28    6 818 217.72    5 528 046.75    2 908 759.96   23.04%    73.79%598.963 210.10
+Minimum865 783.41    4 331 066.86    3 770 727.18    1 495 249.76    9.75%    28.76%323.83114.37
+Maximum    2 091 416.00    8 425 628.50    7 790 610.98    6 552 139.13   51.25%    97.76%694.015 677.08
+Std. Dev.513 547.39    1 725 927.05    1 696 799.83    2 098 922.74   16.74%    28.65%155.502 686.14
+G
+2
+Average1 669 072.55    6 907 138.99    6 236 345.96    3 168 055.33   13.10%    66.42%800.934 102.75
+Minimum824 742.20    4 805 269.92    4 079 993.51    1 471 159.03    2.27%    27.34%516.322 532.68
+Maximum    2 627 844.35    8 905 242.50    7 998 347.97    4 572 534.35   21.44%    89.87%   1 019.894 803.99
+Std. Dev.742 891.65    1 517 204.36    1 526 582.14    1 177 070.88    6.89%    25.11%244.66912.82
+G
+3
+Average3 612 151.05   13 314 288.52   12 677 591.61    5 712 943.76   14.16%    80.63%   2 319.2218 165.94
+Minimum1 309 013.22   10 363 740.37    8 993 891.97    2 943 075.08    0.01%    60.92%854.909 212.38
+Maximum    8 917 672.92   16 937 373.64   16 909 383.91    9 479 584.72   52.71%    95.53%   5 296.3025 846.55
+Std. Dev.3 040 909.30    2 748 638.13    3 348 730.20    3 049 635.73   22.84%    12.68%   1 840.856 577.09
+G
+4
+Average    10 234 246.48   16 072 826.79   16 050 137.98   14 440 906.69    1.67%    33.43%   1 353.4742 105.06
+Minimum4 918 338.93   12 490 586.49   12 490 740.32    8 394 300.43    0.00%4.73%867.8322 999.65
+Maximum   18 206 080.72   20 928 788.66   20 859 146.91   20 179 016.38    5.78%    57.79%   2 239.5968 278.97
+Std. Dev.6 119 895.67    3 551 963.87    3 528 665.94    4 915 789.87    2.55%    21.02%526.5216 917.08
+G
+5
+Average4 588 301.18    8 399 234.59    8 229 744.13    6 416 136.15    4.36%    50.28%   1 079.505 042.05
+Minimum3 210 013.16    6 650 392.32    6 596 881.40    3 758 439.83    0.01%    14.69%116.76393.55
+Maximum    6 207 786.36    9 912 661.91    9 770 100.71    8 430 954.45    9.44%    89.62%   1 846.917 490.99
+Std. Dev.1 183 816.01    1 273 803.29    1 275 634.32    1 714 151.33    3.36%    31.52%641.672 845.31
+12
+G
+1
+Average1 224 396.54    8 859 546.41    6 800 126.13    1 754 992.62   28.25%    92.46%   1 315.852 279.54
+Minimum430 956.00    5 948 843.91    4 291 000.22698 818.80   12.43%    83.63%737.05150.42
+Maximum    2 547 355.72   12 486 133.83   11 105 056.81    3 454 364.80   45.43%    96.04%   1 632.027 745.34
+Std. Dev.811 358.06    2 375 174.27    2 581 881.21    1 053 879.32   11.93%5.06%373.423 194.59
+G
+2
+Average2 555 826.73   11 337 552.83   10 183 165.77    3 931 426.38   11.80%    83.09%   1 910.777 837.36
+Minimum1 348 641.53    6 224 658.74    5 807 005.31    2 298 091.16    7.51%    74.77%   1 082.734 837.39
+Maximum    3 870 765.35   14 943 715.31   12 656 064.72    5 593 647.40   18.63%    90.01%   2 466.9410 930.57
+Std. Dev.1 097 641.12    3 373 390.75    2 657 972.79    1 228 464.71    4.91%5.73%538.782 388.98
+G
+3
+Average2 468 939.78   17 692 425.38   17 227 815.46    5 713 307.08    3.49%    79.81%   3 613.5031 148.28
+Minimum695 042.83    9 322 266.45    8 826 959.27    2 266 640.40    0.00%    49.32%689.309 759.61
+Maximum    3 894 014.43   21 989 602.05   21 989 702.21   12 830 432.83    7.34%    94.21%   8 108.9076 666.49
+Std. Dev.1 178 390.06    5 120 157.85    5 190 559.41    4 410 865.40    3.65%    19.71%   2 882.0526 116.01
+G
+4
+Average9 566 612.02   20 659 040.15   20 558 099.37   16 226 665.13    1.41%    38.56%   3 031.0654 627.62
+Minimum4 269 401.16   13 372 330.26   13 368 724.05   10 353 110.08    0.04%9.40%   1 882.9639 558.08
+Maximum   17 109 206.98   25 665 786.31   25 640 881.42   24 861 345.76    6.52%    59.26%   5 002.0575 213.90
+Std. Dev.5 300 792.04    4 669 764.31    4 698 567.53    5 510 888.57    2.86%    19.47%   1 289.7215 714.63
+G
+5
+Average6 531 021.44   10 643 855.15   10 440 852.02    9 419 518.34    5.45%    35.97%   1 395.946 753.45
+Minimum4 449 595.38    7 829 178.24    7 120 643.96    4 990 825.26    0.01%0.60%437.031 535.74
+Maximum    9 569 346.85   13 001 209.84   13 000 673.24   12 964 693.93   20.97%    83.99%   2 418.0110 681.25
+Std. Dev.2 023 588.85    1 928 260.92    2 196 313.88    3 158 091.99    8.84%    40.16%826.553 368.84
+Table 3: Dual bounds for the decomposed DNN and DNN+RLT relaxations obtained
+by Algorithm 1. “Improvement” is computed as 1−
+|obj
+ADMM
+−obj
+MILP
+|
+|obj
+LP
+−obj
+MILP
+|
+.
+References
+[1]  Martin Skovgaard Andersen. Chordal sparsity in interior-point methods for conic
+optimization.  PhD thesis, University of California, Los Angeles, 2011.
+17
+[2]  Samuel  Burer.On  the  copositive  representation  of  binary  and  continuous
+nonconvex  quadratic  programs.Mathematical  Programming,  120(2):479–495,
+2009.
+[3]  Dimitris I. Chatzigiannis, Grigoris A. Dourbois, Pandelis N. Biskas, and Anasta-
+sios G. Bakirtzis. European day-ahead electricity market clearing model. Electric
+Power Systems Research, 140:225–239, 2016.
+[4]  John  H.  Drew  and  Charles  R.  Johnson.   The  completely  positive  and  doubly
+nonnegative completion problems.  Linear  and  Multilinear  Algebra, 44(1):85–92,
+1998.
+[5]  Salar Fattahi, Morteza Ashraphijuo, Javad Lavaei, and Alper Atamt ̈urk.  Conic
+relaxations of the unit commitment problem.  Energy, 134:1079–1095, 2017.
+[6]  Robert Grone, Charles R. Johnson, Eduardo M. S ́a, and Henry Wolkowicz.  Pos-
+itive definite completions of partial hermitian matrices.   Linear  algebra  and  its
+applications, 58:109–124, 1984.
+[7]  Cheng  Guo,  Merve  Bodur,  and  Joshua  Taylor.   Copositive  duality  for  discrete
+energy markets.  Available at SSRN 4964985, 2024.
+[8]  Dirk A Lorenz and Quoc Tran-Dinh.  Non-stationary douglas–rachford and al-
+ternating  direction  method  of  multipliers:  adaptive  step-sizes  and  convergence.
+Computational Optimization and Applications, 74(1):67–92, 2019.
+[9]  Mehdi  Madani,  Mathieu  Van  Vyve,  Alain  Marien,  Marijn  Maenhoudt,  Patrick
+Luickx,  and  Andreas  Tirez.   Non-convexities  in  european  day-ahead  electricity
+markets: Belgium as a case study.  In 2016 13th International Conference on the
+European Energy Market (EEM), pages 1–5, 2016.
+[10]  Danilo Elias Oliveira, Henry Wolkowicz, and Yangyang Xu.  Admm for the sdp
+relaxation of the qap.  Mathematical Programming Computation, 10(4):631–658,
+2018.
+[11]  Hanif  D  Sherali  and  Cihan  H  Tuncbilek.   A  global  optimization  algorithm  for
+polynomial programming problems using a reformulation-linearization technique.
+Journal of Global Optimization, 2(1):101–112, 1992.
+[12]  Ryohei Yokoyama, Yuji Shinano, Syusuke Taniguchi, Masashi Ohkura, and Tet-
+suya  Wakui.Optimization  of  energy  supply  systems  by  milp  branch  and
+bound method in consideration of hierarchical relationship between design and
+operation.  Energy conversion and management, 92:92–104, 2015.
+[13]  Yang Zheng, Giovanni Fantuzzi, Antonis Papachristodoulou, Paul Goulart, and
+Andrew Wynn.  Chordal decomposition in operator-splitting methods for sparse
+semidefinite programs.  Mathematical Programming, 180(1):489–532, 2020.

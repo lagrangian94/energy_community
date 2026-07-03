@@ -1,0 +1,3106 @@
+# Copositive Duality for Discrete Energy Markets
+ 
+```
+Cheng Guo
+School of Mathematical and Statistical Sciences, Clemson University, Clemson, SC 29634 USA, cguo2@clemson.edu
+Merve Bodur
+School of Mathematics and Maxwell Institute for Mathematical Sciences, University of Edinburgh, Edinburgh EH9 3FD, UK,
+merve.bodur@ed.ac.uk
+Joshua A. Taylor
+Department of Electrical and Computer Engineering, New Jersey Institute of Technology, Newark, NJ 07102, USA,
+jat94@njit.edu
+Optimization problems with discrete decisions are nonconvex and thus lack strong duality, which limits the
+usefulness of tools such as shadow prices. It was shown in Burer (2009) that mixed-binary quadratic programs
+can be written as completely positive programs, which are convex. We apply this perspective by writing unit
+commitment in power systems as a completely positive program, and then using the dual copositive program
+and strong duality to design new pricing mechanisms. We show that the mechanisms are revenue-adequate,
+and, under certain conditions, support a market equilibrium. To facilitate implementation, we also employ
+a cutting plane algorithm for solving copositive programs exactly, which we further speed up via a second-
+order cone programming approximation. We provide numerical examples to illustrate the potential benefits
+of the pricing mechanisms and algorithms.
+Key words: Copositive programming, strong duality, unit commitment, electricity market, pricing
+```
+## 1. Introduction
+ 
+Markets with discrete decisions such as the startup and shutdown of power plants often lack
+equilibria. A market is in equilibrium if demand equals supply and if its participants have no
+incentive to change. The absence of a market equilibrium can lead to inefficient allocation of
+resources and unbalanced supply and demand. A basic difficulty in achieving equilibrium in markets
+with discreteness is the lack of convexity, which precludes the use of tools like strong duality and
+the Karush-Kuhn-Tucker (KKT) conditions. Many discrete problems can be written as mixed-
+integer linear programs (MILPs). Burer (2009) has shown that mixed-binary quadratic programs
+(MBQPs), a generalization of MILPs, can be written as completely positive programs (CPPs).
+CPPs and their dual copositive programs (COPs) are convex but NP-hard. While this does not
+point to a better way of solving MBQPs, it does provide a new notion of duality. In this paper, we
+use copositive duality to design a new pricing mechanism for nonconvex electricity markets.
+ 
+This work is accepted atManagement Science. The link to the published paper is
+https://pubsonline.informs.org/doi/10.1287/mnsc.2023.00906.
+ 
+```
+1
+```
+ 
+Unit commitment (UC) minimizes the total production cost of generators in electricity markets
+under inelastic demand, thereby optimizing social welfare. It makes electricity markets nonconvex
+because the decision to turn a generator on or off is binary. In a convex market, equilibrium
+prices can be derived from the shadow prices of the social welfare optimization. However, UC is
+commonly formulated as an MILP, which generally does not have shadow prices, making it difficult
+to construct efficient electricity prices; see, e.g., (Liberopoulos and Andrianesis 2016). Here, we
+rewrite the MILP as a CPP, and use the dual COP to design a novel pricing mechanism based on
+shadow prices. The mechanism has some desirable properties, e.g., it is budget balanced and, under
+certain conditions, individually rational. It is also straightforward, as we illustrate, to incorporate
+additional features into this mechanism, such as revenue adequacy of the generators, by adding
+constraints directly to the dual COP.
+An immediate challenge in using copositive duality is the relatively small number of options for
+solving COPs exactly. Using a copositivity certificate proposed by Anstreicher (2021), we design a
+cutting plane algorithm that exactly solves COPs when it terminates. The algorithm consists of a
+sequence of MILPs, which can thus be implemented using standard industrial solvers.
+The remainder of the paper is organized as follows. In Section 2 we review the literature on
+pricing in nonconvex markets and copositive programming, also detail our contributions. In Section
+3 we provide the necessary background on CPPs and COPs. In Section 4 we design a COP-based
+pricing scheme for UC. In Section 5 we present the cutting plane algorithm for solving COPs.
+In Section 6 we present the results of our computational experiments. We conclude the paper in
+Section 7.
+All proofs are provided in Section B of the e-companion.
+ 
+## 2. Literature Review
+ 
+In this section, we review the relevant literature. Section 2.1 surveys the pricing schemes for non-
+convex markets. Section 2.2 reviews the relationship between CPPs, COPs, and integer programs,
+and solution methods for COPs. Section 2.3 summarizes our contributions.
+ 
+2.1. Pricing in Discrete Markets
+Classical equilibrium theories assume that market participants make decisions by solving linear or
+convex optimization models. Under this assumption, the market equilibrium prices are related to
+the shadow prices of the social welfare optimization (Mas-Colell et al. 1995). These prices lead to
+exchanges that maximize social welfare while respecting constraints.
+However, in practice many markets have nonconvexities, e.g., due to binary decisions and indi-
+visible goods. It is difficult to design efficient pricing mechanisms in such markets because of the
+ 
+ 
+lack of strong duality. This has now been a subject of research for decades. We refer the reader to
+Liberopoulos and Andrianesis (2016) for a more thorough review of pricing in nonconvex markets.
+A basic source of nonconvexity in electricity markets is the binary startup and shutdown decisions
+of generators. These decisions are optimized via UC, which is commonly formulated as an MILP
+(Carri ́on and Arroyo 2006). The basic idea of most current approaches is to construct approximate
+shadow prices for the MILP. O’Neill et al. (2005) eliminate the nonconvexity by fixing the binary
+decisions at their optimal values and obtaining shadow prices from the resulting linear program
+(LP). This scheme is called the restricted pricing (RP) in the literature. RP and its variants are used
+by some independent system operators (ISOs) in the US, such as the Pennsylvania-New Jersey-
+Maryland Interconnect (PJM). However, RP is often too low to cover the costs of generators, in
+which uplift or make-whole payments are needed to ensure generator profitability, and it can be
+volatile due to high sensitivity to the load. The convex hull pricing (CHP) of Hogan and Ring
+(2003) and Gribik et al. (2007) uses the Lagrangian multipliers of the demand constraints as
+prices, and has been shown to minimize uplift. Common methods for solving the Lagrangian dual
+problem for CHP include the subgradient and cutting plane algorithms, both of which require some
+parameter tuning and can suffer slow convergence. A modified version of CHP called extended
+locational marginal pricing is used by the Midcontinent ISO. Ruiz et al. (2012) propose a primal-
+dual approach for pricing, which combines the UC problem and the dual of its linear relaxation,
+as well as revenue adequacy constraints that ensure nonnegative profit for each generator. We
+note that such revenue adequacy constraints eliminate uplift, but also modify the original UC
+problem and may therefore result in suboptimal decisions. Recently, Azizan et al. (2020) proposed
+a parametric pricing function method for markets with nonconvexity, where desirable conditions
+such as revenue adequacy and individual rationality are directly imposed as constraints and thus
+are guaranteed to be satisfied. Since the problem is intractable, approximate solutions are obtained
+via grid search. Milgrom and Watt (2022) propose two linear pricing mechanisms for markets with
+nonconvexity, and show that they are budget balanced and approximately incentive compatible.
+We use the CPP reformulation of MBQP to design a new pricing scheme, which we refer to
+as copositive duality pricing (CDP). We construct CDP using the dual COP, which benefits from
+strong duality and the flexibility of an explicit representation. CDP is budget balanced, supports
+the optimal UC (i.e., the shadow prices incentivize the optimal startups and shutdowns for each
+individual generator), and is flexible in that it provides direct access to the dual COP. We make
+use of this feature by adding a revenue adequacy constraint without inducing nonuniform prices
+or uplift. We refer to the augmented pricing scheme as revenue-adequate CDP (RCDP).
+It is desirable for a pricing scheme to ensure individual rationality, i.e., that individual generators
+have no incentive to deviate from the optimal UC solution. O’Neill et al. (2005) prove that RP is
+ 
+ 
+individually rational. CHP satisfies individual rationality in some special cases, but in general it
+does not support each individual generator’s profit-maximizing solution. For example, Gribik et al.
+(2007) provide sufficient conditions for when CHP satisfies individual rationality. The primal-dual
+approach does not guarantee individual rationality either. CDP and RCDP do not in general lead
+to individual rationality, but we provide simple-to-check sufficient conditions under which they do.
+Table 1 compares the properties of several pricing schemes, where “X” and “×” respectively
+represent true and false, and “◦” indicates the existence of a sufficient condition in the literature
+for ensuring the property. Column “Uniform only” shows whether the scheme is able to cover total
+costs with only uniform prices. “Optimal UC” shows whether the prices incentivize the optimal
+UC solution. “Individual rationality” shows whether each pricing scheme is individually rational.
+ 
+```
+Table 1 Features of Pricing Schemes
+Uniform Optimal Individual
+Scheme only UC rationality
+RP × X X
+CHP × × ◦
+Primal-dual X × ×
+CDP × X ◦
+RCDP X ◦ ◦
+```
+We also mention that there is a related literature stream focusing on markets with indivisible
+goods. Recent papers include Danilov et al. (2001) and Baldwin and Klemperer (2019), which use
+discrete convexity to prove the existence of equilibria.
+ 
+2.2. Copositive Programming
+Copositive programming has been shown to generalize a number of NP-hard problems, such as
+quadratic optimization (Bomze and De Klerk 2002), two-stage adjustable robust optimization (Xu
+and Burer 2018, Hanasusanto and Kuhn 2018), and MBQPs (Burer 2009). In particular, Burer
+(2009) shows that an MBQP can be written as a CPP. This reformulation is the basis of our work.
+At present, no industrial software can directly solve COPs. Parrilo (2000) constructs a hierarchy
+of semidefinite programs (SDPs), which is often used to approximate COPs. For example, it is used
+by De Klerk and Pasechnik (2002) to find the stability number of a graph, and by Hanasusanto and
+Kuhn (2018) for two-stage distributionally robust linear programs. An exact algorithm for COPs
+based on simplicial partitions is proposed by Bundfuss and D ̈ur (2009). Bomze et al. (2008) and
+Bomze et al. (2010) use cutting planes to strengthen the SDP relaxation for COPs, but both are
+problem specific and can only be used for quadratic programming and clique number problems,
+respectively. In this paper, we develop a purely MILP-based cutting plane algorithm that exactly
+ 
+ 
+solves COPs when it terminates. To speed up convergence, we strengthen the master problem with
+a second-order cone programming (SOCP) approximation of the COP.
+ 
+2.3. Our Contributions
+We use COP to construct a notion of duality for MILPs and MBQPs. We show that this has several
+uses, such as (i) providing direct access to dual decisions that support optimal primal decisions
+(e.g., prices), and this is particularly useful for modeling constraints involving both primal and
+dual decisions, and (ii) theoretical analysis of problem structure (e.g., using strong duality).
+Here we design a new pricing mechanism for UC in power systems, CDP, based on a CPP re-
+formulation of the UC MILP model. We use CPP-COP strong duality to prove that this pricing
+scheme is revenue neutral, and to obtain sufficient conditions for individual rationality, both de-
+sirable features in practice. Using the Shapley-Folkman Lemma, we relax the sufficient conditions
+and show that individual rationality will hold for most generators in a sufficiently large system. We
+also derive a bound on the subsidy required for generators that are not individually rational. We
+design a modified version of the new pricing mechanism, RCDP, which ensures another important
+property, revenue adequacy, enforced explicitly in the pricing model using the direct access to dual
+(pricing) variables. We show that RCDP uses only uniform prices, is uplift-free, and, under certain
+conditions, supports a market equilibrium. Due to its generality, copositive duality can potentially
+be used to design pricing mechanisms for and analyze equilibria of other nonconvex markets.
+To facilitate implementation, we develop a cutting plane algorithm based on a copositivity cer-
+tificate proposed by Anstreicher (2021), and the algorithm exactly solves COPs when it terminates.
+This algorithm is easier to implement than that of Bundfuss and D ̈ur (2009), which is to the best
+of our knowledge the only algorithm in the literature that exactly solves COPs (also when it ter-
+minates). Since our algorithm is purely MILP-based, it can handle COPs with both continuous
+and discrete variable. We speed up convergence by tightening the master problem with an SOCP
+restriction of the COP. The solutions produced by the SOCP-based cutting plane algorithm are
+no worse (and typically better) than those obtained from a commonly-used SDP approximation.
+We apply the algorithm to moderately sized instances of UC.
+While our cutting plane algorithm is a useful advance, the technology for solving COPs is not
+mature. At the same time, there is much debate over which existing pricing mechanism for UC is
+superior, as some are more tractable, while others have better properties. We therefore view our
+pricing mechanism as a new conceptual direction, which we hope will lead to significant improve-
+ments once there are more efficient tools for solving COPs.
+There are numerous discrete and NP-hard problems that can be represented via COP. To date,
+there have been relatively limited applications of COP to such problems. This is due to the fact that
+ 
+ 
+much of the literature on COP is recent, and because at present there are few options for solving
+COPs. We believe that, via tools like strong duality and the KKT conditions, there are many
+promising applications of COP. We view our results on discrete energy markets as a significant
+step in this direction. We also believe the cutting plane algorithm is a useful advance in making
+COP a tractable modeling framework.
+ 
+## 3. Background
+ 
+In this section, we define CPP and COP and state some basic results.
+Throughout the paper, we use bold letters for vectors. We use Tr(·) for the trace of a matrix,
+(·)>for the transpose of a vector or matrix,ek∈Rnfor thekthunit vector, and opt(·) for the
+optimal objective value of an optimization problem.
+ 
+3.1. Preliminaries
+LetSnbe the set ofn-dimensional real symmetric matrices. The copositive coneCnis defined as:
+ 
+```
+Cn={X∈Sn|y>Xy≥0 for ally∈Rn+}. (1)
+```
+The dual cone ofCnis the completely positive coneCn∗:
+ 
+C∗n={XX>|X∈Rn+×r}. (2)
+In COP (CPP), we optimize a linear function of the matrixXsubject to linear constraints and
+X∈Cn(X∈C∗n).
+Because COP and CPP are convex, strong duality holds if a regularity condition is satisfied, e.g.,
+Slater’s condition, which requires the feasible region to have an interior point. It may also hold
+under certain problem structures (Gao et al. 2019, Cifuentes et al. 2024).
+ 
+3.2. CPP Reformulation of MBQP
+In this section, we state the CPP reformulation of MBQP given in Burer (2009). We also derive
+its COP dual.
+Consider the MBQP:
+ 
+```
+PMBQP: min x>Qx+ 2c>x (3a)
+s.t. a>jx=bj ∀j= 1,...,m (3b)
+xk∈{ 0 , 1 } ∀k∈B (3c)
+x∈Rn+ (3d)
+```
+whereB⊆{ 1 ,...,n}is the set of indices of the binary elements ofx. Without loss of generality we
+assume the matrixQis symmetric.
+ 
+ 
+Burer (2009) gives a CPP reformulation ofPMBQP, which here we refer to asPCPP, obtained
+by squaring the linear constraints and substituting lifted variables for the bilinear terms.
+ 
+```
+PCPP: min Tr(QX) + 2c>x (4a)
+s.t. a>jx=bj ∀j= 1,...,m (4b)
+a>jXaj=b^2 j ∀j= 1,...,m. (4c)
+x[k=Xkk ∀k∈B (4d)
+1 x>
+xX
+```
+### ]
+ 
+```
+∈Cn∗+1. (4e)
+We now derive the dual of (4). For convenience, define:
+Y=
+```
+```
+[ 1 x>
+xX
+```
+### ]
+ 
+### ;Q ̃=
+ 
+```
+[ 0 01 ×n
+0 n×^1 Q
+```
+### ]
+ 
+### ; C=
+ 
+```
+[ 0 c>
+c 0n×n
+```
+### ]
+ 
+```
+;Aj=
+```
+```
+[ 0 1 / 2 a>
+j
+1 / 2 aj 0 n×n
+```
+### ]
+ 
+```
+,∀j= 1,...,m. (5)
+We also define the matricesA ̃j= [0,a>j]>[0,a>j],∀j= 1,...,m, and, for eachk∈B,Bksuch that
+```
+```
+(Bk)l 1 ,l 2 =
+```
+### 
+ 
+### 
+ 
+### 
+ 
+```
+1 /2 ifl 1 =k+ 1, l 2 = 1 orl 1 = 1, l 2 =k+ 1
+−1 ifl 1 =k+ 1, l 2 =k+ 1
+0 otherwise
+```
+### .
+ 
+Then,PCPPcan be written as
+ 
+min Tr(QY ̃ ) + Tr(CY) (6a)
+s.t. Tr(AjY) =bj ∀j= 1,...,m (6b)
+Tr(A ̃jY) =b^2 j ∀j= 1,...,m (6c)
+Tr(BkY) = 0 ∀k∈B (6d)
+Y∈Cn∗+1. (6e)
+Letγγγo,βββo,δδδo, and Ωobe the respective dual variables of constraints (6b) - (6e). The dual of
+PCPPis the following COP:
+ 
+```
+PCOP:γγγo,βmaxββo,δδδo,Ωo
+```
+```
+∑m
+j=
+```
+```
+(γo
+jbj+βjob^2 j
+```
+```
+) (7a)
+```
+```
+s.t. Q ̃+C−
+```
+```
+∑m
+j=
+```
+```
+γjoAj−
+```
+```
+∑m
+j=
+```
+```
+βjoA ̃j−
+```
+### ∑
+ 
+```
+k∈B
+```
+δokBk−Ωo= 0 (7b)
+Ωo∈Cn+1. (7c)
+Burer (2009) shows thatPMBQPandPCPPare equivalent, in the sense that (i) opt(PMBQP) =
+opt(PCPP); and (ii) if (x∗,X∗) is optimal forPCPP, thenx∗is in the convex hull of optimal solutions
+ofPMBQP. The second point indicates thatx∗is not necessarily feasible forPMBQP, i.e., it is possible
+for somex∗kwithk∈Bto be fractional.
+ 
+```
+PCPPcorresponds to (C) in Burer (2009).
+```
+ 
+Remark 1.Ifx∗is an optimal solution ofPMBQP, then (x∗,x∗x∗>) is optimal forPCPP.
+Remark 2.Let (x∗,X∗) be an optimal solution forPCPP. IfQ0 andx∗is feasible forPMBQP,
+thenx∗is an optimal solution ofPMBQP. Note that the conditionQ0 ensures that the objective
+value ofPMBQPis optimal atx∗.
+ 
+## 4. Pricing Unit Commitment
+ 
+In this section we use copositive duality to design a pricing mechanism for UC. UC optimally
+schedules the startups and shutdowns of the generators in a power system, typically over a 24
+hour horizon. The problem is usually formulated as an MILP, in which the startup and shutdown
+decisions are binary variables. We reformulate the MILP as a CPP in Section 4.1, and use the dual
+to define prices in Section 4.2, which we modify in Section 4.4 to guarantee revenue adequacy for
+individual generators.
+LetG be the set of generators andT the set of time periods. Fort∈T,dtdenotes the load,
+whereascpg,cug,pming andpmaxg are respectively the production cost, startup cost, lower production
+limit, and upper production limit forg∈G. Fort∈T andg∈G, the decision variablepgtrepresents
+the production level,ugtis the binary decision to startup, andzgtis equal to 1 if the generator is
+online and 0 if offline. A basic MILP model for UC is as follows:
+ 
+```
+min
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+) (8a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+pgt=dt ∀t∈T (8b)
+ugt≥zgt−zg,t− 1 ∀g∈G,t∈T \{ 1 } (8c)
+pgt≥pming zgt ∀g∈G,t∈T (8d)
+pgt≤pmaxg zgt ∀g∈G,t∈T (8e)
+pgt,ugt≥ 0 ∀g∈G,t∈T (8f)
+zgt∈{ 0 , 1 } ∀g∈G,t∈T. (8g)
+```
+The objective (8a) minimizes the total cost of power production and generator startup. Constraints
+(8b) ensure that the total production satisfies the load in each time period. Constraints (8c) link
+the startup decisions to the online/offline statuses. Constraints (8d) and (8e) set the lower and
+upper bounds for power output when the generator is on, and ensure the production level is 0
+when the generator is off. We impose binary restrictions only on thezgtvariables, as the binary
+constraints on theugtvariables are then implied by (8c) and the objective.
+Problem (8) is a simplification of the UC model solved in practice (Carri ́on and Arroyo 2006, Tay-
+lor 2015), which includes additional constraints such as transmission capacity, minimum up/down
+ 
+ 
+time, ramping constraints, and energy storage. We omit these constraints to simplify exposition,
+but could straightforwardly incorporate them in our pricing mechanisms.
+To reformulate (8) as a CPP, we first add upper bound constraints (9) to all binary variables:
+ 
+```
+zgt≤ 1 ∀g∈G,t∈T. (9)
+```
+We then add slack variables to all inequality constraints to make them equality constraints. To
+simplify notation, we write the reformulated model in a more compact form. Letψjgtrepresent
+the slack variable corresponding to inequality constraintjfor generatorg at timet. Letx>=
+(u>,z>,p>,ψψψ>), with bold font denoting vectors. For example,udenotes the vector of variables
+ugtfor allg∈G,t∈T. Denote the vector of coefficients for a constraint asajgt. The MILP (8) can
+be rewritten as:
+ 
+```
+UC: min
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+) (10a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+pgt=dt ∀t∈T (10b)
+a>jgtx=bjgt ∀j= 1,...,m,g∈G,t∈T (10c)
+x∈Rn+ (10d)
+zgt∈{ 0 , 1 } ∀g∈G,t∈T. (10e)
+```
+Constraints (10c) are the individual generator’s operational constraints, which include (8c) - (8e)
+and (9), after the addition of slack variables. Constraints (10c) can also include other operational
+constraints such as minimum up/down time and ramping constraints.
+Thanks to constraints (9) (which is reformulated to (10c)) and (10d),UCsatisfies the key as-
+sumption (1) of Burer (2009), which allows us to reformulateUCas a CPP.
+ 
+4.1. CPP Reformulation of UC
+We reformulate (10) in the form ofPCPP. LetXbe the matrix of lifted variables forxandY, as
+defined in (5). To make the correspondence between elements ofXand variables in vectorxmore
+explicit, we denote byXk,qvwthe element ofXcorresponding to the row of thevkvariable and the
+column of thewqvariable. That is,Xvwrepresents the block ofXwith rows corresponding to the
+variablesvand columns to the variablesw. For example, for the UC above, we have
+ 
+### X=
+ 
+### 
+ 
+### 
+ 
+### 
+ 
+### 
+ 
+```
+X 11 uu, 11 Xuu 11 , 12 ... X 11 uψ,rl
+X 12 uu, 11 Xuu 12 , 12 ...
+... ... ...
+Xrl,ψu 11 .. ... Xrl,rlψψ
+```
+### 
+ 
+### 
+ 
+### 
+ 
+### 
+ 
+### .
+ 
+ 
+Letht∈Rnbe the coefficient vector for the left-hand side of constraints (10b), i.e., the left-hand
+side of (10b) can be written ash>tx, wherehtis a binary vector with 1’s corresponding topgt, and
+0’s elsewhere. The CPP reformulation is as follows:
+ 
+```
+UCCPP: min
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+) (11a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+pgt=dt ∀t∈T (λt) (11b)
+a>jgtx=bjgt ∀j= 1,...,m,g∈G,t∈T (φjgt) (11c)
+Tr(hth>tX) =d^2 t ∀t∈T (Λt) (11d)
+Tr(ajgta>jgtX) =b^2 jgt ∀j= 1,...,m,g∈G,t∈T (Φjgt) (11e)
+zgt=Zgt ∀g∈G,t∈T (δgt) (11f)
+Y∈C∗n+1 (Ω). (11g)
+```
+Dual variables are shown to the right of the constraints.
+The dual of (11) is:
+ 
+```
+UCCOP: max
+```
+### ∑
+ 
+```
+t∈T
+```
+### (
+ 
+```
+dtλt+d^2 tΛt+
+```
+```
+∑m
+j=
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+(b
+jgtφjgt+b^2 jgtΦjgt
+```
+### )
+ 
+### )
+ 
+```
+(12a)
+s.t. (λλλ,φφφ,ΛΛΛ,ΦΦΦ,δδδ,Ω)∈FCOP, (12b)
+```
+whereFCOPdenotes the feasible region of the dual problem, which can be written in the form of
+constraints (7b) - (7c).
+Recently, Cifuentes et al. (2024) showed that strong duality holds for the CPP reformulation (4)
+if the original MBQP has a convex objective function. Since the objective function (10a) is linear
+and thus convex, strong duality holds forUCCPP.
+ 
+4.2. Copositive Duality Pricing
+In this section, we describe CDP, a new pricing mechanism for UC. In an electricity market, the
+system operator (SO) acts as a coordinator, collecting payments from the electricity consumption
+(commonly referred to as the “load”) and distributing them among generators. A pricing mecha-
+nism sets the prices for computing these payments. A generator’s profit is calculated by subtracting
+its costs from the revenue it receives from the SO. A generator isrevenue neutral(orbudget bal-
+anced) if its revenue equals its costs. It isrevenue adequateif its revenue meets or exceeds its costs,
+andrevenue deficientif its revenue falls short of its costs. Similarly, an SO is budget balanced if
+the payments that it collects and distributes are of an equal amount. A pricing scheme isindivid-
+ually rationalif the centralized UC decision also maximizes each generator’s individual profit, and
+therefore each market participant has no incentive to deviate from the centrally optimal solution
+ 
+ 
+(Ndrio et al. 2022). As shown later in this section, CDP is budget balanced for both generators
+and the SO and, under certain conditions, individually rational.
+Letx∗be an optimal solution ofUC, and setX∗=x∗x∗>. According to Remark 1, (x∗,X∗) is
+an optimal solution toUCCPP(11). The CDP mechanism is defined as follows:
+Definition 1 (CDP Mechanism). Let (λλλ∗,φφφ∗,ΛΛΛ∗,ΦΦΦ∗) be an optimal solution forUCCOPand
+(x∗,x∗x∗>) be an optimal solution forUCCPP, wherex∗is an optimal solution forUC. Under the
+CDP mechanism, at timetthe SO:
+ 
+- collectsπLt=λ∗tdt+ Λ∗td^2 t+∑mj=1∑g∈G(bjgtφ∗jgt+b^2 jgtΦ∗jgt)from the load, and
+- paysπgtG=λ∗tp∗gt+ Λ∗tXgt,gtpp∗+∑mj=1(φ∗jgtajgtx∗+ Φ∗jgtTr(ajgta>jgtX∗))+∑g′∈−gfgg′tto generator
+    g, where−g=G \{g}andfgg′t is the share of g’s revenue from the cross-term payment
+    2Λ∗tXgt,gpp∗′t. It must satisfyfgg′t+fg′gt= 2Λ∗tXgt,gpp∗′t, and ifXgt,gpp∗′t= 0, thenfgg′t= 0.
+The termπtLconsists of uniform price payments,dtλ∗t andd^2 tΛ∗t, and payments that depend
+on the shadow prices of operational constraints with non-zero right-hand sides. Note that the
+quadratic termd^2 tΛ∗t corresponds to the lifted power balance (11d). The shadow price payments
+for operational constraints are roughly comparable to transmission congestion rents. They could
+represent, for example, a payment corresponding to a ramping constraint, which, if loosened, would
+improve the objective. As we later show in Theorem 1, including non-uniform pricesφ∗jgtand Φ∗jgt
+in the pricing mechanism is necessary to balance the budget for both the generators and the SO.
+The termπgtGdepends on generators’ optimal production levels and on/off statuses. It is obtained
+by summing the products of the left-hand sides of constraints (11b) - (11e) with their corresponding
+dual prices. As in the load payment,λ∗tp∗gtand Λ∗tXgt,gtpp∗ are volumetric payments for which the
+prices are uniform for all generators. The term Λ∗tXgt,gtpp∗ corresponds to the lifted power balance
+(11d). We also include non-uniform payments inπgtG. In practice, SOs such as New York ISO and
+PJM provide non-uniform lump-sum payments to generators, as uniform prices alone may not be
+enough to recover all costs (O’Neill et al. 2005). ForπGgt, the terms in the first sum correspond
+to shadow prices of various operational constraints. The shadow prices are not uniform as they
+depend on the generator index,g. The second sum∑g′∈−gfgg′tcorresponds to the off-diagonal
+entries in the lifted matrixX∗. It is useful for ensuring that the SO remains budget-balanced,
+as shown in Theorem 1. This payment also provides flexibility in the pricing mechanism. Since it
+involves two generators, it is an open question as to how this payment should be divided between
+those generators. For example, we can assign it to the generator that loses money, or divide it
+evenly as in Section 4.4. If it is divided evenly, thenfgg′t= Λ∗tp∗gtp∗g′t.
+We now further examine non-uniform payments resulting from shadow prices. Constraint (9) is
+the only operational constraint with a non-zero constant on the right-hand-side. The portion of
+the payment resulting from constraint (9) and the corresponding lifted constraint are included in
+ 
+ 
+πtG. We refer to the shadow prices of these constraints theavailability prices, as they signal the
+availability of the generators at each hour. These are the only non-uniform prices in this example.
+Note that in practice, generators follow the optimal decisions set byUC(10), as mandated by the
+SO. Therefore, to minimize market distortion, a UC pricing mechanism should incentivize decisions
+that are as close as possible to those set byUC(10).
+The following theorem shows that CDP is revenue neutral for both the SO and the generators.
+Note that in general, revenue of the SO does not always equal to the aggregate revenue of the
+generators. Differences could arise, e.g., when there is transmission congestion, which is a topic for
+future work. Also, note that the individual generators are in general not revenue neutral under
+CDP.
+ 
+Theorem 1(Revenue neutrality of CDP).CDP balances the aggregate revenue and the ag-
+gregate cost of the generators. It also balances the budget of the SO.
+ 
+4.3. Individual Rationality
+Next, we provide a sufficient condition guaranteeing the individual rationality of CDP. The profit-
+maximization problem of generatorgis given by:
+ 
+```
+πgGen(p−g) := max
+```
+### ∑
+ 
+```
+t∈T
+```
+### (
+ 
+```
+λ∗tpgt+ Λ∗tp^2 gt+
+```
+```
+∑m
+j=
+```
+```
+(φ∗
+jgtbjgt+ Φ∗jgtb^2 jgt
+```
+### )+∑
+ 
+```
+g′∈−g
+```
+```
+fgg′t
+```
+```
+−cpgpgt−cugugt
+```
+### )
+ 
+```
+(13a)
+s.t. a>jgtx=bjgt ∀t∈T,j= 1,...,m (13b)
+x∈Rn+ (13c)
+zgt∈{ 0 , 1 } ∀t∈T. (13d)
+```
+wherep−gdenotes the production decision of all generators other thang. The first five terms in
+the objective represent the total revenue of generatorg. The profitπGeng (p−g) should not contain
+entries ofX, which are lifted variables that do not have direct physical meanings. As discussed
+in Remark 1, at optimality we can equivalently use (p∗gt)^2 in place ofXgt,gtpp∗ andp∗gtp∗g′tin place of
+Xgt,gpp∗′t.
+A market mechanism is individually rational if under its prices, no participant would benefit
+by deviating from its allocated quantity (Milgrom and Watt 2022). For CDP, the prices and al-
+located quantity are respectively (λλλ∗,φφφ∗,ΛΛΛ∗,ΦΦΦ∗) and (x∗,x∗x∗>). Sincex∗is optimal toUC, CDP
+is individually rational if and only if the optimal solution of the profit-maximization problem (13)
+matches the corresponding portion of the optimal solution of UCfor all generatorsg∈G(we do
+not consider the load as it is inelastic). Theorem 2 provides a sufficient condition for when CDP is
+individually rational.
+ 
+ 
+Theorem 2(Individual rationality of CDP).If the priceΛΛΛ∗= 0 , then CDP is individually
+rational.
+ 
+A market achievescompetitive equilibriumif the market clears and individual rationality holds.
+In our pricing scheme, since production equals demand for all time periods due to constraints (11b),
+the market always clears. If individual rationality holds, then the equilibrium is competitive.
+While it is difficult to guarantee when ΛΛΛ∗= 0 , we observe in our experiments that its entries
+are often small and sometimes all zero, such as in the Scarf’s example in Section 6.1. It may be
+possible to derive other sufficient conditions for individual rationality, e.g., by decomposing the
+conic constraintX∈C∗using matrix completion (Drew and Johnson 1998). This is a topic of future
+work.
+When ΛΛΛ∗= 0 , constraints (11d) are redundant and can be removed fromUCCPP. In other words,
+the relaxation ofUCCPPwith constraints (11d) removed, which we denote asUCCPP′, is an exact
+reformulation ofUCwhen ΛΛΛ∗= 0.
+Note that constraints (11d) and (11e) are a type of reformulation linearization technique (RLT)
+constraints (Sherali and Adams 2013). RLT constraints are useful for constructing the conic re-
+formulations of MIQP (Fattahi et al. 2017), and it is an open question when a particular RLT
+constraint inPCPPbecomes redundant. Studying the redundancy of specific RLT constraints not
+only could shed light on individual rationality of our pricing mechanism, but also could speed
+up the computation of polynomial optimization (Bienstock et al. 2020). This is a topic for future
+research.
+However, even if RLT constraints (11d) are not redundant, we can still ensure individual ratio-
+nality of most generators in a large-scale system by slightly modifying CDP, by paying generators
+based on prices and primal optimal solutions fromUCCPP′, as defined below:
+ 
+```
+UCCPP′:= min(x,X)∈X′
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+### ), (14)
+ 
+whereX′:={(x,X)|(11b),(11c),(11e),(11f),
+ 
+```
+[ 1 x>
+g
+xgXg
+```
+### ]
+ 
+∈Cn∗g+1,g∈G}, withngthe dimension ofxg.
+UCCPP′ is obtained by removing (11d) fromUCCPP and decomposing the completely-positive
+constraints byg. In Lemma 2 of the e-companion, we show thatUCCPP′ is as tight as aUCCPP
+without the RLT constraints (11d). In Proposition 1, we further demonstrate the tightness of
+UCCPP:
+ 
+Proposition 1. Assume|G|>|T|+1. There exists an optimal solution ofUCCPP′, which we
+denote by( ̄x,X ̄), where at most|T|+1generators have non-integral solutions forz ̄gt,t∈T.
+ 
+ 
+The proof is based on the Shapley-Folkman Lemma (Bertsekas 2009), and is Lemma 4 in the
+e-companion. The Shapley-Folkman Lemma is often used in the literature to derive properties of
+nonconvex but separable problems (Milgrom and Watt 2022, Vujanic et al. 2014). A separable
+problem is an optimization problem whose Lagrange dual function can be decomposed into smaller
+subproblems (Bertsekas 2009).
+We denote (λλλ, ̄φφφ, ̄ 0 ,ΦΦΦ) as a set of optimal shadow prices corresponding to the primal optimal ̄
+solution (x ̄,X ̄), as defined in Proposition 1. We change CDP’s payments to generators by using
+the prices (λ ̄λλ,φ ̄φφ, 0 ,ΦΦΦ) and the primal solution ( ̄ x ̄,X ̄). Proposition 2 provides a lower bound for the
+number of generators that are individually rational after this modification.
+ 
+Proposition 2. Assume|G|>|T|+1. Then a CDP that pays generators using prices(λ ̄λλ,φ ̄φφ, 0 ,ΦΦΦ) ̄
+and the primal optimal solution(x ̄,X ̄)ensures individual rationality of at least|G|−|T|− 1 gener-
+ators.
+ 
+Proposition 2 implies that when there is a large number of generators in the system, the payments
+based on (λλλ, ̄φφφ, ̄ 0 ,ΦΦΦ) and ( ̄ x ̄,X ̄) ensure individual rationality of most generators. For those gener-
+ators, their optimal primal solution is integral and is feasible to the profit-maximization problem
+(13), as shown in the proof of Proposition 2. For the remaining generators, the prices (λ ̄λλ,φ ̄φφ, 0 ,ΦΦΦ) ̄
+support non-integral solutions that are not feasible. Consequently, those generators will not supply
+enough electricity to clear the market. The SO can either ration the demand, which is undesir-
+able, or subsidize those generators to cover the extra cost of production when it is not efficient.
+Proposition 3 provides bounds on both the subsidy and the over-production caused by the subsidy.
+ 
+Proposition 3. Under a CDP that pays generators using prices( ̄λλλ,φ ̄φφ, 0 ,ΦΦΦ) ̄ and the primal
+optimal solution(x ̄,X ̄), the total subsidy for covering the cost of generators that are not individually
+rational isO((|T|+1)|T|), and the over-production at each time period isO(|T|+1).
+ 
+Proposition 2 and 3 motivate the following modification on CDP’s payment to generators: At time
+t, the SO paysπGgt′= ̄λt ̄pgt+∑mj=1(φ ̄jgtajgt ̄x+Φ ̄jgtTr(ajgta>jgtX ̄))to generatorg. If the generator
+is not individually rational, then the SO also subsidizes the uncovered cost due to non-integral
+solutions.
+Since we do not change the load’s payments under CDP, the load still pays the prices fromUCCPP.
+Because opt(UCCPP)≥opt
+ 
+### (
+ 
+### UCCPP′
+ 
+### )
+ 
+, the revenue from the load is enough to cover payments to
+generators after this modification, if not considering the subsidy. The SO can impose an additional
+charge on the load to fund the subsidy, which can be very small compared with the total payment
+in a large-scale system with many generators operating.
+In summary, if ΛΛΛ∗= 0 , then CDP ensure individual rationality of all generators. In general, we
+can modify CDP’s payments to generators to ensure individual rationality of at least|G|−|T|− 1
+ 
+ 
+generators (when|G|>|T|+1). To avoid rationing, a subsidy is needed to cover the costs of addi-
+tional production. The bounds on the subsidy and the resulting over-production are not affected
+by the number of generators|G|. Consequently, in a large-scale system with many generators op-
+erating, the ratios of subsidy to total payment and over-production to total production can be
+very small. Note that this modification could lead to inefficient productions that are different from
+an optimal central dispatch, yet due to bounded subsidy, the cost of such inefficiency is relatively
+small in a large-scale system.
+ 
+4.4. Ensuring Individual Revenue Adequacy
+CDP does not guarantee each individual generator’s revenue adequacy, i.e., nonnegative profit.
+This is also the case with some other schemes, including RP and CHP. In CDP, we can enforce
+revenue adequacy by adding constraints directly to the dual ofUCCPP.
+Revenue adequacy can be enforced through the non-uniform pricesφ∗jgtand Φ∗jgt, which can be
+different for each generator, and/or through the uniform pricesλtand Λt. We use uniform pricing
+because it is easier to implement in practice. In Section C of the e-companion, we present a different
+version that uses availability prices as well.
+We enforce revenue adequacy by adding a new constraint to the dual problem, which ensures
+that the payment to each generator is no less than its costs. The resulting augmented dual problem
+is given by:
+ 
+```
+max
+```
+### ∑
+ 
+```
+t∈T
+```
+### (
+ 
+```
+dtλt+d^2 tΛt+
+```
+```
+∑m
+j=
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+(bjgtφjgt+b^2 jgtΦjgt)
+```
+### )
+ 
+```
+(15a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+t∈T
+```
+### 
+ 
+```
+p∗gtλt+p∗gt^2 Λt+∑
+g′∈−g
+```
+```
+p∗gtp∗g′tΛt
+```
+### 
+ 
+### ≥∑
+ 
+```
+t∈T
+```
+```
+(cp
+gp∗gt+cugu∗gt
+```
+```
+) ∀g∈G (15b)
+```
+```
+(λλλ,φφφ,ΛΛΛ,ΦΦΦ,δδδ,Ω)∈FCOP. (15c)
+```
+The objective (15a) and the constraint (15c) are the same as in the original dual problem,UCCOP.
+The left-hand side of constraint (15b) is the total revenue of generatorg, assuming that the cross-
+term payments are divided evenly between generators. The right-hand side of (15b) is the total
+cost of generatorg. Constraint (15b) ensures that each generator is revenue adequate, and thus no
+generator-dependent uplift payment is needed.
+The prices are computed by solving (15). The optimal values of primal variables,p∗gtandu∗gt,
+could be obtained by solvingUC. We refer to this pricing mechanism as Revenue-adequate CDP
+(RCDP). More formally, the RCDP mechanism is defined as follows.
+Definition 2 (RCDP Mechanism).Let (λλλ∗,ΛΛΛ∗) be an optimal solution for (15) and
+(x∗,x∗x∗>) be an optimal solution forUCCPP, wherex∗is an optimal solution forUC. Under the
+RCDP mechanism, at hourtthe SO:
+ 
+ 
+- collects ̃πLt=λ∗tdt+ Λ∗td^2 tfrom the load, and
+- pays ̃πgtG′=(λ∗tp∗gt+ Λ∗tXgt,gtpp∗)+∑g′∈−gp∗gtp∗g′tΛ∗tto the generatorg.
+A benefit of RCDP is that the generators pay only uniform prices, which makes it easier to
+implement in practice. We say a pricing scheme uses only uniform prices if all generators see
+the same price, i.e., only( λλλ∗ and ΛΛΛ∗are used as prices. SinceXgt,gtpp∗ =p∗gt^2 , the payment ̃πGgt′=
+λ∗t+ Λ∗t∑g′∈Gp∗g′t
+ 
+### )
+ 
+p∗gt. By conservation of power,∑g′∈Gp∗g′t=dt, the load at time t. Hence, the
+payment simplifies to (λ∗t+ Λ∗tdt)p∗gt.
+Note that since we use only the uniform prices and ignore the availability prices, the total
+payments under RCDP no longer equal the total costs. However, RCDP still balances the utility’s
+revenue and payments. We formalize this result in the following proposition:
+ 
+Proposition 4(Revenue neutrality of RCDP).RCDP balances the budget of the SO.
+The optimal solution to the augmented dual problem (15) does not necessarily correspond to
+the original primal problemUCCPP. The following proposition provides a straightforward way to
+check whether RCDP incentivizes the optimal UC solution.
+ 
+Proposition 5. RCDP incentivizes the optimal solution ofUC if the optimal value of (15)
+equals the optimal value ofUCCOP.
+ 
+Proposition 5 says that RCDP supports the optimal solution when the addition of constraints
+(15b) do not change the optimal value ofUCCOP, i.e., ifUCCOPhas multiple solutions, then con-
+straints (15b) eliminate solutions that are not revenue adequate. In our experiments, we found that
+the optimal objective value of (15) satisfied the condition (within a small numerical tolerance) in
+most instances.
+We are also interested in whether individual rationality holds under RCDP. Combining the
+sufficient conditions in Theorem 2 and Proposition 5 yields following proposition:
+ 
+Proposition 6(Individual rationality of RCDP).If the priceΛΛΛ∗= 0 , and if the optimal
+value of (15)equals the optimal value ofUCCOP, then the market mechanism with RCDP is indi-
+vidually rational.
+ 
+We omit the proof from the e-companion because it is similar to that of Theorem 2.
+By modifying (15) with (i) usingp∗gtandu∗gtfromUCCPP′, (ii) setting ΛΛΛ = 0 , and (iii) replacing
+FCOPwith the dual feasible region ofUCCPP′, we can also extend the results of Propositions 2 and
+3 to RCDP if the optimal value of the modified problem equals opt(UCCOP′).
+Because the addition of constraints (15b) restricts the original dual problem (12), it is worth
+checking if the problem is still feasible. We know that if either the primal or dual is feasible,
+bounded, and has an interior point, then the other is also feasible (Luenberger and Ye 2015). We
+ 
+ 
+therefore focus on the dual of (15). Letqg≥0 be the dual multiplier of (15b). The dual of (15) is
+the following:
+ 
+```
+min
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt−(cpgp∗gt+cugu∗gt)qg
+```
+```
+) (16a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+(p
+gt−p∗gtqg
+```
+```
+)=d
+t ∀t∈T (16b)
+```
+```
+Tr(hth>tX)−
+```
+### ∑
+ 
+```
+g∈G
+```
+### 
+ 
+```
+p∗gt^2 +∑
+g′∈−g
+```
+```
+p∗gtp∗g′t
+```
+### 
+ 
+```
+qg=d^2 t ∀t∈T (16c)
+```
+```
+(11c),(11e),(11f) (16d)
+qg≥ 0 g∈G (16e)
+Y∈Cn∗+1. (16f)
+```
+Observe that this is similar toUCCPP, but with additional terms multiplyingqgin the objective
+and constraints. Note that (16) includes bothpgt, a variable, andp∗gt, part of the solution toUCCPP.
+The CPP (16) is feasible because we recoverUCCPPby setting allqgto zero. It is bounded due
+to the equality (16b), and the fact that the production levelpgtis usually bounded by generator
+capacity. If the problem has an interior, then its dual, (15), is feasible.
+To summarize, when the conditions of Theorem 2 and Proposition 6 are satisfied, CDP and
+RCDP support optimal UC solutions and market equilibrium. CDP includes both uniform and
+non-uniform prices, as well as uplift, while RCDP only needs uniform prices, which are easier to
+implement in practice. In our experiments, RCDP always leads to higher payments from consumers
+than CDP, so the choice between CDP and RCDP can be viewed as a tradeoff between efficiency
+and practical simplicity.
+Our pricing schemes satisfy many important properties and can be viewed as a natural extension
+of uniform, equilibrium-supporting shadow prices from convex markets to discrete markets. In
+particular, RCDP is to the best of our knowledge the first shadow pricing-based scheme for discrete
+markets that uses only uniform prices, is uplift-free, and under certain conditions supports a market
+equilibrium.
+ 
+4.5. Properties of Pricing Mechanisms
+The properties of a pricing mechanism depend on: (i) the choice of the base primal UC formulation,
+(ii) how duality is used, and (iii) the design of the payments. In what follows, we discuss the impact
+of these factors by comparing CDP/RCDP with RP and CHP with respect to uplift, profit, and
+load payments.
+A generator’s revenue can come from both price-based and uplift payments. The uplift payment
+to a revenue-deficient generator equals the difference between its price-based revenue and costs.
+ 
+ 
+The load’s payment equals the total revenue of generators. Since the load is inelastic, a lower
+payment is desirable.
+(1) Payment and Profit Under CDP and RCDP: We denote the prices under CDP as
+(λλλCDP,φφφCDP,ΛΛΛCDP,ΦΦΦCDP). Before uplift, some generators are already profitable while others lose
+money. The latter receive uplift and end up with zero profit. Since revenue neutrality holds under
+CDP, the total pre-uplift profits of the profitable generators equals the losses of the others.
+Under CDP, the price-based payments equals opt(UC) because of revenue neutrality. Therefore,
+load payment under CDP = opt(UC) + uplift payments under CDP.
+ 
+On the other hand, under RCDP all generators are revenue-adequate, and thus there is no uplift
+payment. We denote the prices under RCDP as (λλλRCDP,ΛΛΛRCDP).
+If the condition in Proposition 5 holds, then there exists a set of prices (λλλCDP,φφφCDP,ΛΛΛCDP,ΦΦΦCDP)
+under CDP such thatλλλCDP=λλλRCDPand ΛΛΛCDP= ΛΛΛRCDP.
+(2) Comparison with RP:RP is obtained by solving the following linear program:
+ 
+```
+UCRP: min
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+) (17a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+pgt=dt ∀t∈T (λt) (17b)
+a>jgtx=bjgt ∀j= 1,...,m,g∈G,t∈T (φjgt) (17c)
+zgt=z∗gt ∀g∈G,t∈T (ιgt) (17d)
+x∈Rn+, (17e)
+```
+which is the same asUCexcept that the binary variables are fixed to their optimal solutions
+(17d). RP is obtained from the optimal dual variables of constraints (17b) and (17d), which
+we denote (λλλRP,ιιιRP). The SO collects ∑t∈T
+ 
+### (
+ 
+```
+λRPt dt+∑g∈GιRPgtz∗gt
+```
+### )
+ 
+from the load, and pays
+∑
+t∈T
+ 
+```
+(λRP
+t p∗gt+ιRPgtzgt∗
+```
+```
+)to generatorg. It is straightforward to check that RP balances the revenue
+```
+and payment of the SO.
+Due to strong duality of LP, we have
+∑
+g∈G
+ 
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+### )=∑
+ 
+```
+t∈T
+```
+### (
+ 
+```
+λRPt dt+
+```
+### ∑
+ 
+```
+g∈G
+```
+### (
+ 
+```
+ιRPgtzgt∗+
+```
+```
+∑m
+j=
+```
+```
+φRPjgtbjgt
+```
+### ))
+ 
+### .
+ 
+If allbjgt= 0, as forUCRPif we ignore the redundant upper bounds onzgt, then RP balances the
+aggregated revenue and cost of generators. It is mentioned in the literature that under RP every
+generator’s net profit is zero (Azizan et al. 2020). If we add constraints with nonzerobjgt, such as
+ramping constraints, to (8) and they are binding, then individual revenue neutrality may no longer
+hold.
+ 
+ 
+```
+When every generator’s net profit is zero, there is no uplift payment under RP, and we have
+```
+```
+load payment under RP = opt(UC).
+```
+This implies that the load payment under RP is no more than that after uplift under CDP, and
+under RCDP.
+(3) Comparison with CHP:CHP can be obtained via the following Lagrangian dual problem (Wang
+et al. 2013):
+ 
+```
+UCCHP: maxλλλ minx
+```
+### ∑
+ 
+```
+g∈G
+```
+### ∑
+ 
+```
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+### )+∑
+ 
+```
+t∈T
+```
+```
+λt(dt−
+```
+### ∑
+ 
+```
+g∈G
+```
+```
+pgt) (18a)
+s.t. a>jgtx=bjgt ∀j= 1,...,m,g∈G,t∈T (18b)
+x∈Rn+ (18c)
+zgt∈{ 0 , 1 } ∀g∈G,t∈T. (18d)
+```
+We denote the vector of prices under CHP asλλλCHP, which corresponds to optimal values of the
+Lagrangian multipliersλt,t∈T. Due to nonconvexity, generally strong duality does not hold for
+the Lagrange dual problem.
+CHP does not guarantee revenue adequacy for each generator, and thus may have nonzero uplift
+payments. Therefore,
+ 
+```
+load payment under CHP = payments fromλλλCHP+ uplift payments under CHP.
+```
+Because prices under CHP do not correspond to the optimal UC solution, it is difficult to
+analytically compare the load payment under CHP with that under CDP and RCDP. In our
+experiments, the load payment under CHP is usually higher than CDP, and slightly lower than
+RCDP.
+We now discuss the pricing implications of tightening the base primal UC formulation. One can
+tighten a given UC formulation with the addition of valid inequalities. These are typically linear
+or convex constraints added to an MILP, which shrink the search space of the corresponding linear
+relaxations and reduce the relaxation gap. Adding valid inequalities can make the prices obtained
+from linear relaxations more efficient. However, it has been observed that for RP, strengthening
+linear relaxations of UC with valid inequalities can lead to shadow prices with peculiar properties
+(O’Neill et al. 2005).
+BecauseUCCPPis an exact convex reformulation of UC, adding valid inequalities will not change
+the optimal objective value, or the fact that CDP is efficient. However, addition of constraints
+toUCCPP could potentially be useful for selecting prices with desirable properties, e.g., fairness.
+ 
+ 
+One can obtain an alternative CPP reformulation by lifting a different MILP formulation, e.g.,
+an MILP with additional valid inequalities. Pricing mechanisms like CDP and RCDP may then
+be constructed in a similar manner. However, modifying the CPP in this way could complicate
+the resulting pricing mechanism; for instance, new RLT and conic constraints could add more
+couplings between generators, further compromising separability, and making it harder to interpret
+the corresponding dual variables.
+We also mention that one could in principal construct a pricing mechanism using the SDP
+relaxation of UC by Quarm and Madani (2021), which is also conic. In the future, we intend to
+characterize how a pricing mechanism is affected by adding valid inequalities for linear and conic
+relaxations of UC.
+ 
+## 5. Cutting Plane Algorithm
+ 
+At present, no industrial solver can handle COPs. In the literature they are often approximately
+solved via SDPs (see Section A of the e-companion). To solve COPs exactly, we propose a cut-
+ting plane algorithm, which returns the optimal solution when it terminates. To the best of our
+knowledge, this is the first use case and computational assessment of the copositivity certificate
+by Anstreicher (2021). We also speed up the algorithm by tightening the master problem with an
+SOCP restriction of the COP.
+ 
+5.1. The Algorithm
+The cutting plane algorithm is applicable for the following general type of COPs with linear
+constraints over a copositive cone:
+ 
+```
+max q>λλλ+ Tr(H>Ω) (19a)
+s.t. d>λλλ+ Tr(D>iΩ) =gi ∀i= 1,...,m (19b)
+λλλ≥ 0 (19c)
+Ω∈Cnc (19d)
+```
+whereλλλis annl-dimensional vector,Lis the index set for integer variables inλλλ, Ω∈Rnc×nc. The
+notationCncdenotes annc-dimensional copositive cone. Note that the COP problemsPCOP(7) is
+a special case of the COP (19).
+The algorithm starts by removing the conic constraint (19d) to obtain the initial master prob-
+lem, which is iteratively refined by the addition of cuts. At each iteration, we solve the master
+problem to obtain an optimal solution, denoted by (λ ̄λλ,Ω). To determine whether ̄ Ω is copositive, ̄
+we employ the MILP problem proposed by Anstreicher (2021), which checks copositivity using
+a recent characterization of copositive matrices given in Dickinson (2019). Before presenting the
+MILP problem, we first introduce Lemma 1, which restates Theorem 3.3 in (Dickinson 2019).
+ 
+ 
+Lemma 1. Letβbe the index set for a submatrix ofΩ ̄, and let|β|=nβ. LetΩ ̄ββ∈Rnβ×nβdenote
+the principal submatrix ofΩ ̄ that consists of rows and columns with indices inβ. The matrix
+Ω ̄ is not copositive if and only if there is a submatrixΩ ̄ββ and a vectorzβ∈Rn+β that satisfies
+Ω ̄ββzβ=− 1.
+ 
+The MILP problem, which serves as the separation problem in our cutting plane algorithm, is
+given by:
+ 
+```
+SP(Ω) : max w (20a)
+s.t. Ωz≤−w 1 +m>( 1 −u) (20b)
+1 >u≥q (20c)
+w≥ 0 (20d)
+0 ≤z≤u (20e)
+u∈{ 0 , 1 }nc (20f)
+```
+whereq= 1 (or a larger integer, depending on problem structure), 1 is a vector of all ones, and
+m∈Rn++c is a vector of large numbers. The MILP identifies non-copositive matrices by finding a
+submatrixΩ ̄ββthat satisfies Lemma 1. The binary variableuiequals 1 if theithrow and column
+are selected for the submatrix. By Theorem 2 of Anstreicher (2021),Ω is copositive if and only if ̄
+the optimal objective ofSP(Ω) is zero. ̄
+At any iteration, if the optimal value of the subproblem is zero, then the master problem solution
+is feasible and optimal for the COP (19), and we can terminate the algorithm. Otherwise, asΩ is ̄
+not copositive, we add the following cut to the master problem:
+ 
+```
+̄z>Ω ̄z≥ 0 (21)
+```
+where ̄zis an optimal solution ofSP(Ω). ̄
+ 
+```
+Proposition 7. If the optimal value ofSP(Ω) ̄ is nonzero, then(21)cuts offΩ ̄.
+```
+Therefore, ifΩ is not copositive, then the MILP (20) produces a vector ̄ ̄zthat violates the inequality
+z>Ω ̄z≥0.
+Note that the cut (21) does not eliminate any feasible solutions from (19). This is because for
+any ̄z∈Rn+c, any copositive matrix Ω satisfies ̄z>Ω ̄z≥0.
+SinceSP(Ω) is an MILP, we can strengthen its LP relaxation to improve its computational ̄
+efficiency. Anstreicher (2021) suggests doing so by settingmi= 1 +∑nj=1c , j 6 =i{Ω ̄ij:Ω ̄ij> 0 }, i=
+ 
+```
+This result is not stated explicitly in Anstreicher (2021), but is useful to show the validity of the cutting planes.
+```
+ 
+1 ,...,nc. This is an upper bound forw+Ω ̄>iz, which ensures that the constraint (20b) is redundant
+whenui= 0. Note thatΩ ̄iiis not in the definition ofmibecauseui= 0 implieszi= 0. In addition,
+Lemma 1 indicates that if diag(Ω) ̄ ≥0, then we only need to checkΩ ̄ββzβ=− 1 fornβ≥2. Thus,
+the separation problem can be strengthened by lettingq= 2. In our algorithm, diag(Ω) ̄ ≥0 is
+a valid inequality because Ω∈Cnc. Thus, when initializing the master problem, we can add the
+constraint diag(Ω)≥0, and setq= 2 inSP(Ω). ̄
+In some cases the master problem is unbounded at initialization. There are several ways to deal
+with this. One is to impose a large upper bound on the elements of Ω. This bound can be gradually
+relaxed and then removed eventually.
+It is worth noting that our algorithm can also solve COPs with integer variables, in which case
+the master problem becomes an MILP. Since our algorithm uses a (mixed-integer) linear master
+problem and an MILP separation problem, handling discrete variables is much easier compared
+with using the SDP approximations, which require solving mixed-integer SDPs.
+Exploiting our COP’s connection to an MBQP, we propose helpful algorithmic enhancements
+by taking advantage of the problem structure. More specifically, in this paper, we reformulate the
+MBQP as a CPP, then dualize the CPP to obtain a COP. Usually the original MBQP can be
+solved with reasonable efficiency, but it is the solution of the dual COP that we are interested in.
+We can use solutions of the MBQP problem, and the strong duality property between CPP and
+COP to help the cutting plane algorithm in the following ways:
+ 
+- If the optimal objective of the MBQP and the cutting plane algorithm are equal, then the
+    algorithm has terminated at an optimal solution.
+- Supposex∗is optimal for the MBQP. Then we can tighten the master problem by adding the
+    complementary slackness constraint Tr(x∗x∗>Ω) = 0.
+In addition, since Ω∈C, the constraint Tr(x∗x∗>Ω)≥0 is always valid, and this constraint is
+helpful in speeding up the computation in our experiments.
+We were unfortunately unable to prove that the cutting plane algorithm terminates in finitely
+many iterations. However, note that the objective of the master problem is non-increasing through-
+out the algorithm. In addition, note that the other exact algorithm for COPs, the simplicial parti-
+tion method (Bundfuss and D ̈ur 2009), is also shown to be exact only in the limit. We find in our
+numerical experiments that the cutting plane algorithm usually converges in a reasonable compu-
+tational time, and when it does not, the approximate solution obtained from the last iteration is
+often still useful.
+ 
+5.2. Tightening the Master Problem
+We can further improve performance of the cutting plane algorithm, in regards to obtaining exact
+or approximate solutions, with a tighter master problem initialization. A natural choice for such
+ 
+ 
+a master problem would be the use of the SDP approximation of the COP. LetSn+be the n-
+dimensional positive semidefinite (PSD) cone andNn be the cone of n-dimensional entrywise
+nonnegative matrices. ThenSn++Nn⊆Cn(Parrilo 2000). Therefore, introducing the new decision
+matricesV andN, we can approximate the constraint Ω∈Cnwith the restriction:
+ 
+```
+V+N= Ω (22a)
+N≥ 0 (22b)
+V∈Sn+. (22c)
+```
+Unfortunately, solving an SDP master problem at each iteration is a substantial computational
+burden. Furthermore, the SDP approximation might be very restrictive.
+For better tractability and approximation, we relax the SDP constraints to second-order cone
+(SOC) constraints (Kim and Kojima 2003). Using the fact that anyV ∈ S+n has nonnegative
+diagonal entries and principal minors, we replace (22c) with the following constraints:
+ 
+```
+Vii≥ 0 ∀i= 1,...,n (23a)
+ViiVjj≥Vij^2 ∀i 6 =j;i,j= 1,...,n, (23b)
+```
+where (23b) are SOC constraints that require all two-by-two principal minors to be nonnegative.
+Accordingly, we obtain the following strengthened initial master problem:
+ 
+```
+max q>λλλ+ Tr(H>Ω) (24a)
+s.t. d>λλλ+ Tr(D>iΩ) =gi ∀i= 1,...,m (24b)
+λλλ≥ 0 (24c)
+V+N= Ω (24d)
+Vii≥ 0 ∀i= 1,...,n (24e)
+ViiVjj≥Vij^2 ∀i 6 =j;i,j= 1,...,n (24f)
+N≥ 0. (24g)
+```
+Enforcing Ω∈Cnc with the addition of cutting planes, the algorithm will solve (24) with the
+additional constraint Ω∈Cnc, given that this restricted COP is feasible. That is to say, the algorithm
+will either converge to a feasible (not necessarily optimal) solution of the original problem, the
+COP (19), or prove infeasibility of the restricted COP due to the inclusion of the constraints
+(24d)-(24g). Note that in the former case the solution will be no worse than that of the commonly
+used SDP approximation of the COP. Moreover, in order to obtain a feasible solution in the latter
+case, and if desired to further improve the obtained feasible solutions (even to converge to an
+ 
+ 
+optimal COP solution), we can continue running the cutting plane algorithm by gradually removing
+constraints (24d)-(24g) from the master problem. In our computational experiments, we found that
+the algorithm with the SOC-restricted initial master problem converged significantly faster than
+its exact version and to generally good approximations of prices for CDP and RCDP.
+ 
+## 6. Numerical Results
+ 
+In this section we present our numerical experiments. Section 6.1 implements several pricing
+schemes on Scarf’s example. Section 6.2 compares different pricing schemes for a nonconvex elec-
+tricity market. Section 6.3 showcases the performance of our cutting plane algorithm and its en-
+hancements on various UC instances. We also include a comparison of our COP cutting plane
+algorithm with other COP algorithms on a commonly used benchmark problem in e-companion
+Section D.
+All experiments are implemented in Julia using the optimization package JuMP.jl (Dunning et al.
+2017). The COP cutting plane algorithm was implemented using CPLEX (CPLEX, IBM ILOG
+2022), and the SOCP master problems in the strengthened cutting plane algorithm are solved
+using Gurobi (Gurobi Optimization, LLC 2023). We use Mosek (MOSEK ApS 2022) to solve SDP
+approximations.
+ 
+6.1. Pricing in Scarf ’s Example
+Scarf’s example is often used to compare pricing schemes for nonconvex markets. We use the
+modified version from Hogan and Ring (2003) to compare CDP with RP and CHP, which are
+currently used by utilities in the U.S.. In the modified Scarf’s example, there are three types of
+generators: smokestack, high technology, and medium technology. LetGibe the set of generators
+of typei= 1, 2 ,3. We have|G 1 |= 6,|G 2 |= 5,|G 3 |= 5. The binary variablesugi,gi∈Gi,i= 1, 2 ,3, rep-
+resent startup decisions, and the continuous variablespgi,gi∈Gi,,i= 1, 2 ,3, represent production
+decisions. Scarf’s example solves the following cost minimization problem:
+ 
+```
+min
+```
+### ∑
+ 
+```
+g 1 ∈G 1
+```
+```
+(53ug 1 + 3pg 1 ) +
+```
+### ∑
+ 
+```
+g 2 ∈G 2
+```
+```
+(30ug 2 + 2pg 2 ) +
+```
+### ∑
+ 
+```
+g 3 ∈G 3
+```
+```
+7 pg 3 (25a)
+```
+```
+s.t.
+```
+### ∑
+ 
+```
+g 1 ∈G 1
+```
+```
+pg 1 +
+```
+### ∑
+ 
+```
+g 2 ∈G 2
+```
+```
+pg 2 +
+```
+### ∑
+ 
+```
+g 3 ∈G 3
+```
+```
+pg 3 =d (25b)
+pg 3 ≥ 2 ug 3 ∀g 3 ∈G 3 (25c)
+pg 1 ≤ 16 ug 1 ∀g 1 ∈G 1 (25d)
+pg 2 ≤ 7 ug 2 ∀g 2 ∈G 2 (25e)
+pg 3 ≤ 6 ug 3 ∀g 3 ∈G 3 (25f)
+pg≥ 0 ,ug∈{ 0 , 1 } ∀g∈G 1 ,G 2 ,G 3 (25g)
+```
+ 
+where the objective is to minimize the total cost. Constraint (25b) ensures the total production
+ 
+equals the demand. Constraints (25c) set the lower bound for the production of medium technology
+ 
+generators when they are on. Constraints (25d)-(25f) set the capacity of each generator.
+ 
+```
+We experiment with various demand levels from 5 to 160, with a step length of 5. In Figure 1
+```
+we compare the following aspects of RP, CHP, CDP and RCDP:
+ 
+1. The uniform prices. Notice that for CDP and RCDP, bothλ∗t and Λ∗tare uniform prices. In
+    all of our experiments Λ∗tequals zero. Therefore, we report onlyλ∗t for those schemes.
+2. Sum of generator profits, as calculated by deducting costs from total revenue, which includes
+    both price-based payments and uplift.
+3. The payments from non-uniform pricesφ∗jgtand Φ∗jgt.
+4. The make-whole uplift payments. This payment is made when the revenue from electricity
+    prices is not enough to cover the costs. It is equal to the difference between the revenue and
+    costs.
+ 
+(^20406080100120140160)
+Demand
+2
+4
+6
+8
+10
+Uniform price
+RP
+CHP
+CDP
+RCDP
+(a)
+(^20406080100120140160)
+Demand
+0
+20
+40
+60
+80
+Sum of profits
+RP
+CHP
+CDP
+RCDP
+(b)
+(^20406080100120140160)
+Demand
+100
+0
+100
+200
+300
+400
+Non-uniform price payment
+RP
+CHP
+CDP
+RCDP
+(c)
+(^020406080100120140160)
+Demand
+0
+1
+2
+3
+4
+5
+6
+Make-whole uplift
+RP
+CHP
+CDP
+RCDP
+(d)
+Figure 1 Comparison of different pricing schemes for (a) uniform prices, (b) sum of profits, (c)
+payments from non-uniform prices, (d) make-whole uplift payments.
+ 
+ 
+Mosek solves all instances in under ten seconds. Because the cutting plane algorithm is signif-
+icantly slower, we only use it when the demand level is less than 100. When the demand level is
+higher, we present results from the SDP approximation.
+Figure 1a shows that a small change in demand level can result in significant volatility in RP. This
+observation is consistent with results in the literature. Interestingly, CHP and CDP are equivalent
+for all demand levels. RCDP is higher than CDP for lower demand, and equals COP when the
+demand is high.
+In Figure 1b, we find that RP and CDP have zero profit for all instances. CHP generates near-
+zero profits at lower demand level and higher profits at higher demand levels. RCDP generates the
+highest profits among all pricing schemes, and match the profits of CHP at higher demand levels.
+In Figure 1c, both CHP and RCDP have no non-uniform prices due to the fact that both only
+use uniform prices corresponding to the demand constraint. CDP produces near-zero negative
+non-uniform prices at low demand levels, and more negative prices at higher demand levels. RP
+produces volatile and large non-uniform prices in many instances. As explained by O’Neill et al.
+(2005), the negative non-uniform prices are used to discourage the entry of marginal plants when
+it is uneconomic to do so. In practice, utilities usually disregard such negative prices.
+Figure 1d shows that RP requires zero make-whole payment, which is also consistent with the
+results in Azizan et al. (2020). RCDP ensures revenue adequacy and thus also needs no make-whole
+payment. CHP requires make-whole payments, as expected, because Lagrangian duals of MILPs
+do not in general have strong duality. Interestingly, CDP also requires make-whole payments in
+many instances, which could be because bounds imposed on entries of Ω are restrictive.
+The advantages of RCDP are that it does not rely on non-uniform/make-whole uplift payments
+to ensure revenue adequacy, and its uniform prices are less volatile than RP.
+ 
+6.2. Pricing in Electricity Markets
+In this section we compare pricing schemes for unit commitment, as described in Section 4. Note
+that in the experiments of Sections 6.2 and 6.3 we use the formulation in (8) for theUCproblem.
+Our test instances are based on the adapted California ISO dataset of Guo et al. (2022). The
+parameters for the generators are listed in Table 2, the first three of which are coal and the rest
+natural gas.
+In Table 3 we list the instances used in Sections 6.2 and 6.3. “Coals”, “NGs”, and “Hours”
+are respectively the number of coal generators, natural gas generators and hours. To ensure the
+instances are feasible with fewer generators in the system, we scale down the load by dividing it
+with the value in “Scale”. “Bound” is the bound on the absolute values of the entries in Ω. A larger
+bound improves accuracy while slowing down convergence.
+ 
+ 
+```
+Table 2 Generator Parameters
+Gen. 1 Gen. 2 Gen. 3 Gen. 4 Gen. 5 Gen. 6
+cpg 25.0 25.5 26.0 44.7 44.7 44.7
+cug 140.9 140.9 140.9 86.3 86.3 86.3
+pming 297 238 198 198 198 198
+pmaxg 620 496 413 620 620 620
+```
+```
+Table 3 Instances for Electricity Markets
+Case Coals NGs Hours Scale Bound
+1 2 0 4 26 5000
+2 2 0 4 16 5000
+3 1 1 4 26 5000
+4 1 3 4 12 5000
+5 3 1 4 12 5000
+6 1 1 8 26 5000
+7 1 3 8 12 3000
+8 1 1 12 26 5000
+9 1 3 12 12 3000
+10 1 1 24 26 3000
+```
+```
+We first consider two generators over four hours with Scale equals 26, which we refer to as Case
+```
+1. We setdt= [508, 644 , 742 ,776] and use Generators 1 and 2 in Table 2. We use the cutting plane
+algorithm of Section 5.1 to solve the CDP and RCDP COPs. Note that in this case, Mosek fails to
+solve the SDP approximation of the RCDP problem (returns “UNKNOWNRESULTSTATUS”),
+while the cutting plane algorithm converges in 244.47 seconds. When using the cutting plane
+algorithm, we set the bound for each element of the copositive matrix to 5000, and add constraint
+Tr(x∗x∗>Ω)≥0.
+    We compare the following aspects of RP, CHP, CDP and RCDP and present the results in Table
+4:
+    1. Generator profits.
+    2. The payments from non-uniform prices (absolute value).
+    3. The make-whole uplift payments.
+    4. The percentage increase in total payment compared with RP.
+       RP results in zero profit for both generators, but relies on the revenue from non-uniform prices for
+Generator 2. CHP uses a make-whole uplift payment to avoid a loss for Generator 2. Interestingly,
+CDP results in positive profit for Generator 1, and uses a make-whole uplift equal to Generator 1’s
+profit to cover the loss of Generator 2. As expected, CDP is revenue neutral in aggregate, but not
+for individual generators. RCDP is the only pricing scheme that has no non-uniform or make-whole
+uplift payments. It also ensures the generators with lower costs receive higher profits, which is
+ 
+ 
+```
+Table 4 Comparison of Pricing Schemes for Case 1
+RP CHP CDP RCDP
+Gen. 1 profit 0 839.4 259.6 1183.8
+Gen. 2 profit 0 0 0 0
+Total profit 0 839.4 259.6 1183.8
+Non-uniform payment 497.9 0 0 0
+Make-whole uplift 0 95.3 259.6 0
+vs RP payment (%) 0 1.2 0.4 1.8
+```
+desirable and to be expected in a market with only uniform prices. The marginal generator has
+zero profit, which is similar to the outcome of shadow pricing-based schemes in convex markets.
+Consumers pay less under RP, while schemes that mainly rely on uniform prices, such as CHP
+and RCDP, have higher payments. This is because RP has non-uniform prices and thus can lower
+the payment via price discrimination.
+In Figure 2 we show the revenue and profit in each iteration of the cutting plane algorithm
+(without the constraint Tr(x∗x∗>Ω)≥0) for UC Case 1. We observe that for both CDP and RCDP,
+the revenue and profit decrease as more cuts are added.
+ 
+(^60200400) Round 600 800
+8
+10
+12
+14
+16
+18
+Log(Revenue from prices)
+(a)
+(^60200400) Round 600 800
+8
+10
+12
+14
+16
+18
+Log(Profit)
+(b)
+(^60200400) Round 600 800
+8
+10
+12
+14
+16
+18
+Log(Revenue from prices)
+(c)
+(^60200400) Round 600 800
+8
+10
+12
+14
+16
+18
+Log(Profit)
+(d)
+Figure 2 Trends of the cutting plane algorithm for UC Case 1 in (a) revenue of CDP, (b) profit of
+CDP, (c) revenue of RCDP, (d) profit of RCDP.
+For the second example we use Case 8, which has two generators over 12 hours. In Table 5,
+we again compare the profit, generator dependent payment, make-whole uplift and total payment
+ 
+ 
+for each pricing scheme. In this case, Mosek is unable to solve the SDP approximation for the
+RCDP COP, and the SOCP-based cutting plane algorithm solves the problems to 16.13% (CDP)
+and 0.91% (RCDP) optimality gaps after 2 hours (where optimality gap is calculated based on the
+optimalUCsolution, as explicitly defined in the next section).
+ 
+```
+Table 5 Comparison of Pricing Schemes for Case 8
+RP CHP CDP RCDP
+Gen. 1 profit 0 43146.1 27453.0 47588.4
+Gen. 2 profit 0 0 2825.7 0
+Total profit 0 43146.1 30278.7 47588.4
+Non-uniform payment 23977.8 0 42345.7 0
+Make-whole uplift 0 56.9 0 0
+vs RP payment (%) 0 23.0 16.1 25.3
+```
+When the CDP or RCDP problem is not solved to optimality, the SO is still budget balanced,
+and generators remain revenue adequate in aggregate. However, in this case the prices may not
+support individual rationality even if ΛΛΛ∗= 0 at optimality. Without individual rationality, and
+consequently, a competitive equilibrium, the generators may not have the incentive to follow the
+social-welfare maximizing decisions enforced by the SO.
+Although the prices from CDP and RCDP are not optimal, we observe that similar to Case 1,
+the total revenue from uniform and availability prices, as well as the profit, have decreasing trends
+with more cuts added, as shown in Figure 3. This indicates that adding more cutting planes brings
+the prices closer to satisfying the theoretical properties of CDP and RCDP.
+The results for Case 8 are similar to Case 1. RCDP is the only pricing scheme that does not result
+in non-uniform or uplift payments. The consumer payments are higher under CHP and RCDP.
+Note that in practice, the payment under RP is usually higher than our computed value because
+negative non-uniform prices are ignored (O’Neill et al. 2005).
+Results from the other instances in our experiments are similar to the two examples above. Note
+that a large optimality gap upon termination (see Table 7 for optimality gaps) can lead to higher
+total payment, which highlights the importance of efficient COP algorithms.
+ 
+6.3. Computational Performance
+In this section we compare the computational performance of our cutting plane algorithms for the
+instances in Table 3. All experiments in this section are completed on Linux workstations with
+Intel Xeon CPUs, 28 cores and 125 GB memory.
+Table 6 and Table 7 show the computational performance for instances in Table 3. The optimality
+gap (“Gap”) is the normalized difference between the COP dual and the original MILP:
+opt(UCCOP)−opt(UC)
+opt(UC).
+ 
+ 
+(^11050100) Round 150 200
+12
+13
+Log(Revenue from prices)
+(a)
+(^10050100) Round 150 200
+11
+12
+13
+Log(Profit)
+(b)
+(^11050100150) Round 200 250 300
+12
+13
+Log(Revenue from prices)
+(c)
+(^10050100150) Round 200 250 300
+11
+12
+13
+Log(Profit)
+(d)
+Figure 3 Trends of the cutting plane algorithm for UC Case 8 in (a) revenue of CDP, (b) profit of
+CDP, (c) revenue of RCDP, (d) profit of RCDP.
+In the tables “LP” and “SOC” correspond to results from the cutting plane algorithm with LP and
+SOCP master problems, respectively. “#Iter” reports the total number of iterations. All instances
+are run with a time limit of 2 hours. Smaller instances such as Cases 1-3 converge within the time
+limit, so we report their computation time (“Time”) in Table 6, while instances in Table 7 did not
+terminate automatically within the time limit. Note that we use the constraint Tr(x∗x∗>Ω)≥0 for
+Cases 1-3, and leave it out in other instances so as to compare optimality gaps more accurately
+when the algorithm does not converge.
+If the algorithm terminates automatically with no optimality gap, then strong duality holds and
+we have the optimal solution. If the algorithm terminates automatically with a negative optimality
+gap, then it could be because (i) the imposed bounds on entries of Ω are restrictive; (ii) SOC con-
+straints (23b) are restrictive; or (iii) individual revenue adequacy constraints (15b) are restrictive.
+Due to possible negative optimality gaps, when the algorithm does not terminate automatically, it
+can be difficult to tell from the optimality gap how close the solution is to optimality. Nonetheless,
+our results show that when the optimality gap is low, CDP and RCDP lead to lower total payment.
+Regardless of the optimality gap, RCDP remains the only scheme that does not need non-uniform
+or uplift payments.
+ 
+ 
+```
+Table 6 Time (seconds), Optimality Gap (%) and Number of Iterations of Cases 1-3
+CDP LP CDP SOC RCDP LP RCDP SOC
+Case Time Gap #Iter Time Gap #Iter Time Gap #Iter Time Gap #Iter
+1 187.4 0 1051 80.2 -0.34 121 244.5 0 1303 50.4 0 55
+2 195.3 0 1038 89.1 0 62 249.5 0 1339 76.2 0 55
+3 536.7 -4.97 1635 68.5 -7.28 131 319.5 -4.18 1310 78.0 -7.34 146
+```
+```
+Table 7 Optimality Gap (%) and Number of Iterations of Cases 4-10
+CDP LP CDP SOC RCDP LP RCDP SOC
+Case Gap #Iter Gap #Iter Gap #Iter Gap #Iter
+4 14.41 3279 3.32 212 15.43 3212 3.77 207
+5 14.80 3750 5.85 230 15.03 2985 4.15 243
+6 9.08 2979 -1.25 310 4.95 3247 -0.93 394
+7 88.78 1171 18.71 99 110.13 909 17.63 109
+8 49.04 3895 16.13 228 27.06 5496 0.91 344
+9 106.28 1549 21.35 102 130.37 1734 21.52 132
+10 80.94 1724 17.96 224 132.40 1826 18.12 250
+```
+The SOCP-based cutting plane algorithm outperforms its counterpart in all instances, leading
+to either less computation time or smaller optimality gaps (if the time limit is met). The SOCP-
+based algorithm also requires fewer iterations, which indicates the tightness of the SOCP master
+problem. In each case, the computational performance for CDP and RCDP are mostly similar
+when solved with the same algorithm. The only exception is Case 9, where RCDP is solved to
+much smaller optimality gaps than CDP using both algorithms. This could be because the extra
+individual revenue adequacy constraints under RCDP restrict the feasible region and tighten the
+master problems.
+The computational performance of the algorithms is more likely to be affected by the number
+of generators than the length of the time horizon. For example, compared with Case 6, Case 4
+has twice as many generators and half the number of hours, and Case 6 converges faster than
+Case 4. The algorithms behave similarly on instances with the same time horizon and number of
+generators.
+In Table 8 we compare solution times for the master problem (“Master”) and subproblem (“Sub”)
+for Cases 4-10. In all instances more time is spent on the MILP subproblems than the LP/SOCP
+master problems. The SOCP master problem usually takes less time in total than its LP coun-
+terpart. It also takes much fewer iterations to converge. On the other hand, the subproblems in
+the SOCP-based cutting plane algorithm take much longer to solve compared with the original
+algorithm. This shows that with better master problem solutions, the subproblem becomes more
+difficult to solve.
+ 
+ 
+```
+Table 8 Master Problem and Subproblem Solving Time (hours) of Cases 4-10
+CDP LP CDP SOC RCDP LP RCDP SOC
+Case Master Sub Master Sub Master Sub Master Sub
+4 0.08 1.92 0.03 1.97 0.07 1.93 0.02 1.98
+5 0.09 1.91 0.02 1.98 0.07 1.93 0.03 1.97
+6 0.07 1.93 0.02 1.98 0.07 1.93 0.05 1.95
+7 0.07 1.93 0.02 1.98 0.05 1.95 0.02 1.98
+8 0.22 1.78 0.02 1.98 0.36 1.64 0.05 1.95
+9 0.20 1.80 0.14 1.86 0.22 1.78 0.27 1.73
+10 0.25 1.77 0.06 1.94 0.24 1.76 0.08 1.92
+```
+## 7. Conclusion
+ 
+MBQPs can be equivalently written as CPPs, which are NP-hard but convex. Given an MBQP, we
+straightforwardly derive its dual COP. Due to convexity, if a constraint qualification is satisfied, the
+CPP and COP have strong duality. This provides a new and general notion of duality for discrete
+optimization problems.
+We use this perspective to design a new pricing mechanism for nonconvex electricity markets,
+which has several useful theoretical properties. One direction of future study is the design of
+economic mechanisms for other nonconvex markets, e.g., surge pricing in transportation. To en-
+able implementation, we design a new cutting plane algorithm for COPs, which we use to solve
+moderate-size nonconvex electricity markets instances as a proof of concept.
+There are several promising avenues of future work. It would be interesting to explore the
+properties of CDP and RCDP after incorporating network constraints, as those constraints are
+straightforward to accommodate in the CPP model and do not affect strong duality, yet they will
+change the structure of the pricing mechanism, e.g., by making prices differ across locations. In
+addition, our COP-based pricing schemes make it possible to model market equilibrium in discrete
+markets as KKT conditions, which can then be used in applications such as modeling strategic
+behaviors in energy markets. Finally, it may be possible to improve the cutting plane algorithm by
+deriving conditions under which the algorithm is guaranteed to terminate. Our work shows that
+COP-based pricing schemes are of potentially significant value to electricity and other discrete
+markets, and will become more practical in the future as solution algorithms improve.
+ 
+## Acknowledgments
+ 
+The authors thank the Department Editor, Associate Editor and three anonymous referees for valuable com-
+ments. They gratefully acknowledge Clemson University for the allotment of compute time on the Palmetto
+Cluster.
+ 
+ 
+## References
+ 
+Anstreicher KM (2021) Testing copositivity via mixed–integer linear programming.LinearAlgebraAppl.
+609:218–230.
+Azizan N, Su Y, Dvijotham K, Wierman A (2020) Optimal pricing in markets with nonconvex costs.
+Oper.Res. 68(2):480–496.
+Baldwin E, Klemperer P (2019) Understanding preferences: demand types, and the existence of equilibrium
+with indivisibilities.Econometrica 87(3):867–932.
+Bertsekas D (2009)Convexoptimizationtheory, volume 1 (Athena Scientific).
+Bienstock D, Chen C, Munoz G (2020) Outer-product-free sets for polynomial optimization and oracle-based
+cuts.Math.Program. 183(1-2):105–148.
+Bomze IM (2015) Copositive relaxation beats lagrangian dual bounds in quadratically and linearly con-
+strained quadratic optimization problems.SIAMJ.Optim. 25(3):1249–1275.
+Bomze IM, De Klerk E (2002) Solving standard quadratic optimization problems via linear, semidefinite and
+copositive programming.J.Global.Opt. 24(2):163–185.
+Bomze IM, Frommlet F, Locatelli M (2010) Copositivity cuts for improving SDP bounds on the clique
+number.Math.Program. 124(1-2):13–32.
+Bomze IM, Locatelli M, Tardella F (2008) New and old bounds for standard quadratic optimization: domi-
+nance, equivalence and incomparability.Math.Program. 115(1):31.
+Bundfuss S, D ̈ur M (2009) An adaptive linear approximation algorithm for copositive programs.SIAM
+J.Optim. 20(1):30–53.
+Burer S (2009) On the copositive representation of binary and continuous nonconvex quadratic programs.
+Math.Program. 120(2):479–495.
+Carri ́on M, Arroyo JM (2006) A computationally efficient mixed-integer linear formulation for the thermal
+unit commitment problem.IEEETrans.PowerSyst. 21(3):1371–1378.
+Cifuentes D, Dey SS, Xu J (2024) Sensitivity analysis for mixed binary quadratic programming.Int.Conf.
+IntegerProgram.andComb.Opt., 446–459 (Springer).
+CPLEX, IBM ILOG (2022) User’s manual for CPLEX. International Business Machines Corporation
+46(53):157.
+Danilov V, Koshevoy G, Murota K (2001) Discrete convexity and equilibria in economies with indivisible
+goods and money.Math.Soc.Sci. 41(3):251–273.
+De Klerk E, Pasechnik DV (2002) Approximation of the stability number of a graph via copositive program-
+ming.SIAMJ.Optim. 12(4):875–892.
+Dickinson PJ (2019) A new certificate for copositivity.LinearAlgebraAppl. 569:15–37.
+DIMACS (1992) Second dimacs challenge. URL /http://www.dcs.gla.ac.uk/~pat/maxClique/
+distribution/DIMACS_cliques/.
+Drew JH, Johnson CR (1998) The completely positive and doubly nonnegative completion problems.Linear
+andMultilinearAlgebra 44(1):85–92.
+Dunning I, Huchette J, Lubin M (2017) JuMP: A modeling language for mathematical optimization.SIAM
+Review 59(2):295–320.
+ 
+ 
+D ̈ur M (2010) Copositive programming–a survey.RecentAdvancesinOptimizationandItsApplicationsin
+Engineering, 3–20 (Springer).
+Fattahi S, Ashraphijuo M, Lavaei J, Atamt ̈urk A (2017) Conic relaxations of the unit commitment problem.
+Energy 134:1079–1095.
+Faye A, Roupin F (2007) Partial lagrangian relaxation for general quadratic programming.4OR 5(1):75–88.
+Gao SY, Simchi-Levi D, Teo CP, Yan Z (2019) Disruption risk mitigation in supply chains: The risk exposure
+index revisited.Oper.Res. 67(3):831–852.
+Gribik PR, Hogan WW, Pope SL, et al. (2007) Market-clearing electricity prices and energy uplift.
+Cambridge,MA 1–46.
+Guo C, Bodur M, Papageorgiou DJ (2022) Generation expansion planning with revenue adequacy constraints.
+Comput.andOper.Res. 142:105736.
+Gurobi Optimization, LLC (2023) Gurobi Optimizer Reference Manual./https://www.gurobi.com.
+Hanasusanto GA, Kuhn D (2018) Conic programming reformulations of two-stage distributionally robust
+linear programs over Wasserstein balls.Oper.Res. 66(3):849–869.
+Hogan WW, Ring BJ (2003) On minimum-uplift pricing for electricity markets.Electr.PolicyGr. 1–30.
+Kim S, Kojima M (2003) Exact solutions of some nonconvex quadratic optimization problems via SDP and
+SOCP relaxations.Comput.Optim.Appl 26:143–154.
+Liberopoulos G, Andrianesis P (2016) Critical review of pricing schemes in markets with non-convex costs.
+Oper.Res. 64(1):17–31.
+Luenberger DG, Ye Y (2015)LinearandNonlinearProgramming (Springer Publishing Company, Incorpo-
+rated).
+Mas-Colell A, Whinston M, Green J (1995)Microeconomictheory (Oxford University Press).
+Milgrom P, Watt M (2022) Linear pricing mechanisms for markets without convexity.Proc.23rdACMConf.
+Econ.Comput., 300–300.
+MOSEK ApS (2022) The MOSEK optimization toolbox for JuMP manual./http://docs.mosek.com/9.0/
+toolbox/index.html.
+Ndrio M, Winnicki A, Bose S (2022) Pricing economic dispatch with ac power flow via local multipliers and
+conic relaxation.IEEETrans.onControlofNetworkSyst..
+O’Neill RP, Sotkiewicz PM, Hobbs BF, Rothkopf MH, Stewart Jr WR (2005) Efficient market-clearing prices
+in markets with nonconvexities.EuropeanJ.Oper.Res. 164(1):269–285.
+Parrilo PA (2000)StructuredSemidefiniteProgramsandSemialgebraicGeometryMethodsinRobustness
+andOptimization. Ph.D. thesis, California Institute of Technology, Pasadena, CA.
+Quarm E, Madani R (2021) Scalable security-constrained unit commitment under uncertainty via cone
+programming relaxation.IEEETrans.PowerSyst. 36(5):4733–4744.
+Ruiz C, Conejo AJ, Gabriel SA (2012) Pricing non-convexities in an electricity pool.IEEETrans.PowerSyst.
+27(3):1334–1342.
+Sherali HD, Adams WP (2013)Areformulation-linearizationtechniqueforsolvingdiscreteandcontinuous
+nonconvexproblems, volume 31 (Springer Science & Business Media).
+Taylor JA (2015)Convexoptimizationofpowersystems (Cambridge University Press).
+ 
+ 
+UserBenchmark (2023) Intel Core i9-9900KF vs Pentium 4 2.80GHz./https://cpu.userbenchmark.com/
+Compare/Intel-Pentium-4-280GHz-vs-Intel-Core-i9-9900KF/m3163vsm764533.
+Vujanic R, Esfahani PM, Goulart P, Morari M (2014) Large scale mixed-integer optimization: A solution
+method with supply chain applications.22ndMediterraneanConferenceonControlandAutomation,
+804–809 (IEEE).
+Wang G, Shanbhag UV, Zheng T, Litvinov E, Meyn S (2013) An extreme-point subdifferential method for
+convex hull pricing in energy and reserve markets – part I: Algorithm structure.IEEETrans.PowerSyst.
+28(3):2111–2120.
+Xu G, Burer S (2018) A copositive approach for two-stage adjustable robust optimization with uncertain
+right-hand sides.Comput.Optim.Appl. 70(1):33–59.
+ 
+ 
+Appendix A: SDP Approximation for COP
+ 
+LetSn+be then-dimensional positive semidefinite (PSD) cone andNnbe the cone ofn-dimensional entrywise
+nonnegative matrices, then we haveC∗n⊆S+n∩NnandSn++Nn⊆Cn(D ̈ur 2010). Taking advantage of these
+relationships, we can relax and approximately solve CPP as an optimization problem over the intersection
+ofS+nandNncones, and restrict the COP problem as an optimization over the Minkowski sum ofSn+and
+Nncones.
+In our work, we reformulate MBQP models to CPPs using the method by Burer (2009), to utilize the dual
+COP problems. We summarize the relationship between all those mathematical programming problems in
+Figure 4.
+ 
+### CPP
+ 
+### COP
+ 
+```
+MBQP Optimization overS+n∩Nn
+```
+```
+Optimization overSn++Nn
+```
+```
+Reformulation
+```
+```
+Dualization
+```
+```
+Relaxation
+```
+```
+Restriction
+Figure 4 Relationships between MBQP, CPP, COP and their approximations
+```
+We need to solve COPs in this work. One method often used in the literature, as mentioned in Section 5.2,
+is to use the relationshipSn++Nn⊆Cnfor approximation. More specifically, we replace the conic constraint
+Ω∈Cnwith the following restriction:
+ 
+```
+V+N= Ω
+N≥ 0
+V∈Sn+,
+```
+which can be solved with SDP solvers such as Mosek and SeDuMi.
+Another method to obtain a solution of a COP is to solve its dual CPP problem using a commercial
+solver, then query the duals of CPP constraints via the solver. However, there is not any solver that directly
+solves CPPs, so we instead solve an SDP relaxation of the CPP problem, then query the duals of the SDP
+relaxation. More specifically, we relax the conic constraintX∈Cn∗to the following constraints:
+ 
+```
+X∈Sn+
+X≥ 0 ,
+```
+which can then be solved with SDP solvers.
+ 
+ 
+Appendix B: Proofs
+Theorem 1.CDP balances the aggregate revenue and the aggregate cost of the generators. It also balances
+the budget of the SO.
+ 
+Proof of Theorem 1. Fix all primal and dual variables at the optimal values. Multiplying constraints
+(11b) - (11e) by their corresponding dual variables yields
+∑
+g∈G
+ 
+```
+λ∗tp∗gt=λ∗tdt ∀t∈T (26b)
+φ∗jgta>jgtx∗=φ∗jgtbjgt ∀j= 1,...,m,g∈G,t∈T (26c)
+∑
+g∈G
+```
+```
+Λ∗tXgt,gtpp∗+ 2 ∑
+g 1 <g 2 ,g 1 ,g 2 ∈G
+```
+```
+Λ∗tXgpp 1 t,g∗ 2 t= Λ∗td^2 t ∀t∈T (26d)
+Φ∗jgtTr(ajgta>jgtX∗) = Φ∗jgtb^2 jgt ∀j= 1,...,m,g∈G,t∈T. (26e)
+Summing all the constraints in (26), we obtain
+∑
+t∈T
+```
+```
+(∑
+```
+```
+g∈G
+```
+```
+(
+λ∗tp∗gt+ Λ∗tXppgt,gt∗+
+∑m
+j=1
+```
+```
+(φ∗
+jgtajgtx∗+ Φ∗jgtTr(ajgta>jgtX∗)
+```
+```
+))
+```
+```
++ 2 ∑
+g 1 <g 2 ,g 1 ,g 2 ∈G
+```
+```
+Λ∗tXgpp 1 ∗t,g 2 t
+```
+```
+)
+```
+```
+=∑
+t∈T
+```
+```
+(
+dtλ∗t+d^2 tΛ∗t+
+∑m
+j=1
+```
+```
+∑
+g∈G
+```
+```
+(b
+jgtφ∗jgt+b^2 jgtΦ∗jgt
+```
+```
+)) (27)
+```
+where the left-hand side and the right-hand side are respectively equal to ΠG:=∑g∈G∑t∈TπgtGand ΠL:=
+∑
+t∈TπLt (using the definitions ofπGgtandπtLin Definition 1). This shows that the total amount collected,
+ΠG, is equal to the total amount paid, ΠL, thus CDP is budget balanced for the SO.
+Since strong duality holds forUCCPP, and considering the optimal objective ofUCCOPequalsπL, we have:
+πG=
+ 
+```
+∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gp∗gt+cugu∗gt
+```
+```
+).
+```
+Therefore, for the generators the total payment from the SO equals the total cost. 
+ 
+Theorem 2.If the priceΛ∗= 0, then CDP is individually rational.
+Proof of Theorem 2. InUCCPPwe dualize demand constraints (11b) and lifted demand constraints (11d)
+with their respective optimal dual pricesλ∗tand Λ∗t. We obtain the following partial Lagrangian relaxation
+problem (Faye and Roupin 2007, Bomze 2015):
+ 
+```
+min∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗t
+```
+```
+(
+dt−∑
+g∈G
+```
+```
+pgt
+```
+```
+)
+```
+```
++
+```
+```
+∑
+t∈T
+```
+```
+Λ∗t
+```
+```
+(
+d^2 t−
+```
+```
+∑
+g∈G
+```
+```
+(
+Xgt,gtpp +
+```
+```
+∑
+g′∈−g
+```
+```
+Xgt,gpp′t
+```
+))
+(28a)
+s.t.(11c),(11e)−(11g). (28b)
+Since we have strong duality (Cifuentes et al. 2024), and because the Lagrangian multipliers are fixed at
+their optimal values, an optimal solution (x∗,X∗) for CPP (11) is also optimal for its Lagrangian relaxation
+(28).
+ 
+ 
+```
+Because Λ∗= 0, the objective function is equivalent to
+∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗t
+```
+```
+(
+dt−∑
+g∈G
+```
+```
+pgt
+```
+```
+)
+, (29)
+```
+which transforms the CPP (28) to the form ofPCPP, with (29), (11c), (11e), (11f) and (11g) respectively
+corresponding to (4a), (4b), (4c), (4d) and (4e). Due to the equivalence betweenPMBQPandPCPP(The key
+assumption (1) of Burer (2009) is satisfied by (11c)), (28) is equivalent to the following MILP:
+ 
+```
+min ∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗t
+```
+```
+(
+dt−∑
+g∈G
+```
+```
+pgt
+```
+)
+(30a)
+s.t. (11c) (30b)
+x∈Rn+ (30c)
+zgt∈{ 0 , 1 } ∀g∈G,t∈T. (30d)
+Ignoring the constant termλ∗tdtin the objective, problem (30) can be separated into individual optimiza-
+tion problems, one per generator. Solving problem (30) is equivalent to solving the following maximization
+problem for allg∈G:
+ 
+```
+max ∑
+t∈T
+```
+```
+(λ∗
+tpgt−cpgpgt−cugugt
+```
+```
+) (31a)
+```
+s.t. a>jgtx=bjgt ∀t∈T,j= 1,···,m (31b)
+x∈Rn+ (31c)
+zgt∈{ 0 , 1 } ∀t∈T. (31d)
+When Λ∗= 0, (31) is the same as the profit-maximization problem (13) (except for the constant terms
+φ∗jgtbjgtand Φ∗jgtb^2 jgt). Therefore, if a solution (x∗,X∗) is optimal for CPP (11), thenx∗also solves (13)
+optimally (If CPP (11) has multiple solutions, we consider a solution with integralx∗). In other words, under
+CDP, the generators’ profit-maximizing actions align with the centrally optimal dispatch. 
+We now define some useful notation. Letxgbe a subvector ofxcorresponding to generatorg,Xgbe a
+submatrix ofXcorresponding to generatorg. We define a feasible regionXgfor (xg,Xg), which includes
+constraints (11c), (11e), (11f) for generatorg, and the conic constraint
+ 
+```
+[ 1 x>
+x g
+gXg
+```
+]
+∈Cn∗g+1. In addition, let
+Xˆg={(xg,Xg)|(13b)−(13d);Xg=xgx>g}.
+ 
+```
+Lemma 2.Consider the following CPP obtained by removing(11d)fromUCCPP:
+min ∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+) (32a)
+```
+```
+s.t. (11b) (32b)
+(11c),(11e)−(11g). (32c)
+The optimal objective value of(32)is equivalent to opt(UCCPP′).
+```
+ 
+Proof. SinceUCCPP′replacesY∈C∗n+1by imposing completely positive constraints on principal subma-
+trices ofY, it is a relaxation of (32). Thus, opt(UCCPP′) is no more than the optimal objective value of (32).
+We now prove the reverse direction.
+We relax constraint (32b) in (32) with its optimal shadow priceλλλ∗∗and obtain the following partial
+Lagrangian relaxation problem:
+ 
+```
+min∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗∗t
+```
+```
+(
+dt−∑
+g∈G
+```
+```
+pgt
+```
+)
+(33a)
+s.t.(11c),(11e)−(11g). (33b)
+Because (32) has a linear objective function, strong duality holds (Cifuentes et al. 2024), and thus (32)
+has the same optimal objective as (33). Due to the equivalence betweenPMBQPandPCPP, (33) is equivalent
+to the following MILP:
+ 
+```
+min ∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗∗t
+```
+```
+(
+dt−∑
+g∈G
+```
+```
+pgt
+```
+)
+(34a)
+s.t. (11c) (34b)
+x∈Rn+ (34c)
+zgt∈{ 0 , 1 } ∀g∈G,t∈T. (34d)
+Ignoring the constant termsλ∗∗tdt,t∈T, (34) can be decomposed by generators. For each generator’s
+problem, we can reformulate it to a CPP due to the equivalence betweenPMBQPandPCPP. We then
+aggregate those CPPs and add back the constant termsλ∗∗tdt,t∈T to obtain the following CPP:
+ 
+```
+(xg,Xming)∈Xg,g∈G
+```
+```
+∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)+∑
+t∈T
+```
+```
+λ∗∗t
+```
+```
+(
+dt−
+```
+```
+∑
+g∈G
+```
+```
+pgt
+```
+```
+)
+```
+. (35)
+ 
+Problem (35) is a relaxation ofUCCPP′, and it has the same optimal objective value as (32). Thus, the
+optimal objective value of (32) is no more than opt(UCCPP′). 
+We now introduce Lemma 3, which is used in the proof of Proposition 1.
+Lemma 3.conv(Xˆg) =Xg.
+Proof. As a reminder,Xg=
+ 
+```
+{
+(xg,Xg)
+```
+```
+∣∣
+∣(11c),(11e),(11f) for generatorg;
+```
+```
+[ 1 x>
+x g
+gXg
+```
+```
+]
+∈ C∗ng+1
+```
+}
+andXˆg=
+{(xg,Xg)|(13b)−(13d);Xg=xgx>g}.
+Burer (2009)’s Corollary 2.5 indicates that if the setP={xg|(13b)−(13d)}is bounded, then
+conv
+ 
+```
+{[ 1 x>
+x g
+gxgx>g
+```
+```
+]∣∣
+∣∣xg∈P
+```
+```
+}
+=
+```
+```
+{[ 1 x>
+g
+xgXg
+```
+```
+]∣∣
+∣∣(xg,Xg)∈Xg
+```
+```
+}
+,
+```
+which is equivalent to conv(Xˆg) =Xg.
+To ensure the boundedness ofP, note that the feasible region ofUCis usually bounded. If not, it can be
+modified to become bounded. For example, in the UC model (8), bothpgtandzgtare bounded, while the
+boundedness ofugtis implied by (8c) and the objective. Thus, we can imposeugt∈[0,1] to makePbounded,
+without changing the solution(s) of the problem. 
+ 
+ 
+For the convenience of the readers, we include the Shapley-Folkman Lemma as Lemma 4. For its proof,
+see Proposition 5.7.1 of the textbook by Bertsekas (2009).
+ 
+Lemma 4(Shapley-Folkman Lemma).LetSg,g∈G, be nonempty subsets ofR|T|+1, with|G|>|T|+1,
+and letS=S 1 +···+S|G|. Then every vectorσσσ∈conv(S)can be represented asσσσ=∑g∈Gσσσg, whereσσσg∈
+conv(Sg)for allg∈G, andσσσg∈S/ gfor at most|T|+1indicesg.
+ 
+Proposition 1.Assume|G|>|T|+1. There exists an optimal solution ofUCCPP′, which we denote as
+( ̄x,X ̄), where at most|T|+1generators have non-integral solutions forz ̄gt,t∈T.
+ 
+Proof. We use the Shapley-Folkman Lemma to show that there exists an optimal solution ofUCCPP′, such
+that the number of generators with non-integral solutions is bounded by 1 plus the number of constraints
+(11b).
+Similar to the method used in the proof of Theorem 1 in (Vujanic et al. 2014), we first construct a setS
+of constraint-cost tuples:
+ 
+```
+S=
+```
+```
+{
+(s 1 ,...,s|T|+1)>
+```
+```
+∣∣
+∣∣
+∣sj=
+```
+```
+∑
+g∈G
+```
+```
+pgj,j= 1,...,|T|;s|T|+1=∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+),∀(x
+g,Xg)∈Xˆg,g∈G
+```
+}
+,
+(36)
+wheresj,∀j= 1,...,|T|are the constraint functions of constraints (11b), which are the only constraints in
+UCCPP′that are not separable by generators. The terms|T|+1is the cost function ofUCCPP′. Note that when
+definingSwe use the feasible regionXˆginstead of its convex hullXg.
+The setSequals the Minkowski sumS 1 +···+S|G|, where∀g∈G:
+Sg=
+ 
+```
+{
+(sg 1 ,...,sg|T|+1)>
+```
+```
+∣∣
+∣∣
+∣s
+```
+```
+gj=pgj,j= 1,...,|T|;sg|T|+1=∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+),∀(xg,Xg)∈Xˆg}. (37)
+```
+We can obtain the set conv(Sg) by replacingXˆgin (37) withXg. To prove this, we first define a linear
+transformationh:Xˆg→R|T|+1, which maps an element ofXˆgtoσσσg∈Sg, i.e.,σσσg=h(xg,Xg) (we omit an
+explicit definition ofh(·,·) as it is straightforward by the definition ofSg). In addition, the notationh(A)
+means applying the linear transformationhto all elements of the setA. Since convex combinations commute
+with linear transformations, we have conv(Sg) = conv(h(Xˆg)) =h(conv(Xˆg)) =h(Xg) (the last equality is
+due to Lemma 3). Since conv(S) = conv(S 1 ) +...+ conv(S|G|), this result also indicates that conv(S) can be
+obtained by replacingXˆgin (36) withXg. That is to say,
+ 
+conv(S) =
+ 
+```
+{
+(s 1 ,...,s|T|+1)>
+```
+```
+∣∣
+∣∣
+∣sj=
+```
+```
+∑
+g∈G
+```
+```
+pgj,j= 1,...,|T|;s|T|+1=
+```
+```
+∑
+g∈G
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+),∀(xg,Xg)∈Xg,g∈G}.
+```
+(38)
+By (38), we can findσσ ̄σ= ( ̄s 1 ,..., ̄s|T|+1)>∈conv(S) that corresponds to an optimal solution (x ̄,X ̄) of
+UCCPP′. Since the solution is feasible toUCCPP′, we have ̄sj=∑g∈Gp ̄gj=dj,∀j= 1,...,|T|; Since it is optimal,
+we also have ̄s|T|+1=∑g∈G∑t∈T(cpgp ̄gt+cug ̄ugt)= opt(UCCPP′).
+Due to Shapley-Folkman Lemma,σ ̄σσcan be written asσσ ̄σ=∑g∈Gσσσ ̄g, whereσ ̄σσg∈conv(Sg)\Sgfor at most
+|T|+1 indicesg∈G, while the rest ofσσσ ̄g’s are inSg. This result indicates that there exists an optimal
+ 
+ 
+solution (∑ x ̄,X ̄), which ensures thatdj=∑g∈G ̃s ̄gj+∑g∈G ̃cs ̄gj,∀j= 1,...,|T|and opt(UCCPP′) =∑g∈G ̃s ̄g|T|+1+
+g∈G ̃c ̄sg|T|+1, whereG ̃is the index set forσσσ ̄g∈conv(Sg)\SgandG ̃c=G\G ̃. Since|G|≤|T| ̃ +1, we have
+( ̄xg,X ̄g)∈Xg\Xˆgfor at most|T|+1 generators. This indicates that at most|T|+1 generators have non-
+integral solutions for ̄zgt,t∈T, as the difference betweenXgandXˆgis thatXˆgadditionally impose integrality
+constraints on ̄zgt. 
+ 
+Proposition 2.Assume|G|>|T|+1. Then a CDP that pays generators using prices(λ ̄λλ,φ ̄φφ, 0 ,ΦΦΦ) ̄ and the
+primal optimal solution(x ̄,X ̄)ensures individual rationality of at least|G|−|T|− 1 generators.
+ 
+Proof. Proposition 1 establishes that there exists an optimal solution ( ̄x,X ̄) ofUCCPP′, where at least
+|G|−|T|−1 generators have integral solutions for ̄zgt,t∈T. We show that for any generatorgin this subset
+(denoted asG ̃c), the subvectorx ̄gis an optimal solution to the generator’s profit maximization problem (13)
+under the prices (λλ ̄λ,φφ ̄φ, 0 ,ΦΦΦ). ̄
+We useλλλ ̄to relax its corresponding constraint and obtain a partial Lagrangian relaxation ofUCCPP′. Since
+UCCPP′has a linear objective function, strong duality holds (Cifuentes et al. 2024), and thus ( ̄x,X ̄) is also
+optimal to this partial Lagrangian relaxation. After dropping the constant terms, the partial Lagrangian
+relaxation can be decomposed byg. For eachgwe have
+ 
+```
+(xgmin,Xg)∈Xg ∑
+t∈T
+```
+```
+(cp
+gpgt+cugugt
+```
+```
+)−∑
+t∈T
+```
+```
+λ ̄tpgt, (39)
+```
+which is optimally solved by ( ̄xg,X ̄g).
+Note that the objective function of (39) can be equivalently converted to that of (13) by changing the
+sense and adding constant terms. Since ̄xgleads to an optimal objective value for (39), it should also be
+optimal to (13) as long as it is feasible to it. This is true forg∈G ̃c, as for those generators, ̄zgt,t∈T are
+integral and thusx ̄gsatisfies all constraints of the profit-maximization problem (13). Therefore, forg∈G ̃c,
+the prices (λλλ, ̄φφφ, ̄ 0 ,ΦΦΦ) and quantities ( ̄ ̄x,X ̄) ensure individual rationality. 
+ 
+Proposition 3.Under a CDP that pays generators using prices( ̄λλλ,φφφ, ̄ 0 ,ΦΦΦ) ̄ and the primal optimal so-
+lution(x ̄,X ̄), the total subsidy for covering the cost of generators that are not individually rational is
+O((|T|+1)|T|), and the over-production at each time period isO(|T|+1)
+ 
+Proof. Consider a generator ˆgthat is not individually rational. It has at least one time period with a
+non-integral solution. Assumetˆis such a time period. Since (λλ ̄λ,φφ ̄φ, 0 ,ΦΦΦ) supports a non-integral solution for ̄
+ˆgwhich is infeasible, we obtain a feasible solution by rounding up the non-integral solution for ̄zˆgˆt.
+The subsidy for generator ˆgatˆtequals the total cost increase due to the rounding of ̄zˆgˆt. Since this rounding
+affects feasibility of ̄pˆgˆtonly via constraint (8d), we can bound the increase in the production level bypminˆg ,
+corresponding to an increase ofcpˆgpminˆg in the production cost. In addition, the increase in ̄uˆgˆtis bounded by 1.
+Thus, the total increase in cost for ˆgandtˆis bounded bycpˆgpminˆg +cuˆg. Since in the worst case the solution for ˆg
+could be non-integral for|T|time periods, and there are at most|T|+1 generators with non-integral solutions,
+the total subsidy needed for covering the cost is at most maxg∈G(cpgpming +cug)(|T|+1)|T|=O((|T|+1)|T|).
+To obtain the bound on over-production, note that the optimal solution ofUCCPP′ clears the market.
+Thus, if rounding up non-integral solutions increases the production levels, then the increased production
+ 
+ 
+levels are over-production. We have shown that when rounding up the non-integral solution of a generator ˆg
+at a time period, the increase in the production level is bounded bypminˆg. Thus, the total over-production at
+each time period after rounding up all fractional solutions is at most (|T|+1) maxg∈Gpming =O(|T|+1). 
+ 
+```
+Proposition 4.RCDP pricing balances the budget of the SO.
+Proof of Proposition 4. According to equation (27) in the proof of Theorem 1, we have
+∑
+t∈T
+```
+```
+(∑
+g∈G
+```
+```
+(
+λ∗tp∗gt+ Λ∗tXgt,gtpp∗ +
+∑m
+j=1
+```
+```
+(φ∗
+jgtajgtx∗+ Φ∗jgtTr(ajgta>jgtX∗)
+```
+```
+))+ 2 ∑
+g 1 <g 2 ,g 1 ,g 2 ∈G
+```
+```
+p∗g 1 tp∗g 2 tΛ∗t
+```
+```
+)
+```
+```
+=∑
+t∈T
+```
+```
+(
+dtλ∗t+d^2 tΛ∗t+
+∑m
+j=1
+```
+```
+∑
+g∈G
+```
+```
+(b
+jgtφ∗jgt+b^2 jgtΦ∗jgt
+```
+```
+)). (40)
+```
+The payment that the SO collects at hourtisλ∗tdt+ Λ∗td^2 t, while the amount it pays generators at
+hourtis∑g∈G
+ 
+```
+(
+λ∗tp∗gt+ Λ∗tXgt,gtpp∗ +∑g′∈−gp∗gtp∗g′tΛ∗t
+```
+```
+)
+```
+. We can prove that those two expressions are equiv-
+alent, by eliminating terms containing availability prices, i.e.,∑mj=1(φ∗jgtajgtx∗+ Φ∗jgtTr(ajgta>jgtX∗))and
+∑m
+j=1
+ 
+```
+∑
+g∈G
+```
+```
+(b
+jgtφ∗jgt+b^2 jgtΦ∗jgt
+```
+```
+)from either side of (40), as they are equivalent. 
+```
+Proposition 5.RCDP incentivizes the optimal solution ofUCif the optimal value of (15)equals the
+optimal value ofUC.
+ 
+Proof of Proposition 5. Since an optimal solution of (15) is inFCOP, it is feasible forUCCOP. If the
+optimal solution corresponds to an objective value that equals the optimal value ofUCCOP, then it is also
+optimal toUCCOP. An optimal solution ofUCCOPincentivizes the optimal solution ofUC. 
+ 
+Proposition 7.If the optimal value ofSP(Ω) ̄ is nonzero, then(21)cuts offΩ ̄.
+Proof of Proposition 7. Because of (20c) and the fact thatq= 1, there is at least one element inuthat
+is nonzero, i.e.β={i|ui= 1,i= 1,...,nc}6=∅. Denote Ωββas the submatrix of Ω that consists of rows and
+columns with indices inβ. Similarly we define the subvectorzβ. From the fact that the optimal objective
+w > ̄ 0, we know from constraint (20b) thatΩ ̄ββ ̄zβ< 0 and thus ̄zβ 6 = 0. Therefore, ̄z>βΩ ̄ββ ̄zβ<0. Also, let
+α={ 1 ,...,nc}\β, then ̄zα= 0 due to (20e), which means ̄z>Ω ̄ ̄z= ̄z>βΩ ̄ββ ̄zβ<0. Thus,Ω violates the cut ̄
+(21). 
+Appendix C: Individual Revenue Adequacy with Both Uniform and Availability
+Prices
+If we include both uniform and availability prices in the revenue adequacy constraints, we have the following
+pricing problem to solve:
+ 
+```
+max ∑
+t∈T
+```
+```
+(
+dtλt+d^2 tΛt+
+∑m
+j=1
+```
+```
+∑
+g∈G
+```
+```
+(bjgtφjgt+b^2 jgtΦjgt)
+```
+```
+)
+(41a)
+```
+```
+s.t.
+```
+```
+∑
+t∈T
+```
+```
+
+p∗gtλt+p∗gt^2 Λt+ ∑
+g′∈G\{g}
+```
+```
+p∗gtp∗g′tΛt+
+```
+```
+∑m
+j=1
+```
+```
+(a>
+jgtx∗φjgt+ Tr(ajgta>jgtX∗)Φjgt
+```
+```
+)
+```
+```
+
+
+```
+```
+≥
+```
+```
+∑
+t∈T
+```
+```
+(cp
+gp∗gt+cugu∗jgt
+```
+```
+) ∀g∈G (41b)
+```
+```
+(λλλ,φφφ,ΛΛΛ,ΦΦΦ,δδδ,Ω)∈FCOP. (41c)
+```
+ 
+Again, we use (p∗gt)^2 in place ofXgt,gtpp∗ andp∗gtp∗g′tin place ofXgt,gpp∗′t.
+If (41) is feasible, then prices from (41) should satisfy revenue neutrality for generators. This is because
+if we sum up left-hand sides of (41b) overg, then the value equals the objective (41a) (proved by (27)),
+which represents the total revenue of generators. One the other hand, (41) can be viewed as imposing extra
+constraints on the original CDP problem (12), whose objective value, according to weak duality, is no more
+than the total costs∑g∈G∑t∈T(cpgp∗gt+cugu∗gt). But (41) also restricts the total revenue of generators to
+be no less than the total costs. Therefore, a feasible solution of (41) should ensure revenue neutrality for
+generators.
+In addition, we actually have revenue neutrality for every generator, so each generator is paid exactly its
+cost. To understand why this result is true, assume towards contradiction if any generator has a strictly
+positive profit, then because of revenue neutrality of the whole system, some other generator must have a
+strictly negative profit, which violates (41b).
+In comparison, we do not have revenue neutrality for individual generators in RCDP, i.e., in that case
+generators could have strictly positive profits.
+Similar to the case of RCDP, with this pricing scheme, it can be proved that (41) is guaranteed to be
+feasible if its dual problem has an interior.
+ 
+Appendix D: COP Algorithms Comparison for Maximum Clique Problem
+We compare the performance of our cutting plane algorithm with other COP algorithms in the literature
+on the maximum clique problem, which is commonly used to benchmark COP algorithms. In the maximum
+clique problem, one tries to find the maximum clique number of a graphG= (N,E), which is equivalent to
+finding the stability number ofG’s complementary graph,G ̄= (N,E ̄). Letωbe the maximum clique number
+ofG. We can formulate the maximum clique problem as the following MILP, which finds the stability number
+of graphG ̄:
+ 
+```
+ω= max
+```
+```
+∑n
+i=1
+```
+xi (42a)
+s.t. xi+xj≤ 1 ∀(i,j)∈E ̄ (42b)
+xi∈{ 0 , 1 } ∀i= 1,...,n. (42c)
+LetAbe the adjacency matrix ofG. Then we haveA=Q−A ̄, whereQ=ee>−I, andA ̄is the adjacency
+matrix ofG ̄. Applying this relationship to the COP model in Corollary 2.4 of De Klerk and Pasechnik (2002),
+we obtain the following COP model for the maximum clique number ofG:
+ 
+ω= min λ (43a)
+s.t. λ(ee>−A)−ee>=Y (43b)
+Y∈Cn. (43c)
+In our experiment we use 10 max-clique problem instances from the second DIMACS challenge (DIMACS
+1992). We compare the following ways of solving the COP (43):
+ 
+ 
+(1) Approximately solve the COP with SDP, as shown in Section A. This is the method suggested by
+De Klerk and Pasechnik (2002). Note that the SDP approximation is a restriction to the dual COP model,
+and thus overestimates the maximum clique number ofG. We use Mosek 9.1.2 to solve the SDPs.
+(2) Exactly solve the COP with the cutting plane algorithm of Section 5.
+(3) Exactly solve the COP with the simplicial partition method of Bundfuss and D ̈ur (2009).
+We use Linux workstation with 3.6 Hz Intel Core i9-9900K CPUs and 128 GB memory for experiments
+using methods (1) and (2). We directly cite the results for Method (3) from Bundfuss and D ̈ur (2009) for
+comparison, as it is not straightforward to implement and the source code is not available.
+Note that we can strengthen the master problem in our cutting plane algorithm by providing bounds for
+Yin the initialization stage. Since the maximum clique numberωcannot exceed the number of total nodes,
+|N|, and elements ofee>are all 1’s while elements ofAare either 0 or 1, from constraints (43b) we have
+that the elements ofYshould be in the range of [− 1 ,|N|−1].
+We present the results of the comparison between methods (1) and (2) in Table 9, where we list the number
+of nodes,|N|, number of edges,|E|, and the maximum clique number of the graph,ωfor each instance.
+We measure the computational performance of the SDP approximation in terms of the objective (“Obj”),
+optimality gap (“Gap”, compared with the trueω), and the computational time (“Time”). For our cutting
+plane algorithm we list the computational time and the number of iterations needed for convergence; we do
+not list the objectives because the cutting plane algorithm always converges to an exact solution.
+ 
+```
+Table 9 Algorithm Comparison for Maximum Clique Dual COP Model
+Mosek Cutting plane
+Instance |N| |E| |N||E| ω Obj Gap(%) Time(sec) Time(sec) #Iter
+c-fat200-1 200 1534 7.67 12 12 0 566.81 13.87 2
+c-fat200-2 200 3235 16.18 24 24 0 638.72 18.90 2
+c-fat200-5 200 8473 42.37 58 60.35 3.89 606.33 12.19 2
+hamming6-2a 64 1824 28.50 32 32 0 1.51 6.05 2
+hamming6-4a 64 704 11.00 4 4 0 1.59 1.55 4
+johnson8-2-4 28 210 7.50 4 4 0 0.20 9.53 2
+johnson8-4-4 70 1855 26.50 14 14 0 2.47 11.82 2
+johnson16-2-4a,b 120 5460 45.50 8 8 0 31.88 62.75 2
+keller4 171 9435 55.18 11 13.47 18.34 426.16 - -
+MANNa9 45 918 20.40 16 17.48 8.47 0.45 547.62 2
+aObtained by settingq= ̄ωin the separation problem, see text for explanation.
+bObtained by early termination of the separation problem.
+```
+When solving instances “hamming6-2”, “hamming6-4” and “johnson16-2-4” with cutting planes, we en-
+counter some very hard separation problems that take a long time to solve. To speed up the process, we
+use instead a strengthened version of the separation problem withq= ̄ωin constraint (20c) (Anstreicher
+2021), where ̄ωis the current master problem solution forω. Even with this enhancement, the instance
+“johnson16-2-4” still has a hard separation problem which achieves a nonzero lower bound early on (thus
+ 
+ 
+proving that the matrix is not copositive), but cannot converge after an extended period of time. In this
+case we set a time limit of 1 minute and use the non-converged solution. Finally, when solving the instance
+“keller4” we encounter a very hard separation problem after a few iterations. CPLEX fails to find a feasible
+solution for this separation problem, and we had to stop the algorithm due to memory usage. However, we
+still obtain useful information from the master problem objective, which upper bounds the COP objective.
+When we stopped the algorithm for “keller4” the master problem objective was 11, which is the correct value
+ofω, and is therefore superior to the bound provided by the SDP approximation (13.47).
+We observe that in some instances, the SDP approximation fails to provide the correct maximum clique
+number. Also, in certain instances such as “c-fat200-1”, “c-fat200-2” and “c-fat200-3”, the cutting plane
+algorithm is faster than the SDP approximation. Both methods tend to struggle with instances that have
+higher|N||E|ratios, though there are exceptions such as “c-fat200-1”, where the|N||E|ratio is relatively low, yet
+both methods need longer time to solve.
+We also compare our algorithm with the simplicial partition method of Bundfuss and D ̈ur (2009), which
+to the best of our knowledge is the only exact algorithm for general linear COPs in the literature. Because of
+the difference in computer setups, this comparison is not an exact one, and is meant to provide a general idea
+to the readers. Bundfuss and D ̈ur (2009) also solve the maximum clique instances from the second DIMACS
+challenge. They report that their computation time for “johnson8-2-4” and “hamming6-4” are respectively
+1 minutes 33 seconds and 57 minutes 52 seconds. In all other instances, their algorithm produces relatively
+loose bounds within two hours. Their algorithm was implemented in C++ on a Pentium IV, 2.8GHz Linux
+machine with 1GB RAM. Since Intel Core i9-9900K CPUs can be up to 7.4 times faster than Pentium IV,
+2.8GHz CPUs (UserBenchmark 2023), we compare the two algorithms by multiplying the computation time
+of the cutting plane algorithm by 7.4. We find that our algorithm performs better in all instances.
+Note that the cutting plane algorithm terminates in very few iterations in almost all test instances. This
+is not generally the case with the cutting plane algorithm when solving other COP problems. One reason for
+this is the use of a strong formulation of the maximum clique problem. For example, if we use the weaker COP
+formulation (44) below, then the cutting plane algorithm takes longer to terminate: the simplest instance
+(in terms of the number of nodes and edges) “johnson8-2-4” now takes 200.64 seconds and 690 iterations.
+ 
+```
+ω= min λ (44a)
+s.t. λI+
+```
+```
+∑
+(i,j)∈E ̄
+```
+```
+xijEij−ee>=Y (44b)
+Y∈Cn. (44c)
+```
+HereEij∈Rn×nis a matrix with ones atith row andjth column andjth row andith column, and with
+zeros in all other positions.
+References
+Anstreicher KM (2021) Testing copositivity via mixed–integer linear programming.LinearAlgebraAppl.
+609:218–230.
+Azizan N, Su Y, Dvijotham K, Wierman A (2020) Optimal pricing in markets with nonconvex costs.
+Oper.Res. 68(2):480–496.
+ 
+ 
+Baldwin E, Klemperer P (2019) Understanding preferences: demand types, and the existence of equilibrium
+with indivisibilities.Econometrica 87(3):867–932.
+Bertsekas D (2009)Convexoptimizationtheory, volume 1 (Athena Scientific).
+Bienstock D, Chen C, Munoz G (2020) Outer-product-free sets for polynomial optimization and oracle-based
+cuts.Math.Program. 183(1-2):105–148.
+Bomze IM (2015) Copositive relaxation beats lagrangian dual bounds in quadratically and linearly con-
+strained quadratic optimization problems.SIAMJ.Optim. 25(3):1249–1275.
+Bomze IM, De Klerk E (2002) Solving standard quadratic optimization problems via linear, semidefinite and
+copositive programming.J.Global.Opt. 24(2):163–185.
+Bomze IM, Frommlet F, Locatelli M (2010) Copositivity cuts for improving SDP bounds on the clique
+number.Math.Program. 124(1-2):13–32.
+Bomze IM, Locatelli M, Tardella F (2008) New and old bounds for standard quadratic optimization: domi-
+nance, equivalence and incomparability.Math.Program. 115(1):31.
+Bundfuss S, D ̈ur M (2009) An adaptive linear approximation algorithm for copositive programs.SIAM
+J.Optim. 20(1):30–53.
+Burer S (2009) On the copositive representation of binary and continuous nonconvex quadratic programs.
+Math.Program. 120(2):479–495.
+Carri ́on M, Arroyo JM (2006) A computationally efficient mixed-integer linear formulation for the thermal
+unit commitment problem.IEEETrans.PowerSyst. 21(3):1371–1378.
+Cifuentes D, Dey SS, Xu J (2024) Sensitivity analysis for mixed binary quadratic programming.Int.Conf.
+IntegerProgram.andComb.Opt., 446–459 (Springer).
+CPLEX, IBM ILOG (2022) User’s manual for CPLEX. International Business Machines Corporation
+46(53):157.
+Danilov V, Koshevoy G, Murota K (2001) Discrete convexity and equilibria in economies with indivisible
+goods and money.Math.Soc.Sci. 41(3):251–273.
+De Klerk E, Pasechnik DV (2002) Approximation of the stability number of a graph via copositive program-
+ming.SIAMJ.Optim. 12(4):875–892.
+Dickinson PJ (2019) A new certificate for copositivity.LinearAlgebraAppl. 569:15–37.
+DIMACS (1992) Second dimacs challenge. URL /http://www.dcs.gla.ac.uk/~pat/maxClique/
+distribution/DIMACS_cliques/.
+Drew JH, Johnson CR (1998) The completely positive and doubly nonnegative completion problems.Linear
+andMultilinearAlgebra 44(1):85–92.
+Dunning I, Huchette J, Lubin M (2017) JuMP: A modeling language for mathematical optimization.SIAM
+Review 59(2):295–320.
+D ̈ur M (2010) Copositive programming–a survey.RecentAdvancesinOptimizationandItsApplicationsin
+Engineering, 3–20 (Springer).
+Fattahi S, Ashraphijuo M, Lavaei J, Atamt ̈urk A (2017) Conic relaxations of the unit commitment problem.
+Energy 134:1079–1095.
+Faye A, Roupin F (2007) Partial lagrangian relaxation for general quadratic programming.4OR 5(1):75–88.
+ 
+ 
+Gao SY, Simchi-Levi D, Teo CP, Yan Z (2019) Disruption risk mitigation in supply chains: The risk exposure
+index revisited.Oper.Res. 67(3):831–852.
+Gribik PR, Hogan WW, Pope SL, et al. (2007) Market-clearing electricity prices and energy uplift.
+Cambridge,MA 1–46.
+Guo C, Bodur M, Papageorgiou DJ (2022) Generation expansion planning with revenue adequacy constraints.
+Comput.andOper.Res. 142:105736.
+Gurobi Optimization, LLC (2023) Gurobi Optimizer Reference Manual./https://www.gurobi.com.
+Hanasusanto GA, Kuhn D (2018) Conic programming reformulations of two-stage distributionally robust
+linear programs over Wasserstein balls.Oper.Res. 66(3):849–869.
+Hogan WW, Ring BJ (2003) On minimum-uplift pricing for electricity markets.Electr.PolicyGr. 1–30.
+Kim S, Kojima M (2003) Exact solutions of some nonconvex quadratic optimization problems via SDP and
+SOCP relaxations.Comput.Optim.Appl 26:143–154.
+Liberopoulos G, Andrianesis P (2016) Critical review of pricing schemes in markets with non-convex costs.
+Oper.Res. 64(1):17–31.
+Luenberger DG, Ye Y (2015)LinearandNonlinearProgramming (Springer Publishing Company, Incorpo-
+rated).
+Mas-Colell A, Whinston M, Green J (1995)Microeconomictheory (Oxford University Press).
+Milgrom P, Watt M (2022) Linear pricing mechanisms for markets without convexity.Proc.23rdACMConf.
+Econ.Comput., 300–300.
+MOSEK ApS (2022) The MOSEK optimization toolbox for JuMP manual./http://docs.mosek.com/9.0/
+toolbox/index.html.
+Ndrio M, Winnicki A, Bose S (2022) Pricing economic dispatch with ac power flow via local multipliers and
+conic relaxation.IEEETrans.onControlofNetworkSyst..
+O’Neill RP, Sotkiewicz PM, Hobbs BF, Rothkopf MH, Stewart Jr WR (2005) Efficient market-clearing prices
+in markets with nonconvexities.EuropeanJ.Oper.Res. 164(1):269–285.
+Parrilo PA (2000)StructuredSemidefiniteProgramsandSemialgebraicGeometryMethodsinRobustness
+andOptimization. Ph.D. thesis, California Institute of Technology, Pasadena, CA.
+Quarm E, Madani R (2021) Scalable security-constrained unit commitment under uncertainty via cone
+programming relaxation.IEEETrans.PowerSyst. 36(5):4733–4744.
+Ruiz C, Conejo AJ, Gabriel SA (2012) Pricing non-convexities in an electricity pool.IEEETrans.PowerSyst.
+27(3):1334–1342.
+Sherali HD, Adams WP (2013)Areformulation-linearizationtechniqueforsolvingdiscreteandcontinuous
+nonconvexproblems, volume 31 (Springer Science & Business Media).
+Taylor JA (2015)Convexoptimizationofpowersystems (Cambridge University Press).
+UserBenchmark (2023) Intel Core i9-9900KF vs Pentium 4 2.80GHz./https://cpu.userbenchmark.com/
+Compare/Intel-Pentium-4-280GHz-vs-Intel-Core-i9-9900KF/m3163vsm764533.
+Vujanic R, Esfahani PM, Goulart P, Morari M (2014) Large scale mixed-integer optimization: A solution
+method with supply chain applications.22ndMediterraneanConferenceonControlandAutomation,
+804–809 (IEEE).
+ 
+ 
+Wang G, Shanbhag UV, Zheng T, Litvinov E, Meyn S (2013) An extreme-point subdifferential method for
+convex hull pricing in energy and reserve markets – part I: Algorithm structure.IEEETrans.PowerSyst.
+28(3):2111–2120.
+Xu G, Burer S (2018) A copositive approach for two-stage adjustable robust optimization with uncertain
+right-hand sides.Comput.Optim.Appl. 70(1):33–59.

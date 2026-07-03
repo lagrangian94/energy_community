@@ -1,0 +1,1636 @@
+%% 
+%% Migrated from arXiv preprint to Elsevier CAS single-column template
+%% Based on cas-sc-template.tex (CAS Bundle v2.4)
+%% 
+
+\documentclass[a4paper,fleqn]{cas-sc}
+
+% If the frontmatter runs over more than one page
+% use the longmktitle option.
+%\documentclass[a4paper,fleqn,longmktitle]{cas-sc}
+
+% \usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage[numbers,sort&compress]{natbib}
+%%% Additional packages from preprint
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{subcaption}
+
+
+
+%%% \usepackage[section]{placeins}
+%%% Theorem environments (cas-sc provides \newtheorem, \newdefinition, \newproof)
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% Short title
+\shorttitle{Duality-based Pricing for Cooperative Energy Community Games}
+
+% Short author
+\shortauthors{S.~Kim et~al.}
+
+% Main title
+\title [mode = title]{Profit Allocation in Energy Community Games under Non-convex Operations: A Duality-based Perspective}
+
+% First author
+\author[1]{Seokwoo Kim}[orcid=0000-0003-1559-6145]
+% \cormark[1]
+% \ead{seokwookim@postech.ac.kr}
+\credit{Conceptualization, Methodology, Software, Writing - Original draft}
+
+% Second author
+\author[1]{Yuin Moon}
+\credit{Methodology, Software}
+
+% Third author
+\author[2]{Mohammad Reza Hesamzadeh}
+\credit{Supervision, Writing - Review \& Editing}
+
+% Fourth author
+\author[3]{Jan Kronqvist}
+\credit{Supervision, Writing - Review \& Editing}
+
+% Fifth author
+\author[1]{Dong Gu Choi}[orcid=0000-0003-3208-060X]
+\cormark[1]
+\ead{dgchoi@postech.ac.kr}
+\credit{Conceptualization, Supervision, Writing - Review \& Editing}
+
+% Affiliations
+\affiliation[1]{organization={Department of Industrial and Management Engineering, POSTECH (Pohang University of Science and Technology)},
+            city={Pohang},
+            state={Gyeongsangbuk-do},
+            country={Republic of Korea}}
+
+\affiliation[2]{organization={Department of Electric Power and Energy Systems, KTH Royal Institute of Technology},
+            city={Stockholm},
+            country={Sweden}}
+
+\affiliation[3]{organization={Department of Mathematics, KTH Royal Institute of Technology},
+            city={Stockholm},
+            country={Sweden}}
+
+% Corresponding author text
+\cortext[cor1]{Corresponding author}
+% \cortext[cor2]{Principal corresponding author}
+
+% Abstract
+\begin{abstract}
+Local energy communities integrating sector-coupling technologies, such as electrolyzers, heat pumps, and storage systems across electricity, hydrogen, and heat, can create significant operational synergies through coordinated multi-energy dispatch. However, realizing these benefits requires a profit allocation mechanism that is both economically transparent and stable against coalition deviations among participants. This paper models the profit allocation in sector-coupled energy communities as a cooperative game in which prosumers jointly optimize their multi-energy dispatch, and show that under linear dispatch, the resulting game is an instance of Owen's linear production games. We establish that marginal pricing based on the shadow prices of community balance constraints yields the Owen solution which produces allocations in the core. To account for realistic operational features such as unit commitment and nonlinear electrolysis efficiency, we extend the framework to non-convex dispatch via a Dantzig–Wolfe reformulation that unifies the linear and non-convex settings. We adapt integer programming pricing and convex hull pricing to the cooperative community setting and show that convex hull pricing can be interpreted as computing the Owen solution of the convexified community game. Numerical experiments demonstrate substantial cooperation benefits and show that while integer programming pricing may induce core violations due to commitment-induced price distortions, convex hull pricing significantly mitigates these instabilities and provides allocations that closely approximate core outcomes.
+\end{abstract}
+
+% Research highlights
+\begin{highlights}
+\item Community profit allocation modeled as a cooperative linear production game.
+\item Marginal pricing yields Owen solutions in the core.
+\item Convex hull pricing extends core results to non-convex dispatch.
+\item Experiments compare the stability of allocation methods.
+\end{highlights}
+
+% Keywords
+\begin{keywords}
+Sector Coupling \sep Energy Community \sep Marginal Pricing \sep Linear Production Games \sep Algorithmic Cooperative Game Theory
+\end{keywords}
+
+\maketitle
+
+%% ============================================================
+%% MAIN TEXT
+%% ============================================================
+
+\section{Introduction}
+\label{sec:introduction}
+
+The rapid expansion of variable renewable energy sources is reshaping energy systems, but their intermittency creates substantial operational challenges in balancing supply and demand. Sector coupling, a concept of the integration of electricity with other energy carriers such as hydrogen and heat via conversion technologies, has emerged as a promising strategy to address these challenges~\citep{ramsebner2021sector}. Sector coupling offers a promising pathway to absorb renewable surplus, reduce curtailment, and enhance overall system flexibility. 
+
+Local energy communities have recently emerged as an effective organizational structure for implementing sector coupling at the distribution level~\citep{bovera2022energy}. In such communities, heterogeneous participants, such as renewable generators, storage systems, electrolyzers, and heat pumps, and energy prosumers, need to coordinate their assets and exchange energy across multiple carriers. By jointly operating these assets, communities can exploit complementarities between electricity, hydrogen, and heat systems and generate significant economic and operational synergies~\citep{sousa2019peer, bovera2022energy}. These benefits have motivated a growing body of optimization research on coordinating sector-coupled assets, ranging from integrated power-to-gas scheduling~\citep{belderbos2020facilitating} to multi-energy community dispatch~\citep{zhu2020energy}. However, these benefits must ultimately be distributed among participants who contribute different assets and capabilities. In these circumstances, one of the central challenges in the design of energy communities is therefore the allocation of cooperative economic benefits. The economic gains from cooperation must be distributed in a stable manner to ensure that no community members have an incentive to deviate.
+
+From a cooperative perspective, a desirable allocation must ensure that no subset of participants can improve their collective payoff by leaving the community. This stability requirement is formalized by the \textit{core} concept in cooperative game theory~\citep{shapley1971assignment}. Despite its appeal, applying core-based allocations in energy community settings faces two practical challenges. First, verifying whether an allocation belongs to the core typically requires evaluating the value of every possible coalition, which grows exponentially with the number of participants. Second, the core allocation specifies only the final profit shares but does not explain how those shares were arrived at. That is, it specifies \textit{what} each participant gets, but not the economic mechanism through which the allocation is determined. These challenges motivate the search for allocation mechanisms that can generate core allocations without exhaustive computations while providing transparent economic signals to community participants.
+
+\textit{Duality theory} in mathematical optimization provides a natural tool for addressing both challenges. In electricity market design, \textit{marginal pricing}---setting energy prices as dual variables of market-clearing constraints in the economic dispatch problem---is the standard mechanism, and \cite{karaca2019core} established that such mechanisms are \textit{core-selecting} in convex wholesale markets\footnote{Following common usage in the electricity market design literature, we define a market as \textit{convex} when 
+its underlying dispatch problem used to clear the market has convex cost and utility functions and a convex feasible region (i.e., it can be formulated as a convex optimization problem).}. At the same time, in the cooperative game theory, \cite{owen1975core,granot1986generalized} showed that when the characteristic function of a game is defined by a linear program with separable resource-pooling structure, the shadow prices on resource constraints yield allocations, known as \textit{Owen solutions} that belong to the core. Despite their common duality foundation, these two strands of literature have largely developed independently. Marginal pricing has primarily been studied as a non-cooperative market-clearing mechanism, but Owen solutions have been applied to various cooperative settings~(e.g., see \cite{chen2016duality, toriello2013traveling, toriello2017dynamic}). 
+
+In this paper, we study the profit allocation in sector-coupled energy communities through a cooperative game-theoretic framework. We model the community dispatch problem as a coalition optimization problem and show that the problem reduces to an instance of Owen's linear production games under linear dispatch constraints. We demonstrate that marginal pricing derived from the dual variables of community balance constraints yields the Owen solution and therefore produces an allocation in the core. In addition, to capture realistic operational features, we extend the framework to non-convex dispatch models involving unit commitment and nonlinear electrolysis efficiency. We adapt integer programming pricing and convex hull pricing to the cooperative community setting and interpret convex hull pricing as computing the Owen solution of the convexified community game. Numerical experiments illustrate the cooperation benefits of sector-coupled communities and analyze how different pricing mechanisms affect allocation stability.
+
+The main contributions of this paper can summarized as follows:
+\begin{enumerate}
+   \item \textbf{Linking marginal pricing and cooperative game theory in energy communities.}
+We formulate sector-coupled energy communities as cooperative games and show that, when the linear dispatch problem admits a prosumer-wise decomposition upon relaxation of the market-clearing constraints, the resulting game is an instance of Owen's linear production games.
+Consequently, shadow prices of the market-clearing constraints yield Owen solutions in the core---requiring only the grand coalition dispatch rather than enumeration of all $2^{|N|}-1$ coalitions---thereby unifying the duality-based perspectives of energy market design and cooperative game theory within a single, computationally tractable framework.
+
+\item \textbf{Duality-based profit allocation for non-convex dispatch}.
+Realistic sector-coupling operations involve non-convex constraints (unit commitments, nonlinear conversion efficiency, etc.) that render the dispatch a non-convex optimization problem and invalidate the linear production game structure.
+We adapt integer programming pricing and convex hull pricing to the cooperative multi-energy community setting. We show that convex hull pricing can be understood as finding Owen solution of the convexified community game via Dantzig-Wolfe reformulation.
+To our knowledge, this is the first application of convex hull pricing to profit allocation in the energy community context.
+
+
+\item \textbf{Computational and economic insights through numerical experiments.}
+Using realistic sector-coupled communities with renewable generation, electrolyzers, heat pumps, and heterogeneous consumers, we show that:
+(i) coordinated community operation yields over 50\% profit improvement relative to individual operation;
+(ii) under non-convex dispatch, convex hull pricing largely maintains core stability whereas integer programming pricing induces non-negligible violations; and
+(iii) the proposed duality-based pricing scales to realistic community sizes where naive coalition enumeration and existing row-generation algorithms fail.
+\end{enumerate}
+The remainder of the paper is organized as follows. Section 2 reviews the related literature. Section 3 describes the sector-coupled energy community model, including market structure, technologies, and optimal dispatch formulation. Section 4 develops the cooperative game framework, establishes theoretical results for linear dispatch via connection to linear production games, and presents extended pricing approaches for non-convex operations. Section 5 presents numerical results. Section 6 concludes.
+
+
+
+\section{Literature Review}
+
+%% Block 0: Scoping --- P2P vs community-based
+Energy community design is closely related to the broader literature on consumer-centric electricity markets, including both peer-to-peer (P2P) trading and community-based market structures~\citep{sousa2019peer}. In P2P systems, prosumers negotiate bilateral energy trades in a \textit{non-cooperative game manner}~\citep{tushar2021peer}, whereas community-based systems rely on a central manager that jointly optimizes shared resources and allocates the resulting economic surplus. In sector-coupled communities, a large share of the economic value arises from coordinating conversion and storage assets across electricity, hydrogen, and heat simultaneously. This motivates a two-stage perspective: first, the community solves a centralized multi-energy dispatch problem that maximizes collective welfare; second, the surplus generated by cooperation must be allocated among participants. In this work, we adopt the community-based framework and focus on the problem of allocating cooperation benefits using cooperative game theory.
+
+Several studies have proposed market mechanisms for local energy communities, often employing marginal pricing or negotiation-based approaches without establishing stability guarantees for the resulting allocations. For example, \cite{cornelusse2019community} developed a bilevel framework for community microgrids in which internal community prices are derived from the dual variables of the welfare-maximizing dispatch problem. \cite{moret2018energy} proposed the concept of ``energy collectives,'' where prosumers negotiate through a distributed mechanism and a community manager enforces fairness via Jain's fairness index. While these studies demonstrate welfare improvements compared to individual operation, they do not examine whether the resulting allocations are stable against coalition deviations among participants.
+
+Cooperative game theory has also been applied to profit allocation problems in energy systems such as microgrids, virtual power plants, and flexibility markets.
+\cite{mitridati2021design} proved core stability for a community-based heat-electricity market via a problem-specific argument, but did not connect marginal pricing to cooperative solution concepts such as Owen solutions.
+Other studies have similarly established core stability through problem-specific arguments, including applications to TSO--DSO flexibility procurement \citep{sanjab2022tso} and prosumer--utility energy trading \citep{sangare2024cooperative}.
+A notable exception is \cite{nguyen2018sharing}, who explicitly model wind producers' joint offering as a linear production game, but restrict attention to a single convex energy carrier and do not link the resulting allocation to marginal prices on dispatch constraints.
+In summary, studies employing marginal pricing have established core stability through problem-specific arguments, while studies adopting cooperative solution concepts such as Owen solutions have not linked them back to the pricing mechanisms used in energy markets.
+A separate strand addresses the computational challenge of 
+core allocation through row-generation algorithms proposed by 
+\cite{drechsel2010computing}. \cite{fioriti2024fair} adapted 
+this approach to energy community planning, implementing Fair 
+Core and Fair Least Core allocations on MILP design models 
+for up to 100 prosumers, under which the separation 
+subproblem remains computationally manageable.
+
+Another related line of work studies pricing and coordination in multi-energy systems. Existing multi-energy pricing work has largely developed in non-cooperative settings. \cite{wang2018equilibrium} and \cite{deng2019generalized} extended locational marginal prices to integrated gas--electricity and heat--electricity systems, respectively, within ISO-operated wholesale markets. \cite{zhu2020energy} proposed a double-auction-based trading mechanism for microgrids coupling electricity, hydrogen, and heat, optimizing each microgrid's individual long-term profit via Lyapunov methods. Although these studies highlight the operational benefits of multi-energy coordination, they do not address the cooperative stability of the resulting profit allocations.
+
+Finally, most of the above studies assume convex dispatch models in which dual prices have clear economic interpretations. In realistic sector-coupled systems, however, operational constraints such as unit commitment and nonlinear conversion efficiency lead to non-convex optimization problems. In wholesale electricity markets, integer programming (IP) pricing and convex hull pricing have been developed to address such non-convexities~\citep{o2005efficient, schiro2015convex}. \cite{andrianesis2021computation} showed that convex hull prices can be computed efficiently via Dantzig--Wolfe decomposition when integer variables are local to individual units and only energy balance constraints couple across them. \cite{karaca2019core} proved that core-selecting mechanisms for wholesale electricity markets exist even in non-convex markets, generalizing combinatorial auction theory~\citep{bikhchandani2002package}. While these mechanisms provide economically meaningful price signals in centralized market clearing, their role in cooperative community settings—where prices must also support stable profit allocation among cooperating prosumers—remains largely unexplored.
+
+In summary, the existing literature reveals two main gaps. First, studies employing marginal pricing in energy communities have established welfare improvements or core stability through problem-specific arguments, but have not connected their results to the broader class of linear production games, limiting the generalizability of their stability guarantees to the specific models considered.
+ Second, the theory of linear production games and Owen solutions has not been applied to sector-coupled energy community models, nor connected to marginal pricing mechanisms used in energy markets.
+ Third, row-generation approaches to core computation have been demonstrated on planning-stage energy community models with tractable coalition problems~\citep{fioriti2024fair}, but they do not exploit the duality structure of the dispatch problem: the characteristic function $v(S)$ is evaluated directly at each coalition, with no connection to shadow prices on shared community resources. This separation-based route also becomes computationally prohibitive when dispatch involves non-convex sector-coupled operations, as the separation subproblem inherits and compounds the combinatorial complexity of the coalition dispatch.
+ Furthermore, pricing mechanisms for non-convex dispatch (e.g., integer programming pricing, convex hull pricing) have been developed exclusively for wholesale electricity markets and have not been extended to cooperative community settings. This study addresses these gaps by linking marginal pricing to Owen solutions in sector-coupled community games and extending convex hull pricing to the non-convex and cooperative community setting with formal stability interpretations.
+
+
+\section{Problem Description}
+\label{sec:prob_description}
+We consider a local energy community, as illustrated in Figure~\ref{fig:placeholder}, consisting of a set of community members $N = \{1, \ldots, |N|\}$. The community integrates three energy carriers—electricity, gas (hydrogen), and heat—through sector-coupling technologies that enable energy flows across sectors. Each prosumer may own a combination of assets, including renewable generators (wind turbines, photovoltaic generators), storage devices (battery energy storage systems, hydrogen storage tanks, thermal energy storage systems), and conversion technologies (electrolyzers and heat pumps). Table~\ref{tab:assets} summarizes the available assets. Each prosumer may also have demands for one or more energy carriers. The community participates in external wholesale markets for each energy carrier.  
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{community_scheme.png}
+    \caption{Schematic example of the sector-coupling energy community.}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{Assets available to prosumers in the local energy community.}
+\label{tab:assets}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Sector} & \textbf{Asset} & \textbf{Energy Input} & \textbf{Energy Output} \\
+\midrule
+\multirow{2}{*}{Electricity} 
+  & Renewable generators (wind, PV) & -- & Electricity \\
+  & Battery storage (ESS)           & Electricity & Electricity \\
+\midrule
+\multirow{2}{*}{Gas (Hydrogen)}      
+  & Electrolyzer (P2G) & Electricity & Hydrogen \\
+  & Hydrogen storage                & Hydrogen & Hydrogen \\
+\midrule
+\multirow{2}{*}{Heat}        
+  & Heat pump (P2H)                 & Electricity & Heat \\
+  & Thermal storage                 & Heat & Heat \\
+\midrule
+\multirow{3}{*}{Demand}      
+  & Electricity load                & Electricity & -- \\
+  & Hydrogen load                   & Hydrogen & -- \\
+  & Heat load                       & Heat & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+In this study, we focus on a centralized, \textit{community manager-based} energy community setting~\citep{mitridati2021design}, and consider a problem at the operational planning stage. The community manager has operational control over all prosumer assets, and jointly determines their day-ahead dispatch over a scheduling horizon of time periods $T = \{1, \ldots, |T|\}$ to coordinate production, consumption, storage, and sector-coupling operations to maximize the total social welfare of the community. We assume that the community is a price taker in external wholesale markets, so import and export prices are treated as exogenous parameters. All parameters, including renewable generation profiles, energy demands, and external market prices, are assumed to be given as point forecasts available at the time of scheduling. This deterministic treatment allows us to focus on the main contributions and present them more clearly, while richer uncertainty representations are left for future research.
+
+
+
+\begin{table}[width=0.9\textwidth, pos=htbp]
+\centering
+\caption{Notation for the energy community dispatch model.}
+\label{tab:nonconvex_vars_params}
+\small
+\begin{tabular}{ll}
+\toprule
+Notation & Description \\
+\midrule
+\multicolumn{2}{l}{\textit{Sets and indices}} \\
+\quad $N=\{1,\dots,|N|\}$ & Set of prosumers (players). \\
+\quad $T=\{1,2,\dots,|T|\}$ & Set of time periods. \\
+\quad $k\in\{E,G,H\}$ & Energy carrier index (electricity, gas/hydrogen, heat). \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Parameters}} \\
+\quad $\pi^{k,imkt}_t,\ \pi^{k,emkt}_t$ & Exogenous import/export market prices for carrier $k$ at time $t$. \\
+\quad $c_j^k(\cdot)$ & Cost function for prosumer $j$'s production in carrier $k$ over $T$. \\
+\quad $u_j^k(\cdot)$ & Utility function for prosumer $j$'s load consumption in carrier $k$ over $T$. \\
+\quad $\underline p_{jt}^k,\ \overline p_{jt}^k$ & Lower/upper bounds on $p_{jt}^k$. \\
+\quad $\underline d_{jt}^{k,load},\ \overline d_{jt}^{k,load}$ & Lower/upper bounds on $d_{jt}^{k,load}$. \\
+\quad $\overline d_{j}^{E\to G,sc}$ & Upper bound on electricity input to power-to-gas conversion. \\
+\quad $\overline d_{j}^{E\to H,sc}$ & Upper bound on electricity input to power-to-heat conversion. \\
+\quad $\overline s_j^k$ & Storage energy capacity for carrier $k$ (if owned by prosumer $j$). \\
+\quad $\overline b_j^{k,ch},\ \overline b_j^{k,dis}$ & Maximum charge/discharge rate for carrier $k$ storage. \\
+\quad $\nu_j^{k,ch},\ \nu_j^{k,dis}$ & Charging/discharging efficiency for carrier $k$ storage. \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Decision variables (all continuous variables, per prosumer $j$)}} \\
+\quad $p_{jt}^k$ & Production output of carrier $k$ by prosumer $j$ at time $t$. \\
+\quad $d_{jt}^{k,load}$ & load consumption of carrier $k$ by prosumer $j$ at time $t$. \\
+\quad $i_{jt}^{k,mkt},\ e_{jt}^{k,mkt}$ & Import from / export to external market (carrier $k$) by prosumer $j$ at time $t$. \\
+\quad $i_{jt}^{k,com},\ e_{jt}^{k,com}$ & Import from / export to community (carrier $k$) by prosumer $j$ at time $t$. \\
+\quad $d_{jt}^{E\to G,sc}$ & Electricity input to power-to-gas conversion (electrolyzer) at time $t$. \\
+\quad $d_{jt}^{E\to H,sc}$ & Electricity input to power-to-heat conversion (heat pump) at time $t$. \\
+\quad $s_{jt}^k$ & Stored energy (state of charge) for carrier $k$ at time $t$. \\
+\quad $b_{jt}^{k,ch},\ b_{jt}^{k,dis}$ & Storage charge/discharge for carrier $k$ at time $t$. \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Additional notation for non-convex technology operation constraints}} \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Sets and indices}} \\
+\quad $L=\{1,\ldots,|L|\}$ & Segment index set for the PWL electrolysis efficiency model. \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Parameters}} \\
+\quad $\underline d^{E\to G,sc},\ \overline d^{E\to G,sc}$ & Min/max electrolyzer electricity consumption when ON. \\
+\quad $c^{G,lb}$ & Electrolyzer standby electricity draw. \\
+\quad $c^{G,lu}$ & Electrolyzer cold-start startup cost. \\
+\quad $\tau^{G,down}$ & Electrolyzer minimum downtime after shutdown. \\
+\quad $\underline P_s,\ \overline P_s$ & Domain bounds of segment $s$ in the PWL electrolysis model. \\
+\quad $\phi_s^1,\ \phi_s^0$ & Slope and intercept of segment $s$ in the PWL electrolysis model. \\
+\quad $\nu^{\mathrm{COP}}$ & Heat pump coefficient of performance (COP). \\
+\quad $\underline c^H,\ \overline c^H$ & Heat pump min/max operating ratios (fractions of rated input) when ON. \\
+\quad $R^U,\ R^D,\ R^{SU},\ R^{SD}$ & Heat pump ramp limits (up, down, startup, shutdown). \\
+\quad $c^{H,su}$ & Heat pump startup cost. \\
+
+\midrule
+\multicolumn{2}{l}{\textit{Decision variables}} \\
+\quad $z_t^{G,on},\ z_t^{G,sb},\ z_t^{G,off}$ & Electrolyzer ON/STANDBY/OFF state indicators (binary). \\
+\quad $z_t^{G,su},\ z_t^{G,sd}$ & Electrolyzer startup/shutdown indicators (binary). \\
+\quad $\tilde d_t^{E\to G,sc}$ & Productive electrolyzer electricity input (excluding standby draw; continuous). \\
+\quad $\hat z_{l,t}$ & Segment-selection indicator for segment $s$ at time $t$ (binary). \\
+\quad $\hat d_{l,t}$ & Electricity allocated to segment $s$ at time $t$ (continuous). \\
+\quad $z_t^{H,on}$ & Heat pump ON/OFF state indicator (binary). \\
+\quad $z_t^{H,su},\ z_t^{H,sd}$ & Heat pump startup/shutdown indicators (binary). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+ 
+We formulate the optimal energy dispatch problem for the community as a mathematical optimization model. The community manager jointly determines the day-ahead dispatch of all prosumers in $N$ to maximize the community's total social welfare. The dispatch decisions comprise: generation output $p_{jt}^k$ for each carrier $k\in\{E,G,H\}$; load consumption levels $d_{jt}^{k,load}$; energy procurement from external markets via imports $i_{jt}^{k,mkt}$ and exports $e_{jt}^{k,mkt}$; intra-community energy trades via community imports $i_{jt}^{k,com}$ and exports $e_{jt}^{k,com}$; electricity inputs to sector-coupling conversions, $d_{jt}^{E\to G,sc}$ for electrolysis and $d_{jt}^{E\to H,sc}$ for heat pump operation; and storage operations including state-of-charge $s_{jt}^k$, charge $b_{jt}^{k,ch}$, and discharge $b_{jt}^{k,dis}$. We collect the decision variables listed above for prosumer $j$ over 
+the horizon $T$ into a vector $x_j \in \mathbb{R}^{n_j}_{+}$, where $n_{j}$ denotes the appropriate dimension of $x_{j}$. Depending on how the 
+technology constraints $(f^G, f^H) \leq 0$ are modeled, auxiliary 
+binary variables (e.g., unit commitment and piecewise-linearization 
+indicators) may additionally be introduced. Table~\ref{tab:nonconvex_vars_params} summarizes all the notation for the decision variables and parameters in our model.  
+\begin{subequations}
+\begin{align}
+(\mathrm{DP}_N):\; \max_{x\geq 0}\quad
+& \sum_{j \in N} \sum_{k \in \{E,G,H\}}
+\left\{
+\sum_{t\in T}\left(\pi^{k,emkt}_{t} e_{jt}^{k,mkt} - \pi^{k,imkt}_{t} i_{jt}^{k,mkt}\right)
++ u_{jt}^k(d_{jt}^{k,load}) - c_{jt}^k(p_{jt}^k)
+\right\} \label{eq:dispatch_obj}\\
+\mathrm{s.t.}\quad
+& \sum_{j \in N} (i_{jt}^{k,com} - e_{jt}^{k,com}) = 0,
+\quad \forall t\in T,\; \forall k \in \{E,G,H\},
+\label{eq:community_balance}\\[0.4em]
+%--- Prosumer-level energy balance ---
+& e_{jt}^{E,mkt} - i_{jt}^{E,mkt} + e_{jt}^{E,com} - i_{jt}^{E,com}
+- p_{jt}^{E} + d_{jt}^{E,load} + d_{jt}^{E\to G,sc} + d_{jt}^{E\to H,sc} = 0,
+\nonumber\\
+& \hspace{16em} \forall t\in T,\; \forall j\in N,
+\label{eq:balance_elec}\\
+& e_{jt}^{k,mkt} - i_{jt}^{k,mkt} + e_{jt}^{k,com} - i_{jt}^{k,com}
+- p_{jt}^{k} + d_{jt}^{k,load} = 0,
+\nonumber\\
+& \hspace{10em} \forall t\in T,\; \forall k\in\{G,H\},\; \forall j\in N,
+\label{eq:balance_gh}\\[0.4em]
+%--- Sector-coupling conversion ---
+& f^G(d_j^{E\to G,sc}, p_j^G) \le 0,
+\quad \forall j\in N,
+\label{eq:conversion_G}\\
+& f^H(d_j^{E\to H,sc}, p_j^H) \le 0,
+\quad \forall j\in N,
+\label{eq:conversion_H}\\[0.4em]
+%--- Bounds on production and demand ---
+& \underline{p}_{jt}^k \le p_{jt}^k \le \overline{p}_{jt}^k,
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:bounds_p}\\
+& \underline{d}_{jt}^{k,load} \le d_{jt}^{k,load} \le \overline{d}_{jt}^{k,load},
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:bounds_d}\\
+& 0 \le d_{jt}^{E\to G,sc} \le \overline{d}_{j}^{E\to G,sc},
+\quad \forall t\in T,\; \forall j\in N,
+\label{eq:bounds_scG}\\
+& 0 \le d_{jt}^{E\to H,sc} \le \overline{d}_{j}^{E\to H,sc},
+\quad \forall t\in T,\; \forall j\in N,
+\label{eq:bounds_scH}\\[0.4em]
+%--- Storage dynamics ---
+& s_{jt}^k = s_{j,t-1}^k + \nu_{j}^{k,ch} b_{jt}^{k,ch}
+- \frac{1}{\nu_{j}^{k,dis}} b_{jt}^{k,dis},
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:soc}\\
+& 0 \le s_{jt}^k \le \overline{s}_j^k,
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:storage_cap}\\
+& 0 \le b_{jt}^{k,ch} \le \overline{b}_j^{k,ch},
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:storage_ch}\\
+& 0 \le b_{jt}^{k,dis} \le \overline{b}_j^{k,dis},
+\quad \forall t\in T,\; \forall k\in\{E,G,H\},\; \forall j\in N,
+\label{eq:storage_dis}
+\end{align}
+\end{subequations}
+The objective \eqref{eq:dispatch_obj} maximizes total community social welfare, defined as the sum of
+(i) net revenue from external market trades and (ii) prosumer-level net operating benefits from producing
+and consuming energy over time. In each sector $k$ and time period $t$, the terms
+$u_{jt}^k(\cdot)$ and $c_{jt}^k(\cdot)$ denote, respectively, prosumer $j$'s utility
+from load consumption $d_{jt}^{k,load}$ and production cost for output $p_{jt}^k$; we allow these functions
+to be general (not necessarily linear) as long as they are well-defined on the relevant bounds. In the linear dispatch benchmark studied in Section~4.1, we specialize to linear forms
+$u_{jt}^k(d)=\bar u_{jt}^k d$ and $c_{jt}^k(p)=\bar c_{jt}^k p$.
+In the non-convex dispatch model, we keep the same linear variable terms and additionally include fixed
+(startup) costs associated with unit commitment decisions.
+
+Constraint \eqref{eq:community_balance} enforces market clearing for internal community trading in each time period and sector. Constraints \eqref{eq:balance_elec}--\eqref{eq:balance_gh} enforce prosumer-level energy balance: in the electricity sector, total demand consists of load consumption $d^{E,load}$ and electricity inputs to sector-coupling conversions $d^{E\to G,sc}$ and $d^{E\to H,sc}$, while in the gas and heat sectors consumption is given by load consumption $d^{G,load}$ and $d^{H,load}$.
+
+Constraints \eqref{eq:conversion_G}--\eqref{eq:conversion_H} capture sector-coupling technologies through
+technology operation constraints $f^G$ and $f^H$. For each $k\in\{G,H\}$, we treat $
+f^k(\cdot)\le 0$
+as a compact representation of the feasible input--output relationship between the electricity input
+$d^{E,sc,k}$ and the corresponding sector-$k$ production $p^k$ over the horizon $T$. Specifically,
+$f^k: \mathbb{R}^{n_k}\to\mathbb{R}^{m_k}$ denotes a system of $m_k$ inequalities, and its arguments may
+include additional operational variables required by the chosen technology model (e.g., storage states,
+ramping variables, or commitment indicators). For readability, \eqref{eq:conversion_G}--\eqref{eq:conversion_H}
+display only the primary input--output variables $(d^{E\to G,sc},p^G)$ and $(d^{E\to H,sc},p^H)$; explicit
+instantiations of $f^G$ and $f^H$ used in this study are provided later. The remaining constraints \eqref{eq:bounds_p}--\eqref{eq:storage_dis} impose standard operating limits, including production and demand bounds, sector-coupling capacity limits, and sector-wise storage dynamics with efficiencies $\nu^{k,ch}$ and $\nu^{k,dis}$. Notably, constraint~\eqref{eq:bounds_d} accommodates both elastic and inelastic demand. When $\underline{d}_{jt}^{k,load} = \overline{d}_{jt}^{k,load}$, the demand is fixed and the optimization determines only how this load is sourced---from own production, community trades, or external market imports. In this study, we adopt the inelastic setting for all load consumption (see Section~5).
+
+To write the problem formulation in a compact manner, we define the feasible region of each prosumer $j$ as follows:
+\begin{align}
+\mathcal{X}_j &:= \left\{ x_j \in \mathbb{R}_{+}^{n_{j}} : \eqref{eq:balance_elec}\text{--}\eqref{eq:balance_gh},\;\eqref{eq:conversion_G}\text{--}\eqref{eq:conversion_H},\; \eqref{eq:bounds_p}\text{--}\eqref{eq:storage_dis} \right\}. \label{eq:operational_region}
+\end{align}
+With this notation, $(\mathrm{DP}_N)$ can be written compactly as:
+\begin{subequations}
+\begin{align}
+(\mathrm{DP}_N):\; \max_{x}\quad&
+ \sum_{j \in N} \sum_{k \in \{E,G,H\}}
+\left\{
+\sum_{t\in T}\left(\pi^{k,emkt}_{t} e_{jt}^{k,mkt} - \pi^{k,imkt}_{t} i_{jt}^{k,mkt}\right)
++ u_{j}^k(d_{jt}^{k,load}) - c_{j}^k(p_{jt}^k)
+\right\} \label{eq:dispatch_obj_duplicate}\\
+\mathrm{s.t.}\quad&
+ \sum_{j \in N} (i_{jt}^{k,com} - e_{jt}^{k,com}) = 0,
+\quad \forall t\in T,\; \forall k \in \{E,G,H\},
+\label{eq:community_balance_duplicate}\\
+& x_j \in \mathcal{X}_j:= \left\{ x_j : \eqref{eq:balance_elec}\text{--}\eqref{eq:balance_gh},\;\eqref{eq:conversion_G}\text{--}\eqref{eq:conversion_H},\; \eqref{eq:bounds_p}\text{--}\eqref{eq:storage_dis} \right\},\quad \forall j \in N,
+\label{eq:operational_region_end}
+\end{align}
+\end{subequations}
+where \eqref{eq:dispatch_obj_duplicate}--\eqref{eq:community_balance_duplicate} 
+are identical to \eqref{eq:dispatch_obj}--\eqref{eq:community_balance}, and 
+the set $\mathcal{X}_{j}$ denotes prosumer $j$'s individual operational region, 
+which is bounded by construction. The community energy balance constraints \eqref{eq:community_balance_duplicate} are the only constraints that couple decision variables across prosumers, serving as linking constraints of the dispatch problem. Since all constraints defining $\mathcal{X}_j$ involve only prosumer $j$'s own variables, relaxing \eqref{eq:community_balance_duplicate} decomposes $(\mathrm{DP}_N)$ into $n$ independent subproblems. This decomposable structure is inherent to linear production games, where players contribute individual resources subject to shared resource constraints. The Dantzig--Wolfe reformulation introduced in Section~4 clearly reveals this connection and facilitates the construction of core allocations and convex hull prices.
+
+The formulation \eqref{eq:dispatch_obj}--\eqref{eq:operational_region_end} is general and accommodates technology operation constraints of varying complexity. We denote the optimal value of (DP$_N$) by val(DP$_N$). In what follows, we detail how the generic conversion constraints $f^G, f^H$ are instantiated to capture non-convex operational features of sector-coupling technologies that make the coalition dispatch a mixed-integer program. 
+
+We focus on two features that are primary sources of non-convexity in realistic sector-coupled communities: \emph{unit commitments} and \emph{nonlinear conversion efficiency} of conversion devices. These features introduce binary operating modes and nonlinear input--output relations, making the coalition dispatch problem a mixed-integer program
+(MIP). Following standard modeling approaches in the sector-coupling
+literature (e.g., \cite{raheli2023conic} for Power-to-Gas and \cite{siddique2024dispatch} for Power-to-Heat), we provide MIP-representable descriptions of $f^G, f^H \leq 0$ below. For notational convenience, we suppress the prosumer index $j$, as all constraints apply independently to each prosumer owning the relevant technology.
+
+\textit{Electrolyzer.}
+Electrolyzers exhibit three operational states---on, standby, and
+off---each with distinct power consumption characteristics~\citep{varela2021modeling}. We introduce binary variables
+$z_t^{G,on}, z_t^{G,lb}, z_t^{G,off} \in \{0,1\}$ for the state at
+time~$t$, and $z_t^{G,lu}, z_t^{G,ld} \in \{0,1\}$ for startup and
+shutdown transitions. The unit commitment constraints are:
+\begin{subequations} \label{eq:els_uc}
+\begin{align}
+& z_t^{G,on} + z_t^{G,lb} + z_t^{G,off} = 1,
+  \quad \forall t \in T, \label{eq:els_state}\\
+& z_t^{G,lu} \geq z_t^{G,on} + z_{t-1}^{G,off}
+  + z_{t-1}^{G,lb} - 1,
+  \quad \forall t \in T, \label{eq:els_startup}\\
+& z_t^{G,sd} \geq z_{t-1}^{G,on} + z_t^{G,off}
+  + z_t^{G,lb} - 1,
+  \quad \forall t \in T, \label{eq:els_shutdown}\\
+& z_t^{G,su} + z_t^{G,sd} \leq 1,
+  \quad \forall t \in T, \label{eq:els_su_sd}\\
+& z_{t-1}^{G,off} + z_t^{G,sb} \leq 1,
+  \quad \forall t \in T. \label{eq:els_no_bypass},\\
+  & d_t^{E\to G,sc} = \tilde{d}_t^{E\to G,sc} + c^{sb}_G z_t^{G,lb},
+  \quad \forall t \in T, \label{eq:els_power_decomp}\\
+& \underline{d}^{E\to G,sc} \cdot z_t^{G,on} + c^{sb}_G z_t^{G,sb}
+  \leq d_t^{E\to G,sc}
+  \leq \overline{d}^{E\to G,sc} \cdot z_t^{G,on}
+  + c^{sb}_G z_t^{G,sb},
+  \quad \forall t \in T. \label{eq:els_power_bounds}
+\end{align}
+\end{subequations}
+Constraint \eqref{eq:els_state} enforces that exactly one state is
+active at each time period. Constraints
+\eqref{eq:els_startup}--\eqref{eq:els_shutdown} activate the startup
+and shutdown indicators when the electrolyzer transitions into or out
+of the on-state. Constraint \eqref{eq:els_su_sd} excludes
+simultaneous startup and shutdown, and
+\eqref{eq:els_no_bypass} prevents direct transitions from off to
+standby, bypassing the on-state.
+Equation \eqref{eq:els_power_decomp} decomposes total input into
+productive consumption $\tilde{d}_t^{E\to G,sc}$ and standby consumption
+$c_G^{sb} z_t^{G,lb}$, and \eqref{eq:els_power_bounds} bounds total
+input by capacity limits that activate only in the on-state. According to \cite{varela2021modeling}, ramping limits and minimum shutdown time constraints in traditoinal unit commitments, can be neglected at 1-hour resolution.
+
+Beyond unit commitment, the power-to-hydrogen conversion curve of
+real electrolyzers is non-convex: marginal hydrogen output per unit
+electricity decreases at higher power inputs~\citep{raheli2023conic}. We approximate this curve using a piecewise-linear function with $|L|$ segments indexed by
+$L = \{1, \ldots, |L|\}$, where $\hat{z}^G_{l,t} \in \{0,1\}$
+indicates whether segment~$s$ is active and $\hat{d}^G_{l,t}$ is the
+electricity allocated to it:
+\begin{subequations} \label{eq:els_pla}
+\begin{align}
+& p_t^G = \sum_{l \in L} \left( \phi_{G,l}^1 \hat{d}^G_{l,t}
+  + \phi_{G,l}^0 \hat{z}^G_{l,t} \right),
+  \quad \forall t \in T, \label{eq:els_pla_production}\\
+& \underline{P}_{G,l} \hat{z}^G_{l,t} \leq \hat{d}^G_{l,t}
+  \leq \overline{P}_{G,l} \hat{z}^G_{l,t},
+  \quad \forall l \in L,\; \forall t \in T,
+  \label{eq:els_pla_segment}\\
+& z_t^{G,on} = \sum_{l \in L} \hat{z}^G_{l,t},
+  \quad \forall t \in T, \label{eq:els_pla_link}\\
+& \tilde{d}_t^{E\to G,sc} = \sum_{l \in L} \hat{d}^G_{l,t},
+  \quad \forall t \in T. \label{eq:els_pla_power}
+\end{align}
+\end{subequations}
+Equation \eqref{eq:els_pla_production} computes hydrogen output as
+the sum of segment-wise affine contributions,
+\eqref{eq:els_pla_segment} bounds each segment's input by its
+breakpoints, \eqref{eq:els_pla_link} ensures exactly one segment is
+active whenever the electrolyzer is on, and
+\eqref{eq:els_pla_power} requires that segment inputs sum to the
+productive consumption. 
+
+\textit{Heat Pump.}
+Many community-scale studies model the heat pump with this linear conversion alone
+(e.g., \cite{mitridati2021design}), which is
+appropriate for smaller residential units where startup transients
+are negligible. For larger industrial heat pumps, however,
+\cite{siddique2024dispatch} introduced unit commitment constraints, such as on/off states, startup costs, and ramping limits, analogous to those used for thermal generators. The heat pump conversion itself is linear, in which heat output equals electricity input scaled by the
+coefficient of performance:
+\begin{equation}
+p_t^H = \nu_{\text{COP}} \cdot d_t^{E\to H,sc},
+\quad \forall t \in T. \label{eq:hp_conversion}
+\end{equation}
+
+Heat pumps operate in two states, on and off, with startup costs and ramping constraints \citep{siddique2024dispatch}. Let $z_t^{H,on} \in \{0,1\}$ indicate the on/off state, and let
+$z_t^{H,su}, z_t^{H,sd} \in \{0,1\}$ denote startup and shutdown indicators, respectively (i.e., $z_t^{H,su}=1$ if the heat pump turns on at period $t$, and $z_t^{H,sd}=1$ if it shuts down):
+\begin{subequations} \label{eq:hp_uc}
+\begin{align}
+& z_t^{H,su} - z_t^{H,sd} = z_t^{H,on} - z_{t-1}^{H,on},
+  \quad \forall t \in T, \label{eq:hp_transition}\\
+& z_t^{H,su} + z_t^{H,sd} \leq 1,
+  \quad \forall t \in T, \label{eq:hp_su_sd}\\
+& \underline{c}^H \cdot \overline{d}^{E\to H,sc} \cdot z_t^{H,on}
+  \leq d_t^{E\to H,sc}
+  \leq \overline{c}^H \cdot \overline{d}^{E\to H,sc} \cdot z_t^{H,on},
+  \quad \forall t \in T, \label{eq:hp_power_bounds}\\
+& d_t^{E\to H,sc} - d_{t-1}^{E\to H,sc}
+  \leq R^U z_{t-1}^{H,on} + R^{SU} z_t^{H,su},
+  \quad \forall t \in T, \label{eq:hp_rampup}\\
+& d_{t-1}^{E\to H,sc} - d_t^{E\to H,sc}
+  \leq R^D z_t^{H,on} + R^{SD} z_t^{H,sd},
+  \quad \forall t \in T. \label{eq:hp_rampdown}
+\end{align}
+\end{subequations}
+Constraint \eqref{eq:hp_transition} links the startup/shutdown
+indicators to state changes, and \eqref{eq:hp_su_sd} excludes
+simultaneous transitions. Constraint \eqref{eq:hp_power_bounds}
+imposes state-dependent capacity bounds, while
+\eqref{eq:hp_rampup}--\eqref{eq:hp_rampdown} limit period-to-period
+ramp rates.
+
+\textit{Utility and cost function.} The utility and cost functions retain linear per-unit structure, with
+an additional startup cost term:
+\begin{subequations}
+\begin{align}
+&u_{jt}^{k}(d_{j}^{k,load}) := \bar{u}_{jt}^k \, d_{jt}^{k,load},
+\\
+&c_{jt}^{k}(p_{jt}^{k}) := \bar{c}_{jt}^k \, p_{jt}^k
+  + c^{G,lu} z_{t}^{G,lu}.
+\end{align}    
+\end{subequations}
+
+Collecting all binary auxiliary variables into~$y_j \in \{0,1\}^{m_{j}}$, where $m_{j}$ denotes the appropriate dimension of $y_{j}$, the operational
+region of any prosumer~$j\in N$ is:
+\begin{equation}
+\mathcal{X}_j^{MIP}
+= \left\{ (x_j, y_j) \in \mathbb{R}_{+}^{n_j} \times \{0,1\}^{m_{j}}
+: \eqref{eq:balance_elec}\text{--}\eqref{eq:balance_gh},\;
+\eqref{eq:bounds_p}\text{--}\eqref{eq:storage_dis},\;
+\eqref{eq:els_uc}\text{--}\eqref{eq:els_pla},\;
+\eqref{eq:hp_conversion},\eqref{eq:hp_uc}
+\right\},
+\label{eq:yj_expanded}
+\end{equation}
+where \eqref{eq:conversion_G} is equivalent to \eqref{eq:els_uc}\text{--}\eqref{eq:els_pla} and \eqref{eq:conversion_H} is equivalent to \eqref{eq:hp_uc}\text{--}\eqref{eq:hp_conversion}. With these modeling choices, the community dispatch problem (DP$_{N}$) is a mixed-integer program (MIP). The allocation of the resulting cooperative profit $\mathrm{val}(\mathrm{DP}_N)$ among prosumers is studied in the next section.
+
+\section{Methodology}
+\label{sec:methodology}
+The dispatch model developed in Section~\ref{sec:prob_description} determines 
+the optimal dispatch of the sector-coupled energy community with the resulting total welfare 
+$\mathrm{val}(\mathrm{DP}_N)$ when all community members operate cooperatively. 
+However, the dispatch solution alone does not prescribe how this welfare should 
+be distributed among the participating prosumers. Cooperative game theory offers 
+a systematic framework for this profit allocation problem, enabling allocations 
+that all members can agree upon and that no subgroup has an incentive to deviate 
+from, thereby supporting the long-term stability of the community. Section~\ref{sec:coop_formulation} formulates the profit allocation problem of the community as a cooperative game and introduces the concept of core. Section~\ref{sec:linear} establishes that, under a linear dispatch model, marginal pricing yields Owen solutions in the core.
+Section~\ref{sec:nonconvex} extends the framework to non-convex dispatch by adapting integer programming pricing and convex hull pricing to the cooperative setting.
+
+\subsection{Cooperative Game Formulation}
+\label{sec:coop_formulation}
+We cast the energy community as a cooperative game where prosumers coordinate their energy assets to maximize collective welfare. We first recall the necessary concepts from cooperative game theory before defining the energy community game.
+
+A cooperative game with transferable utility is defined by a tuple $\Gamma = (N, v)$ where $N = \{1, \ldots, |N|\}$ is a finite set of players, often called the \textit{grand coalition}, and $v : 2^{|N|} \to \mathbb{R}$ is the \textit{characteristic function} that assigns a real value to each \textit{coalition} $S \subseteq N$, with $v(\emptyset) = 0$.
+An \textit{allocation} is a vector $\chi = (\chi_1, \ldots, \chi_{|N|}) \in \mathbb{R}^{|N|}$ satisfying $\sum_{j \in N} \chi_j = v(N)$.
+Among solution concepts that specify desirable allocations, the \textit{core} is of particular importance for analyzing stability of cooperative arrangements. The core is the set of allocations under which no coalition has incentive to deviate from the grand coalition:
+\begin{equation}
+\mathcal{C}(v) = \left\{ \chi \in \mathbb{R}^{|N|} : \sum_{j \in N} \chi_j = v(N), \; \sum_{j \in S} \chi_j \geq v(S), \; \forall S \subseteq N \setminus \{\emptyset\} \right\}. \label{eq:core_membership}
+\end{equation}
+A game $\Gamma$ is called \textit{superadditive} if $v(S_1 \cup S_2) \geq v(S_1) + v(S_2)$ for all disjoint coalitions $S_1 \cap S_2 = \emptyset$; superadditivity provides economic rationale for forming the grand coalition. A game is said to have a \textit{non-empty core} if $\mathcal{C}(v) \neq \emptyset$.
+
+We now define the energy community game. For any coalition $S \subseteq N$, the characteristic function value $v(S)$ represents the maximum social welfare that coalition $S$ can achieve by operating cooperatively among themselves, while remaining isolated from prosumers in $N \setminus S$. This value is obtained by solving the dispatch problem (DP$_N$) \eqref{eq:dispatch_obj}--\eqref{eq:operational_region_end} with $N$ replaced by $S$; we denote the resulting coalition dispatch by (DP$_S$), so that $v(S)=\text{val}(\text{DP}_{S})$.
+
+\begin{definition}[Energy Community Game]
+\label{def:energy_game}
+Given the sector-coupled dispatch model $(\mathrm{DP}_N)$ defined in 
+\eqref{eq:dispatch_obj}--\eqref{eq:storage_dis}, let $(\mathrm{DP}_S)$ 
+denote the same problem with $N$ replaced by any coalition 
+$S\subseteq N$. The associated energy community game is the cooperative 
+game $\Gamma=(N,v)$ where $v(S):=\mathrm{val}(\mathrm{DP}_S)$ for all 
+$S\subseteq N$ and $v(\emptyset)=0$.
+\end{definition}
+
+The tractability of computing core allocations and the availability of theoretical guarantees depend critically on the structure of the dispatch model, in particular the technology constraints $(f^G,f^H)\leq 0$ embedded in each prosumer's operational region $\mathcal{X}_j$.
+In general, testing whether a given allocation belongs to the core is coNP-complete~\citep{faigle1997complexity}, and a brute-force approach requires evaluating all $2^{|N|}-1$ coalition values. Since evaluating $v(S)=\text{val}(\text{DP}_{S})$ requires solving a mixed-integer program, which is NP-hard in general, this difficulty is further compounded.
+
+In contrast, under a linear dispatch model (i.e., no integer variables and polyhedral operational regions),
+the game admits strong structure that enables duality-based analysis. In this case, core allocations can be
+constructed from a single solve of the grand-coalition problem (DP$_N$), without enumerating all
+$2^{|N|}-1$ coalitions. This motivates our subsequent analysis: we begin with the linear dispatch case, where all coalition dispatch problems are linear programs
+and shadow prices on the community balance constraints are well-defined. This allows us to connect marginal
+pricing to cooperative-game allocations via linear programming duality. For the non-convex dispatch model with $\mathcal{X}_j^{MIP}$, we can only ensure weak duality and cannot 
+directly compute shadow prices; this necessitates the extended pricing methods developed in Section~\ref{sec:nonconvex}.
+
+\subsection{Profit Allocation under a Linear Dispatch Model}
+\label{sec:linear}
+We begin with a linear dispatch benchmark, in which sector-coupling technology constraints are modeled by linear (affine) relationships and each prosumer's operational region is polyhedral. 
+Such linear dispatch formulations are widely used in practice as the surrogate approximation for day-ahead and real-time market clearing, and they yield transparent marginal prices via LP duality (e.g., refer to \cite{tanaka2022economics}).
+In this setting, we show that the marginal-pricing (MP) allocation admits a cooperative-game interpretation:
+it coincides with the Owen solution of a related linear production game and therefore lies in the core.
+This benchmark result provides a clear reference point before we move to mixed-integer dispatch models and
+assess how these stability guarantees change under realistic non-convex operations.
+
+To clarify what the linear dispatch assumption entails in our model, we revisit the generic technology constraints $f^G \leq 0$ and $f^H \leq 0$ in \eqref{eq:conversion_G}--\eqref{eq:conversion_H}. In Section~\ref{sec:prob_description}, these were instantiated as MIP-representable constraints capturing unit commitment and nonlinear efficiency; here, we provide simpler linear instantiations that make each coalition dispatch problem a linear program. In the linear case, we remove binary commitment variables and represent each sector-coupling technology by a linear input--output relationship. Also we adopt a linear utility and cost by assuming linear per-unit utilities and variable costs.
+Specifically, for each prosumer $j$, carrier $k$, and time $t$, we set
+$u_{jt}^k(d_{jt}^{k,load})=\bar u_{jt}^k\, d_{jt}^{k,load}$ and
+$c_{jt}^k(p_{jt}^k)=\bar c_{jt}^k\, p_{jt}^k$,
+so that (DP$_S$) is a linear program for every coalition $S\subseteq N$.
+
+\textit{Power-to-Gas (electrolyzer).}
+Under the stylized linear model, the electrolyzer constraints 
+$f^G \leq 0$ in \eqref{eq:conversion_G} reduce to the capacity 
+limits \eqref{eq:bounds_p}--\eqref{eq:bounds_scG} together with 
+a linearized efficiency curve:
+\begin{subequations}
+    \begin{align}
+        &p^{G}_{t} = \phi^{1}_{{G,L}}\tilde{d}_{t}^{E\to G,sc} 
+        + \phi^{0}_{G,L},\;\forall t\in T \label{eq:linearized_eff}
+    \end{align}
+\end{subequations}
+where $\phi^{1}_{G,L}$ and $\phi^{0}_{G,L}$ are the slope and
+intercept of the linearized efficiency curve, corresponding to the
+single-segment case of \eqref{eq:els_pla_production} with $|L|=1$.
+
+\textit{Power-to-Heat (heat pump).}
+For the heat pump, the conversion relationship \eqref{eq:hp_conversion} 
+is already linear. Under the linear assumption, the unit commitment 
+constraints are dropped, so that $f^H \leq 0$ in \eqref{eq:conversion_H} 
+reduces to the conversion \eqref{eq:hp_conversion} and capacity limits 
+\eqref{eq:bounds_p}--\eqref{eq:bounds_scH} alone.
+
+\begin{definition}[Linear Energy Community Game]
+\label{def:linear_game}
+A linear energy community game is an energy community game $\Gamma^{LP}=(N,v^{LP})$ in which $v^{LP}(S):=\text{val}(DP_{S})$ where for all $j\in N$, the operational region is a bounded polyhedron
+\begin{equation}
+    \mathcal{X}_{j}^{LP}=\left\{ x_j \in \mathbb{R}_{+}^{n_{j}} : \eqref{eq:balance_elec}\text{--}\eqref{eq:balance_gh},\;\eqref{eq:bounds_p}\text{--}\eqref{eq:storage_dis},  \eqref{eq:hp_conversion}, \eqref{eq:linearized_eff}\; \right\},\quad \forall j \in N,
+\end{equation}
+obtained from $\mathcal{X}_j$ in~\eqref{eq:operational_region} by replacing the sector-coupling technology constraints \eqref{eq:conversion_G}--\eqref{eq:conversion_H} with their linear models.
+\end{definition}
+
+
+Under these conditions, (DP$_S$) becomes a linear program for any coalition $S \subseteq N$, and standard duality theory applies. The key structural result is that linear energy community games can be reformulated as linear production games.
+While the equivalence can be shown by augmenting decision variables and constraint matrices, we establish this connection via a Dantzig--Wolfe reformulation, which preserves the
+linking-constraint structure of the community balance equations and yields an allocation interpretation that is
+useful both for the linear results and for the convex-hull pricing extension later.
+
+A Dantzig-Wolfe reformulation of (DP$_{S}$) is obtained by representing individual player's operational region $\mathcal{X}^{LP}_{j}$ as a convex combination of its extreme points, which is possible because $\mathcal{X}_{j}$ is a bounded polyhedron in the linear dispatch model, i.e., $\mathcal{X}^{LP}_{j}=Conv(Ext(\mathcal{X}^{LP}_{j}))$\footnote{We denote $Conv(\cdot), Ext(\cdot)$ by the set of convex hull and extreme points, respectively.} Using well-known \textit{Minkowski-Weyl Theorem}, every member's operational region can be represented by follows:
+\begin{align} \label{eq:minkowski-weyl}
+    \mathcal{X}^{LP}_{j}&=\left\{x_{j}\in \mathbb{R}_{+}^{n_{j}}:x_{j}=\sum_{q\in Q_{j}}x_{q}\lambda_{q},\sum_{q\in Q_{j}}\lambda_{q}=1, \lambda_{q}\geq 0\;\forall q\in Q_{j} \right\},
+\end{align}
+where $Q_{j}$ is the index set of $Ext(\mathcal{X}^{LP}_{j})$ and $x_{q}$s are the corresponding extreme points. The resulting model is represented as follows:
+\begin{subequations}
+    \begin{align}
+(\text{DWR}_{S}):\;\max_{\lambda } \quad & \sum_{j \in S} \sum_{q \in Q_j} w_j^q \lambda_j^q \label{eq:dwr_obj}\\
+\text{s.t.} \quad & \sum_{j \in S} \sum_{q \in Q_j} a_{jt}^{k,q} \lambda_j^q = 0, \quad \forall t\in T, k \in \{E,G,H\}, \label{eq:dwr_balance}\\
+& \sum_{q \in Q_j} \lambda_j^q = 1, \quad \forall j \in S,\quad(\sigma_{j}) \label{eq:dwr_convex}\\
+& \lambda_j^q \geq 0, \quad \forall q \in Q_j, j \in S. \label{eq:dwr_nonneg} \\
+\text{where }& \nonumber \\
+w_j^q &:= \sum_{k \in \{E,G,H\}} \sum_{t\in T}\left[ \pi^{k,emkt}_{t} e_{jt}^{k,mkt,q} - \pi_{t}^{k,imkt} i_{jt}^{k,mkt,q} - c_{jt}^k p_j^{k,q} + u_{jt}^k d_j^{k,q} \right], \nonumber \\
+a_{jt}^{k,q} &:= i_{jt}^{k,com,q} - e_{jt}^{k,com,q}. \nonumber
+\end{align}
+\end{subequations}
+Here, $\lambda_{j}^{q}$ represents the weight of the convex combination and $\sigma_{j}$ denotes the associated dual variables of the convexity constraint~\eqref{eq:dwr_convex}. Constraint \eqref{eq:dwr_balance} is the reformulation of community energy balance equatoins \eqref{eq:community_balance}, and constraint \eqref{eq:dwr_convex}-\eqref{eq:dwr_nonneg} ensures the reformulation satisfies the exptression \eqref{eq:minkowski-weyl}. To state the structural result of this reformulation formally, we recall the class of \textit{linear production games}.
+
+\begin{definition}[Linear Production Games; \cite{owen1975core}, generalized by \cite{uhan2015stochastic}]
+\label{def:lpg}
+A cooperative game $\Gamma=(N,v)$ is a linear production game if, for each player $j\in N$, there exist a resource vector $b_j\in\mathbb{R}^{m}$, a technology matrix $A_j\in\mathbb{R}^{m\times d_j}$, and an objective vector $c_j\in\mathbb{R}^{d_j}$ (with an optional common technology $A_0, c_0$) such that the characteristic function is defined by the following linear program:
+\begin{align}
+v(S) := &\max_{x \geq 0} \quad  \sum_{j \in S} c_j^\top x_j + c_0^\top x_0 \label{eq:lpg_primal}\\
+&\;\;\text{s.t.} \quad  \sum_{j \in S} A_j x_j + A_0 x_0 \leq \sum_{j \in S} b_j \quad (\mu) \label{eq:lpg_resource},
+\end{align}
+where $\mu$ denotes the associated dual variables of the constraints. That is, coalition $S$ pools their resources $\sum_{j \in S} b_j$ and determines production plans that maximize total revenue subject to resource availability.
+\end{definition}
+
+Based on this reformulation, we provide the representability result in the following Lemma.
+\begin{lemma}
+\label{lem:lpg_reduction}
+The linear energy community game $\Gamma^{LP}=(N,v^{LP})$ is an instance of linear production games.
+\end{lemma}
+\begin{proof}
+    Please refer to Appendix \ref{app:proof_lem_lpg_reduction} for a detailed proof.
+\end{proof}
+
+The Dantzig--Wolfe reformulation \eqref{eq:dwr_obj}--\eqref{eq:dwr_nonneg} makes the
+connection to linear production games transparent by separating the model into two
+structural layers: the community balance constraints \eqref{eq:dwr_balance}, which
+enforce market clearing among whichever prosumers are present, and the convexity
+constraints \eqref{eq:dwr_convex}, which ensure that each prosumer's dispatch is a
+mixture of its feasible operational patterns encoded by
+$\mathrm{Ext}(\mathcal{X}^{LP}_j)$.
+When these constraints are stacked into the linear production game form
+$\sum_{j \in S} A_j \lambda_j \leq \sum_{j \in S} b_j$, the resource vector
+$b_j$ of each prosumer consists of two blocks: a zero block for the balance rows
+and a unit vector $e_j$ for the convexity rows.
+The zero block reflects the fact that market clearing is a structural
+constraint that no individual prosumer endows; it must hold regardless of
+coalition composition.
+The nonzero part activates prosumer~$j$'s convexity constraint, making
+the entire feasible set $\mathcal{X}^{LP}_j$ available to the coalition's dispatch;
+if $j \notin S$, this constraint is absent and none of~$j$'s operational
+patterns can be selected.
+Thus, what each prosumer contributes as a ``resource'' is access to its own
+operational flexibility---generation assets, conversion technologies, storage,
+and demand-side options---compactly represented through the extreme points
+of~$\mathcal{X}_j$.
+
+This reduction immediately yields several game-theoretic properties through known results for linear production games.
+\begin{corollary}
+\label{cor:game_properties}
+The linear energy community game $\Gamma^{LP}$ is totally 
+balanced and superadditive. Total balancedness guarantees a non-empty core for every 
+subgame restricted to coalition $S \subseteq N$. Superadditivity implies that for any disjoint coalitions 
+$S, T \subseteq N$, $v^{LP}(S \cup T) \geq v^{LP}(S) + v^{LP}(T)$, 
+confirming that prosumers always have economic incentive to form larger 
+coalitions.
+\end{corollary}
+
+Corollary \ref{cor:game_properties} confirms that prosumers have economic incentive to form larger coalitions, as cooperation never decreases total achievable welfare. We now connect the Dantzig--Wolfe reformulation to a specific core allocation concept from linear production games. For a linear production game with characteristic function \eqref{eq:lpg_primal}--\eqref{eq:lpg_resource}, an \textit{Owen solution}~\citep{owen1975core} is an allocation derived from an optimal dual solution $\mu^*$ of the grand coalition's program, defined by $\chi_j^{ow} := (\mu^*)^\top b_j$ for all $j \in N$. Owen's fundamental result establishes that every such allocation belongs to the core; the economic intuition is that shadow prices represent equilibrium resource prices, and each player receives compensation equal to the imputed value of their contributed resources. We now show that the dual multipliers of the DWR yield precisely such an Owen solution.
+\begin{proposition} \label{prop:owen_dwr}
+    Let $\{\sigma_{j}^{*}\}_{j\in N}$ be the dual multipliers of \eqref{eq:dwr_convex} which are optimal at the dual problem of \eqref{eq:dwr_obj}-\eqref{eq:dwr_nonneg}. Let the allocation be $\chi_{j}^{OW}:=\sigma_{j}^{*},\;\forall j\in N$. Then, $\{\sigma_{j}^{*}\}_{j\in N}$ is the Owen solution and belongs to the core of lienar energy community game $\Gamma^{LP}$.
+\end{proposition}
+\begin{proof}
+Please refer to Appendix \ref{app:proof_prop_owen_dwr} for a detailed proof.
+\end{proof}
+Economically, $\sigma_j^*$ measures the marginal value that prosumer~$j$'s
+operational flexibility adds to the grand coalition, and Proposition \ref{prop:owen_dwr}
+guarantees that this allocation lies in the core. We now define a profit allocation mechanism based on marginal pricing (MP). 
+Since each prosumer's operational region is given by the polyhedron 
+$\mathcal{X}_j^{LP}$, the coalition dispatch (DP$_S$) is a linear program 
+for every $S\subseteq N$, and the shadow prices on the community balance 
+constraint~\eqref{eq:community_balance} are well-defined. Let 
+$\pi_t^{k,MP}$ denote this shadow price for carrier 
+$k \in \{E,G,H\}$ at time $t$ when solving (DP$_N$). For each prosumer 
+$j \in N$, define their MP-based allocation, denoted by $\chi_j^{MP}$, as:
+\begin{align}
+&\sum_{k \in \{E,G,H\}}\sum_{t\in T}\left[ \pi^{k,emkt} e_{jt}^{k,mkt*} - \pi_{t}^{k,imkt} i_{jt}^{k,mkt*} - c_{j}^k p_{jt}^{k*} + u_{j}^k d_j^{k*} + \pi^{k,MP}_{t}\left( e_{jt}^{k,com*} - i_{jt}^{k,com*} \right) \right],\label{eq:marginal_pricing}
+\end{align}
+where $(e_j^{k,com*}, i_j^{k,com*})$ are optimal community exchange quantities from solving (DP$_N$). The allocation $\chi_j^{MP}$ assigns to each prosumer the value of their net contribution to internal community trading, priced at the shadow prices $\pi^{k,com*}$.
+
+We provide our main result on the connection between marginal pricing and Owen solution, and its core membership:
+\begin{theorem}
+\label{theorem:mp_owen}
+For each $j\in N$, $\chi_{j}^{MP}=\chi^{OW}_{j}$. In other words, the marginal pricing allocation is an Owen solution of the linear production game counterpart of $\Gamma^{LP}$.
+\end{theorem}
+
+\begin{proof}
+Please refer to Appendix \ref{app:proof_theorem_mp_owen} for a detailed proof.
+\end{proof}
+
+The equivalence reflects
+two dual perspectives on decomposing the grand coalition value $v(N)$ among
+prosumers.
+The Owen solution imputes value through the dual: it assigns each
+prosumer~$j$ the shadow price $\sigma_j^*$ of its convexity
+constraint~\eqref{eq:dwr_convex}, representing the value that the
+grand coalition's dual prices attribute to prosumer~$j$'s participation.
+Marginal pricing decomposes the same total value through the primal:
+each prosumer optimizes its own dispatch taking the community clearing
+prices $\pi_t^{k,MP}$ as given, and the resulting net profit defines
+$\chi_j^{MP}$.
+Complementary slackness ensures these two decompositions coincide---the
+dual-imputed value of prosumer~$j$'s participation equals the profit~$j$
+realizes at equilibrium prices---so the marginal pricing allocation
+inherits the core membership guaranteed by Owen's result. Furthermore, it inherits several axiomatic properties from the Owen solution, such as inessentiality, subgame consistency, etc.~\citep[e.g., see][]{van2000characterization}.
+
+Our result establishes that marginal pricing provides a theoretically justified allocation mechanism for linear energy communities. The mechanism requires solving only the grand coalition problem (DP$_N$) once, avoiding the exponential complexity of enumerating all coalition values. The shadow prices $\pi^{k,com*}$ serve dual roles: they guide efficient dispatch decisions and they define a stable profit allocation that ensures no coalition has incentive to deviate.
+
+\subsection{Profit Allocation under a Non-convex Dispatch Model}
+\label{sec:nonconvex}
+
+When the original non-convex technology operations described in Section~\ref{sec:prob_description} are incorporated, the coalition
+dispatch problem becomes a mixed-integer program 
+(MIP; throughout this paper restricted to mixed-integer \textit{linear} 
+programs) and shadow prices on the community balance
+constraints \eqref{eq:community_balance} are no longer available. The Owen
+value interpretation and core guarantees of Section~4.2 therefore do not
+apply. For tractability and economic interpretability of the resulting
+allocation, as discussed above, we retain a price-based approach and adapt two mechanisms developed
+for MIP-based dispatch in wholesale electricity markets---\textit{integer
+programming pricing (IP)} and \textit{convex hull pricing
+(CHP)}---to the cooperative community setting and compare their stability in
+Section~\ref{sec:results}.
+
+The mixed-integer linear dispatch problem of any coalition $S\subseteq N\setminus \{\emptyset \}$ is:
+\begin{align}
+(\mathrm{DP}_S^{MIP}):\; \max_{x,y}\quad
+& \sum_{\substack{j \in N,t\in T, \\ k \in \{E,G,H\}}}
+\left(\pi^{k,emkt}_{t} e_{jt}^{k,mkt} - \pi^{k,imkt}_{t} i_{jt}^{k,mkt}
++ u_{jt}^k d_{jt}^{k,load} - c_{jt}^k p_{jt}^k - c_{j}^{k,su}\, z_{jt}^{k,su}\right)\label{eq:mip_obj}\\
+\mathrm{s.t.}\quad
+& \sum_{j \in S} (i_{jt}^{k,com} - e_{jt}^{k,com}) = 0,
+\quad \forall t\in T,\; \forall k \in \{E,G,H\},
+\label{eq:mip_balance}\\
+& (x_j, y_j) \in \mathcal{X}_j^{MIP},\quad \forall j \in S,
+\label{eq:mip_operational}
+\end{align}
+where $\mathcal{X}_{j}^{MIP}$ is the set defined in \eqref{eq:yj_expanded}. We denote the resulting community game by $\Gamma^{MIP}=(N, v^{MIP})$, where $v^{MIP}(s):=\text{val}(\text{DP}_{S}^{MIP})$ with each prosumer operational region given by $\mathcal{X}_{j}^{MIP}$. We use $\mathcal{X}_{j}^{MIP}$ rather than $\mathcal{X}_{j}$ because the start-up cost term appears in the objective \eqref{eq:mip_obj}.
+
+\textit{Integer programming pricing (IPP)}~\citep{o2005efficient} is the most direct approach:
+solve $(\text{DP}_N^{MIP})$ to obtain an optimal solution $(x^*, y^*)$, fix
+all binary variables at $y_j = y_j^*$, and re-solve the resulting LP to
+obtain shadow prices $\pi_t^{k,IP}$ on the community balance constraints.
+The IP allocation, $\chi_j^{IP}$, is defined as:
+\begin{align}
+&\label{eq:ip_allocation}\sum_{\substack{k \in \{E,G,H\}\\ t\in T}}  \pi^{k,emkt}_t
+e_{jt}^{k,mkt*} - \pi^{k,imkt}_t i_{jt}^{k,mkt*} + u_j^k d_{jt}^{k,load*}
+- c_j^k p_{jt}^{k*} - c_j^{k,su} z_{jt}^{k,su*} + \pi^{k,IP}_t \left(
+e_{jt}^{k,com*} - i_{jt}^{k,com*} \right) 
+\end{align}
+Because the binary variables are fixed before prices are extracted, IP
+prices reflect marginal costs conditional on the realized commitment
+schedule. Fixed costs such as startup costs become constants in the
+re-solved LP and do not enter the prices; consequently, IP cannot
+internalize the opportunity cost of alternative commitment decisions.
+
+\textit{Convex hull pricing (CHP)}~\citep{schiro2015convex,andrianesis2021computation} addresses this limitation by replacing
+each $\mathcal{X}_j^{MIP}$ with $\text{conv}(\mathcal{X}_j^{MIP})$,
+yielding a convexified dispatch $(\text{DP}_N^{CHP})$ that is identical to
+$(\text{DP}_N^{MIP})$ except that \eqref{eq:mip_operational} is replaced by
+$(x_j, y_j) \in \text{conv}(\mathcal{X}_j^{MIP})$ for all $j \in N$. Since $\text{conv}(\mathcal{X}^{MIP})$ is a polyhedron, the resulting problem is a linear program and shadow prices $\pi_t^{k,CHP}$ on the community
+balance constraints are well-defined. To compute them, we apply the
+Dantzig--Wolfe reformulation to DP$_{N}^{MIP}$ where the
+column set $Q_j$ now indexes \emph{integer commitment} schedules of
+prosumer $j$. We build on \cite{andrianesis2021computation}, who 
+formalized the Dantzig--Wolfe reformulation (DWR) as a computationally efficient 
+route to CHP in wholesale unit-commitment markets. We adopt the same 
+reformulation but exploit it in a cooperative setting: we will further 
+show that the DWR structure directly reveals the convexified community 
+game as an instance of a linear production game, allowing us to interpret 
+CHP as the Owen solution of that game and thereby extend the core-stability 
+guarantee of Section~\ref{sec:linear} to the non-convex dispatch case. In the resulting reformulation, each weight $\lambda_{j}^{q}$ should be binary, i.e., $\lambda_{j}^{q}\in \{0,1\}$. Relaxing this integrality requirement to $\lambda_{j}^{q}\geq 0$ yields the 
+LP relaxation of the Dantzig–Wolfe reformulation, commonly referred to 
+as the linear relaxation of the master integer problem~\citep[e.g., see][]{desrosiers2024branch}. 
+This master LP, denoted by (DWR$_{N}^{CHP}$), is equivalent to the convexified dispatch (DP$_{N}^{CHP}$):
+\begin{subequations}
+\begin{align}
+(\mathrm{DWR}_N^{CHP}):\; \max_{\lambda} \quad&  \sum_{j \in N} \sum_{q \in Q_j}
+w_j^q \lambda_j^q \label{eq:dwr_mip_obj}\\
+\mathrm{s.t.}\quad & \sum_{j \in N} \sum_{q \in Q_j} a_{jt}^{k,q}
+\lambda_j^q = 0, \quad \forall t \in T,\; k \in \{E,G,H\}, \quad (
+\pi_t^{k,CHP}) \label{eq:dwr_mip_balance}\\
+& \sum_{q \in Q_j} \lambda_j^q = 1, \quad \forall j \in N, \quad (
+\sigma_j) \label{eq:dwr_mip_convex}\\
+& \lambda_j^q \geq 0, \quad \forall q \in Q_j,\; j \in N,
+\label{eq:dwr_chp_nonneg}
+\end{align}
+\end{subequations}
+where $w_j^q$ and $a_{jt}^{k,q}$ are defined as in
+\eqref{eq:dwr_obj}--\eqref{eq:dwr_nonneg}. Replacing
+\eqref{eq:dwr_chp_nonneg} by $\lambda_j^q \in \{0,1\}$ recovers the
+original problem $(\text{DP}_N^{MIP})$. Since $(\mathrm{DWR}_N^{CHP})$ is a linear program, shadow prices
+$\pi_t^{k,CHP}$ on the community balance constraints
+\eqref{eq:dwr_mip_balance} are well-defined.
+In practice, $|Q_j|$ contains exponential number of dispatch columns
+and need not be enumerated explicitly: a \textit{column generation}
+algorithm iteratively solves $(\mathrm{DWR}_N^{CHP})$ over a restricted
+subset of columns and generates improving columns by solving a
+subproblem for each prosumer, yielding the exact prices
+$\pi_t^{k,CHP}$ at
+convergence~\citep{andrianesis2021computation,desrosiers2024branch}.
+
+The CHP allocation, $\chi_{j}^{CHP}$, is defined analogously to IP:
+\begin{align}
+\sum_{\substack{k \in \{E,G,H\},\\ t\in T}} &
+\pi^{k,emkt}_t e_{jt}^{k,mkt*} - \pi^{k,imkt}_t i_{jt}^{k,mkt*} +
+u_j^k d_{jt}^{k,load*} - c_j^k p_{jt}^{k*}  - c_j^{k,su} z_{jt}^{k,su*} +
+\pi^{k,CHP}_t \left( e_{jt}^{k,com*} - i_{jt}^{k,com*} \right),
+\label{eq:chp_allocation}
+\end{align}
+where the dispatch quantities $(x_j^*, y_j^*)$ are from $(\text{DP}_N^{MIP})$
+but the prices $\pi_t^{k,CHP}$ come from the convexified problem. Under
+both mechanisms the actual dispatch is identical; the two differ only in
+how community prices are computed. IP
+prices are conditional on the fixed commitment schedule $y^*$ and
+therefore cannot reflect the cost of alternative commitment decisions.
+CHP prices, by contrast, are derived from a formulation in which
+commitment variables become continuous through convexification. For
+instance, the electrolyzer on-state indicator is recovered as
+\begin{equation}
+\tilde{z}_{jt}^{G,on} = \sum_{q \in Q_j} \lambda_j^q \, z_{jt}^{G,on,q},
+\label{eq:convexified_commitment}
+\end{equation}
+where each $z_{jt}^{G,on,q} \in \{0,1\}$ for all $q\in \mathcal{Q}_{j}$ but the convex combination $\tilde{z}_{jt}^{G,on}$
+takes values in $[0,1]$. The shadow prices $\pi_t^{k,CHP}$ on the
+community balance constraints therefore internalize the marginal cost of
+shifting between commitment schedules---a channel that is absent in IP
+pricing by construction.
+
+The convexified formulation enables a partial extension of the core
+results from Section~4.2. Define the \emph{convex hull game}
+$\Gamma^{CHP} = (N, v^{CHP})$, where $v^{CHP}(S) :=
+\text{val}(\text{DP}_S^{CHP})$ for each coalition $S \subseteq N$. Since
+$(\text{DP}_S^{CHP})$ is a linear program for every $S$, $\Gamma^{CHP}$
+is a linear energy community game in the sense of
+Definition~\ref{def:linear_game}, and the results of Section~4.2 apply
+directly.
+
+\begin{proposition} \label{prop:chp_core}
+$\Gamma^{CHP}$ is an instance of linear production games and the CHP
+allocation $\chi^{CHP}$ belongs to the core of $\Gamma^{CHP}$.
+\end{proposition}
+
+\begin{proof}
+Please see the Appendix~\ref{app:prop_chp_core} for a detailed proof.
+\end{proof} 
+$(\mathrm{DWR}_N^{CHP})$ retains the
+same two-layer structure---balance constraints
+\eqref{eq:dwr_mip_balance} for collective coordination and convexity
+constraints \eqref{eq:dwr_mip_convex} for individual
+participation.
+The only difference from the linear model is the column set:
+$Q_j$ now indexes integer-feasible commitment schedules rather than
+LP extreme points.
+The LPG reduction therefore carries over intact, and the Owen--marginal
+pricing equivalence of Proposition~\ref{theorem:mp_owen} extends
+accordingly: the CHP allocation $\chi_j^{CHP}$ equals the dual
+imputation $\sigma_j^*$ in the convexified community game.
+
+
+Both IPP and CHP originate in the wholesale electricity market literature on pricing electricity, where non-convex dispatch problems are modeled as MIP. The LP dual of the MIP dispatch does not in general 
+support the efficient integer dispatch as a competitive equilibrium, 
+and some form of side payment (uplift) is required. IPP 
+pricing~\citep{o2005efficient} fixes the cleared commitment schedule 
+$y^*$ and extracts shadow prices from the resulting LP, pairing them 
+with explicit uplifts. CHP~\citep{schiro2015convex} instead prices the 
+convex hull of the feasible dispatch-commitment set, absorbing 
+commitment costs into the energy prices and thereby minimizing the 
+total uplift. 
+This distinction governs whether the MP--Owen equivalence of 
+Theorem~\ref{theorem:mp_owen} extends to the non-convex setting. Under 
+CHP, marginal prices are taken from the convexified LP 
+$(\text{DP}_N^{CHP})$, whose value function $v^{CHP}(S)$ is well-defined 
+for every coalition. The convexified community game 
+$\Gamma^{CHP}=(N,v^{CHP})$ is therefore a linear production game, and 
+the argument of Section~\ref{sec:linear} applies verbatim: the CHP 
+allocation is the Owen solution of $\Gamma^{CHP}$ and belongs to its 
+core (Proposition~\ref{prop:chp_core}). IPP prices, by contrast, are 
+extracted from an LP defined only at the grand coalition's realized 
+commitment $y^*$, with no coalition-indexed value function attached, so 
+the Owen construction has no analogue.
+We note two remarks regarding the CHP guarantee. First, it is with 
+respect to $\Gamma^{CHP}$, not $\Gamma^{MIP}$; since 
+$\text{conv}(\mathcal{X}_j^{MIP})\supseteq\mathcal{X}_j^{MIP}$, we 
+have $v^{CHP}(S)\geq v^{MIP}(S)$ and the CHP allocation may still 
+violate core constraints of $\Gamma^{MIP}$ where this gap is 
+strict. Second, because core violations in $\Gamma^{MIP}$ arise 
+precisely when a sub-coalition's best commitment differs from the 
+grand coalition's $y^*$, IPP prices cannot reflect this deviation value, whereas CHP prices partially do. Numerical experiments in Section~\ref{sec:results} trace how these conceptual differences drive the observed violation patterns.
+
+
+\subsection{Complexity Analysis}
+\label{sec:complexity}
+
+Before presenting the numerical study, we discuss the 
+computational complexity of obtaining core allocations in the 
+energy community game. This discussion provides the structural 
+basis for the solve-time differences observed across 
+mechanisms in the following sections.
+
+Under the linear dispatch model, $\Gamma^{LP}$ is a linear 
+production game (Theorem~\ref{theorem:mp_owen}), and core 
+membership testing is coNP-complete for this 
+class~\citep{deng2008algorithmic}. Consider next the search 
+problem of constructing a core element. One of the most widely used approaches is 
+row generation~\citep{drechsel2010computing}, which alternates 
+between a restricted master problem that imposes coalitional 
+rationality constraints for a subset of coalitions $\hat 
+{\mathcal S} \subseteq 2^N$, and a separation problem that 
+identifies a most-violating coalition by maximizing 
+$v(S)-\sum_{i\in S}\chi_{i}$ over $S\subseteq N\setminus \hat{S}$. Newly 
+identified violators are added to $\hat{\mathcal S}$, and the 
+master problem is resolved until no violating coalition 
+remains. The separation problem is formulated as a 
+mixed-integer program in which coalition membership is 
+encoded by prosumer-selection binary variables 
+coupled to dispatch variables using big-M constraints; we refer 
+to Section~3 of \cite{drechsel2010computing} for the detailed 
+formulation. Even though each $v(S)$ is the value of an LP, 
+the separation MIP is NP-hard in general. A row-generation 
+procedure thus invokes an NP-hard oracle at each iteration 
+and, in the worst case, over $O(2^{|N|})$ coalitions. The LPG 
+structure bypasses this difficulty through LP duality. The 
+marginal-pricing allocation $\chi^{MP}$ coincides with the 
+Owen solution and is obtained from a single solve of 
+$(\mathrm{DP}_N)$, placing core-element construction in class P. 
+Thus duality replaces combinatorial search with a single 
+convex program, and this is the operational value of the LPG 
+structure.
+
+Under the non-convex dispatch model, $\Gamma^{MIP}$ is not an 
+LPG and this tractability is lost. Core membership remains in 
+coNP, and we do not address the hardness result in this study. 
+Each coalition value $v(S)=\mathrm{val}(\mathrm{DP}_S)$ is the 
+optimal value of a mixed-integer program whose dispatch 
+substructure embeds electrolyzer and heat-pump unit 
+commitments. The classical UC model with minimum up/down time 
+constraints and startup costs is strongly NP-hard in 
+general~\citep{bendotti2019complexity}, so $v(S)$ is unlikely 
+to admit a polynomial-time evaluation.
+Constructing a core element on $\Gamma^{MIP}$ is 
+correspondingly more demanding. Brute-force enumeration solves 
+$2^{|N|}-1$ coalition MIPs and is infeasible beyond moderate 
+$|N|$. Row generation compounds the difficulty already present 
+in the linear case: the separation MIP stacks 
+coalition-selection binaries on top of the already 
+combinatorial $v(S)$ formulation, so each iteration requires 
+solving a harder MIP than its linear-case counterpart. The 
+procedure carries no polynomial-time guarantee.
+
+The IPP and CHP mechanisms extend marginal pricing to the 
+non-convex setting and avoid the separation oracle altogether. 
+IPP solves the grand-coalition MIP once to fix integer 
+variables, then solves the resulting LP to recover shadow 
+prices on the community-balance constraints. CHP pricing 
+solves the Dantzig-Wolfe reformulation of $(\mathrm{DP}_N)$ 
+by column generation, in which the master is an LP and the 
+pricing subproblem decomposes into $|N|$ independent 
+single-prosumer MIPs with objectives modified by reduced 
+costs. Both row generation and CHP are iterative decomposition 
+schemes that solve MIP at each iteration, generating 
+rows (constraints) in the former and columns (variables) in 
+the latter. Since the subproblem in column generation of CHP is decomposed into individual prosumers' problems, it is structurally 
+lighter than row generation's community-wide separation MIP, 
+which carries coalition-selection binaries with their big-M 
+couplings on top of the already combinatorial $v(S)$ 
+formulation. This positions IPP and CHP as practical 
+duality-based approaches in energy community games, where row generation's separation oracle becomes the 
+principal computational bottleneck.
+
+\section{Numerical Experiments}
+\label{sec:results}
+
+We evaluate the proposed pricing-based allocation mechanisms through numerical experiments on sector-coupled energy communities where participants exchange electricity, hydrogen, and heat over a 24-hour planning horizon ($|T| = 24$). The experiments aim to quantify the economic benefits of coordinated community operation and to examine how different pricing mechanisms affect the stability of profit allocations. Our analysis proceeds in two stages of increasing community size. We first consider a six-player baseline case that allows exhaustive enumeration of all $2^6 - 1 = 63$ coalitions. Within this setting, we compare the allocation mechanisms (Section~\ref{sec:six_player_results}), diagnose the specific non-convexity sources that drive core violations under IPP (Section~\ref{sec:nonconvex_source}), and perform the sensitivity analysis to test the robustness of pricing mechanisms across five economic and operational scenarios
+(Section~\ref{sec:various_scenarios}). We then extend the analysis to communities with 15 and 30 players to evaluate scalability (Section~\ref{sec:scalability}).
+
+\subsection{Six-Player Baseline Community Case}\label{sec:six_player_results}
+
+The six-player baseline community consists of heterogeneous participants representing the main asset types in a sector-coupled energy system. Player $u_1$ owns a wind generator and a battery energy storage system, representing renewable generation with short-term storage capability. Player $u_2$ operates an alkaline electrolyzer (AEL), which converts electricity into hydrogen. Player $u_3$ operates a heat pump that converts electricity into heat. The remaining players represent end-use consumers: $u_4$ consumes electricity, $u_5$ is a hydrogen refueling station, and $u_6$ consumes heat. Pure consumers do not own generation or storage assets. Their participation value is captured by a load consumption utility $u_t^k$ that is set equal to the prevailing grid import price $\pi_t^{k,\mathrm{imkt}}$ for each carrier $k \in \{E, G, H\}$ at time $t$. This specification reflects the avoided cost of purchasing energy directly from the external market.
+
+The operational characteristics of sector-coupling technologies follow commonly used models in the literature. The electrolyzer production function is based on the piecewise efficiency curve reported by~\cite{raheli2023conic}. The hydrogen production curve is approximated using $|L| = 6$ linear segments, capturing the concave efficiency relationship in which the marginal hydrogen output per unit of electricity decreases at higher input levels. The heat pump converts electricity into heat with a coefficient of performance (COP) of $\nu_{\text{COP}} = 3.28$, defined as the ratio of thermal output 
+to the electrical input.
+
+Each prosumer can trade energy with external markets at carrier-specific import and export prices. Electricity export prices are based on the system marginal price (SMP) recorded in Jeju Island, South Korea, during January 2025, a period characterized by high renewable penetration that frequently drove electricity prices close to zero. A representative daily price profile is constructed using $k$-medoids clustering~\citep{KPX2025}. Hydrogen prices are obtained from the Korean government’s hydrogen economy roadmap~\citep{MOTIE2019}. Heat prices follow the residential single-rate tariff of the Korea District Heating Corporation~\citep{KDHC2024}. For all energy carriers, import prices are set at 1.5 times the corresponding export prices to reflect retail markups and network charges. All prices are converted to euros (EUR).
+
+Hourly wind capacity factors are derived from the January 2019 production profile of an Eastern Denmark wind farm used in \cite{raheli2023conic}, originally obtained from the Renewable.ninja platform. The dataset provides distinct wind generation profiles for each day of January, allowing us to examine how daily variability in renewable supply affects the stability of allocations. Electricity demand profiles are based on hourly load data recorded in Jeju Island, South Korea, obtained from the Korea Power Exchange~\citep{KEPCO_load}. The demand is scaled to represent approximately 700 households using a winter monthly base load of 0.363\,MWh per household. This scaling is chosen to achieve a realistic balance between renewable supply and community demand under the assumed generation capacity. Heat demand profiles are constructed based on the Busan Eco-Delta Smart Village data~\citep{kim2021self}, adopting a per-household floor area of 42.4\,m2$^2$, annual heating intensity of 31\,kWh/m$^{2}\cdot$year, and annual DHW demand of 2{,}839\,kWh per household, with sub-daily profiles shaped by diurnal scaling factors reflecting Korean residential heating patterns. The hydrogen demand profiles are made by hourly demand patterns in a domestic hydrogen refueling station for both passenger cars and buses, yielding hourly demand rates of 5.1--13.6\,kg/h during operating hours (09:00--20:00)~\citep{kim2023analysis}.
+
+As noted in Section~\ref{sec:prob_description}, all load demands are treated as inelastic by setting $\underline{d}_{jt}^{k,load} = \overline{d}_{jt}^{k,load}$ in constraint~\eqref{eq:bounds_d} for all prosumers, carriers, and time periods. 
+This fixes each prosumer’s consumption to the given demand profile while allowing the sourcing 
+decision, such as own production, community trading, or external market imports, to be optimized. This modeling choice isolates the cooperation gains arising from coordinated operation of generation, conversion, and storage technologies. Introducing elastic demand would introduce additional welfare gains from demand flexibility, making it difficult to 
+distinguish these effects from the supply-side cooperation benefits that are the focus 
+of this study.
+
+Table~\ref{tab:baseline_params} summarizes the parameter values of the baseline community. All optimization problems in this study are mixed-integer linear programs 
+and are solved using HiGHS~\citep{huangfu2018parallelizing}, a widely 
+used an open-source MILP solver, on an AMD Ryzen 12-core 3.70 GHz PC with 16 GB RAM. We implemented column-generation algorithms in Python, using PySCIPOpt~\citep{MaherMiltenbergerPedrosoRehfeldtSchwarzSerrano2016}, where HiGHS was used to solve pricing subproblems. As a rule-based benchmark, we also consider the proportional cost allocation (PCA) of \cite{tijs1986game}, adopted in \cite{sanjab2022tso}, which distributes the grand coalition surplus in proportion to standalone profits as Eq. (\ref{eq:pca}). 
+\begin{equation}
+    \chi_{j}^{\mathrm{PCA}} = \frac{v(\{j\})}{\sum_{j\in N}v(\{j\})}\cdot v(N).
+    \label{eq:pca}
+\end{equation}
+
+\begin{table}[htbp]
+\centering
+\caption{Parameters for the six-player baseline community.}
+\label{tab:baseline_params}
+\small
+\begin{tabular}{lcrl}
+\toprule
+Parameter & Symbol & Value & Source \\
+\midrule
+\multicolumn{4}{l}{\textit{Wind farm ($u_1$)}} \\
+\quad Rated capacity              & $\bar{p}^E$  & 1.0\,MW                   & ---                      \\
+\midrule
+\multicolumn{4}{l}{\textit{Electrolyzer ($u_2$)}} \\
+\quad Rated capacity          & $\bar{p}^G$           & 1.0\,MW   &  \citep{raheli2023conic}\\
+\quad Minimum output          & $\underline{p}^G$     & 0.15\,MW  &  \citep{raheli2023conic} \\
+\quad Standby consumption     & $p^{\text{sb}}$       & 0.01\,MW  &  \citep{raheli2023conic} \\
+\quad Startup cost            & $c^{G,\text{su}}$     & 50\,EUR   &  \citep{raheli2023conic} \\
+\quad Efficiency segments     & $|L|$                  & 6        &  \citep{raheli2023conic} \\
+\midrule
+\multicolumn{4}{l}{\textit{Heat pump ($u_3$)}} \\
+\quad Rated capacity          & $\bar{p}^H$           & 0.8\,MW   & \citep{bartolini2020energy} \\
+\quad COP                     & $\nu^{\text{COP}}$    & 3.28      & \citep{bartolini2020energy} \\
+\quad Variable cost & $c^{H}$ & 2.69 EUR/MWh & \citep{siddique2024dispatch} \\
+\quad Min.\ / max.\ output ratio & $\underline{c}^H / \bar{c}^H$ & 0.2 / 0.8 & \citep{siddique2024dispatch} \\
+\quad Startup cost            & $c^{H,\text{su}}$     & 10\,EUR   & \citep{siddique2024dispatch} \\
+\quad Ramp rate (up/down)     & $c^{\text{RU}}_H$     & 0.9       & \citep{siddique2024dispatch} \\
+\midrule
+\multicolumn{4}{l}{\textit{Battery storage ($u_1$)}} \\
+\quad Energy / power ratio    & $\alpha^{E,sto}$                  & 3.0 ($\bar{s}^{E}=3.0\bar{p}^{E})$       & \citep{EIA2021} \\
+\quad Power / wind capacity ratio  & ---                   & 0.25 ($\bar{b}^{E,ch}=0.25\bar{p}^{E}$)      & assumed \\
+\quad Initial SOC / capacity ratio  & ---                   & 0.2 ($s_{0}^{E}=0.2\bar{s}^{E}$)      & assumed \\
+\quad Charge / discharge eff. & $\eta^{\text{ch}}_E$ / $\eta^{\text{dis}}_E$  & 0.95 / 0.95 & \citep{cornelusse2019community} \\
+\midrule
+\multicolumn{4}{l}{\textit{Market prices}} \\
+\quad Elec.\ export price     & $\pi^{E,\text{emkt}}$  & 0--66 EUR/MWh & \citep{KPX2025} \\
+\quad H$_2$ export price        & $\pi^{G,\text{emkt}}$  & 3.33\,EUR/kg & \citep{MOTIE2019} \\
+\quad Heat import price & $\pi^{H,imkt}$ & & \citep{KDHC2024}\\
+\quad Import / export ratio  & $\alpha^{imp}$                   & 1.5        & assumed \\
+\midrule
+\multicolumn{4}{l}{\textit{Demand}} \\
+\quad Residential households (HH)      & $n_{HH}$  & 700                        & derived                   \\
+\quad Elec.\ base load per household     & ---  & 0.363\,MWh/month           & \citep{KEPCO_load}    \\
+\quad Elec.\ demand (hourly range) & $d^{E,load}$ & 0.34--0.45\,MW & \citep{KEPCO_load} \\
+\quad $H_2$ demand (car / bus)    & ---  & 59.2 / 41.8\,kg/day        & \citep{kim2023analysis} \\
+\quad $H_2$ demand (hourly range)    & $d^{G,load}$  & 5.1--13.6 kg/h (09:00--20:00)       & \citep{kim2023analysis} \\
+\quad Floor area per household    & ---  & 42.4\,m$^2$                & \citep{kim2021self}  \\
+\quad Heating intensity           & ---  & 31\,kWh/m$^2\cdot$year   & \citep{kim2021self}  \\
+\quad Annual DHW demand           & ---  & 2{,}839\,kWh/HH$\cdot$year & \citep{kim2021self}  \\
+\quad Heat demand (hourly range) & $d^{H,load}$ & 0.34--1.36 MWh & \citep{kim2021self} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Based on our baseline community, we examine the cooperation synergy and compare allocation mechanisms on a representative day (Day~1). Table~\ref{tab:allocation_comparison_day1} summarizes the results. First, under the linear dispatch model, obtained by relaxing commitment variables and using a single efficiency segment ($|L|=1$), cooperation generates a substantial 
+economic synergy. The total welfare of the grand coalition based on the marginal pricing allocation exceeds the sum of standalone profits by approximately 67\% (1,308 $\rightarrow$ 2,308), reflecting the benefits of renewable sharing and internal multi-carrier trading among community members. Marginal pricing based on the dual variables of the community balance constraints produces zero core violation in this setting. This result numerically confirms~Theorem~\ref{theorem:mp_owen}: under linear dispatch, the marginal pricing allocation coincides with the Owen solution and therefore lies in the core of the cooperative game. 
+
+We next evaluate the same community under the non-convex dispatch model, which enforces electrolyzer unit commitment constraints and the piecewise-linear efficiency curve ($|L|=6$). The mixed-integer restrictions reduce grand coalition welfare relative to the LP bound, as the feasible region shrinks and startup costs are fully incurred. Cooperation synergy remains substantial (${\approx}66\%$), but since shadow prices are no longer directly available from the MIP dispatch, the choice of pricing mechanism 
+becomes consequential. Among the non-convex dispatch mechanisms, IPP incurs a positive core violation, with the electricity--hydrogen coalition $\{u_1,u_2,u_4,u_5\}$ blocking by excluding the heat sector. CHP eliminates this violation by internalizing startup costs through convexification, removing the cross-subsidy that distorts IPP prices. PCA produces by far the largest violation: since $v(\{j\})=0$ for all pure consumers ($u_4$--$u_6$), \eqref{eq:pca} assigns them zero regardless of their contribution to coalition surplus, which is precisely the value they create by enabling internal trades at sub-market prices. The comparison highlights that even IPP (despite its non-convexity distortion) achieves a substantially smaller violation than this simple proportional rule, underscoring that price-based mechanisms better reflect the marginal contribution of each player.
+
+Figure~\ref{fig:prices_day1} shows the resulting community electricity, 
+heat, and hydrogen prices under the three pricing mechanisms: MP applied 
+to the linear dispatch benchmark, and IPP and CHP applied to the 
+non-convex dispatch. The three mechanisms agree closely during hours when no commitment decision is marginal; divergences concentrate in hours from $t=0$ to $t=8$, where the electrolyzer's on/off state differs between the IPP-fixed schedule and the CHP-convexified formulation. LP prices are generally higher, reflecting the relaxation bound. CHP prices lie between IPP and MP, adjusting the IPP distortion while remaining grounded in the integer-feasible dispatch. In particular, IPP underestimates the electricity price during the period from $t=0$ to $t=8$, which over-compensates $u_3$ (heat pump) at the expense of $u_1$ (wind). These price differences across the three pricing mechanisms result in divergent individual profit allocations, as shown in 
+Table~\ref{tab:allocation_comparison_day1}: $u_1$ receives 
+1{,}163\,EUR under IPP versus 1{,}200\,EUR under CHP, and the 
+electricity--hydrogen coalition $\{u_1,u_2,u_4,u_5\}$ blocks 
+by excluding the heat sector that benefits from the 
+cross-subsidy. CHP corrects the electricity price upward in 
+these hours, rebalancing the allocation and eliminating the 
+blocking incentive. The detailed logic through which 
+non-convexity drives these price divergences is analyzed in 
+Section~\ref{sec:nonconvex_source}. 
+
+
+\begin{table}[width=\textwidth, pos=htbp]
+\centering
+\caption{Profit allocation comparison (Day~1, baseline; all monetary values in EUR/day). Individual profits are from standalone optimization under the corresponding dispatch model. Core violation $\varepsilon$ is the maximum excess of any blocking coalition.}
+\label{tab:allocation_comparison_day1}
+\small
+\begin{tabular}{@{}l c rr rrrr@{}}
+\toprule
+& & \multicolumn{2}{c}{Linear dispatch} & \multicolumn{4}{c}{Non-convex dispatch} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-8}
+Player & Owned devices & Individual & MP & Individual & IPP & CHP & PCA \\
+\midrule
+$u_1$ & Wind + ESS    & 975.41  & 1{,}325.86 & 975.41  & 1{,}163.00 & 1{,}199.62 & 1{,}624.43 \\
+$u_2$ & Electrolyzer      & 21.33   & 60.97      & 4.32    & 27.16      & 28.33      & 7.20       \\
+$u_3$ & Heat pump         & 381.64  & 574.36     & 283.15  & 492.44     & 480.26     & 471.56     \\
+$u_4$ & Elec.\ demand     & 0.00    & 79.53      & 0.00    & 167.81     & 144.91     & 0.00       \\
+$u_5$ & Hydro. demand      & 0.00    & 100.33     & 0.00    & 118.07     & 115.35     & 0.00       \\
+$u_6$ & Heat demand       & 0.00    & 167.27     & 0.00    & 134.72     & 134.72     & 0.00       \\
+\midrule
+\textbf{Total} &          & 1{,}378.38 & 2{,}308.32 & 1{,}262.88 & 2{,}103.19 & 2{,}103.19 & 2{,}103.19 \\
+\addlinespace
+Core violation $\varepsilon$ & & --- & 0.00 & --- & 2.13 & 0.00 & 158.01 \\
+Blocking coal.\ & & --- & --- & --- & $\{u_1,u_2,u_4,u_5\}$ & --- & $\{u_2,u_3,u_4,u_5,u_6\}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{community_prices_comparison_all.png}
+\caption{Community prices for electricity, heat, and hydrogen under MP, IPP, and CHP on Day~1. Market import and export prices are shown as dashed lines.  IPP and CHP price the same MIP dispatch but differ where commitment decisions are marginal ($t=0$--$8$).}
+\label{fig:prices_day1}
+\end{figure}
+
+\subsection{Nonconvex Operations as Source of Core Violation}
+\label{sec:nonconvex_source}
+The electrolyzer introduces two distinct sources of non-convexity: (i) \textit{electrolyzer unit commitments}, and (ii) \textit{nonlinear electrolysis efficiency}.
+We examine each in turn. We first consider how unit commitment affects the stability of the allocation in relation to wind intermittency. The following analysis instantiates the conceptual distinction of Section~\ref{sec:nonconvex}: each violation pattern shows how IPP's commitment-conditional pricing omits information that CHP's convex-hull pricing incorporates. We run the model for each of the 31~days in January and compare IPP and CHP allocations.
+IPP violates the core on 3 out of 31~days; CHP pricing satisfies all core constraints on every day.
+The violations are concentrated on days with moderate wind, where the electrolyzer commitment decision is marginal; days with very low or very high wind, on which all coalitions agree on the same commitment state, yield no violation. Two representative days illustrate distinct failure modes (Fig.~\ref{fig:uc_cases}).
+In each of the two representative days below, the mispriced electricity inadvertently benefits one sector at the expense of another, creating an incentive for the disadvantaged players to deviate from the grand coalition.
+
+On a day when wind output during $t$ = 0--8 is sufficient for the grand coalition to activate the electrolyzer for hydrogen export (Fig.~\ref{fig:caseA_wind}), the grand coalition uses the surplus wind to run the electrolyzer for external hydrogen sales, incurring two cold starts ($2 \times 50 = 100$\,EUR in startup costs).
+IPP evaluates the electricity shadow price with the electrolyzer commitment fixed at its optimal on-state (i.e., $z^{on} = 1$) during these hours: since the electrolyzer is already on, the electricity price of IPP at $t=0$--$8$ takes a high marginal value of producing and exporting hydrogen accordingly. However, the 100\,EUR startup cost that enabled this on-state is a fixed cost associated with the binary transition $z^{off,G} \to z^{on,G}$; this transition does not exist in the LP relaxation, nor reflected in the shadow price.
+The result is that IPP overestimates the marginal contribution of electricity to community welfare during $t = 0$--$8$ (Fig.~\ref{fig:caseA}).
+Since no internal hydrogen demand exists in these hours, as hydrogen is only exported, the distortion falls entirely on the electricity price $\pi^{E,\text{com}}$.
+Under this inflated price, the electrolyzer operator $u_2$ faces a double burden: it bears the startup cost directly in its cost function, and it purchases electricity from $u_1$ (wind + ESS) at an overestimated price, while $u_1$ is correspondingly over-compensated.
+The coalition $\{u_2, u_5\}$ can do better alone: operating the electrolyzer only during $t = 9$--$20$ when internal hydrogen demand exists requires a single startup and avoids the expensive electricity purchases of $t = 0$--$8$ altogether, so it blocks the IPP allocation.
+CHP pricing resolves this by generating both on state columns (whose objective value $w_j^q$ is reduced by the startup cost) and off state columns in the master LP.
+The startup cost is thereby internalized into the column pricing: the dual electricity price decreases relative to IPP, reflecting the true marginal value of electricity net of the commitment cost required to utilize it.
+This failure mode disappears on days with abundant wind, where electricity is sufficiently cheap that the benefit of hydrogen production outweighs the startup cost even under IPP allocation, and all coalitions agree on the commitment decision.
+
+On a day when wind output during $t = 0$--$8$ is insufficient to activate the electrolyzer (Fig.~\ref{fig:caseB_wind}), the opposite distortion arises.
+The grand coalition turns the electrolyzer off and allocates the limited wind output to $u_3$ (heat pump) to meet internal heat demand.
+IPP evaluates the electricity shadow price with the electrolyzer commitment fixed at its optimal off-state (i.e., $z^{on} = 0$) and prices electricity against the remaining uses only, namely grid export and heat pump operation, yielding a low $\pi^{E,\text{com}}$ (Fig.~\ref{fig:caseB}).
+The underestimation occurs because an incremental increase in electricity supply could, in principle, switch the electrolyzer from off to on state ($z^{off,G}\to z^{on,G}$), unlocking the value of electricity-to-hydrogen conversion.
+But IPP cannot reflect this activation: with the binary fixed at $z^{on} = 0$, the opportunity cost of hydrogen production via electrolysis is entirely absent from the shadow price.
+The deflated electricity price grants $u_3$ (heat pump) an inadvertent benefit from cheap electricity purchases, while $u_1$ (wind) is under-compensated for the missing opportunity value.
+The coalition $\{u_1, u_2, u_4, u_5\}$, which constitutes the electricity--hydrogen value chain, can achieve a higher aggregate payoff by excluding the heat sector and directing all wind output to hydrogen production, so it blocks the IPP allocation.
+CHP pricing resolves this because its master LP contains $z^{on} = 1$ columns alongside $z^{on} = 0$ columns; the value of the electrolyzer-on schedules raises the dual electricity price to reflect the opportunity cost of hydrogen production, eliminating the implicit cross-subsidy to the heat sector.
+This failure mode disappears on days with very low wind, where the electrolyzer remains off in all coalitions and no divergence in commitment decisions occurs.
+
+Both cases share a common structure: core violation arises when moderate wind places the electrolyzer's on/off decision in a range where it differs between the grand coalition and a sub-coalition.
+At the extremes, i.e., very high or very low wind, all coalitions agree on the commitment decision and IPP is accurate.
+We conducted additional comparison across startup cost levels $c^{G,\text{su}} \in \{0, 50, 100\}$ and confirmed this pattern: higher startup costs widen the range of days where commitment decisions diverge, increasing IPP violation frequency, while CHP eliminates or substantially reduces violations in all cases.
+
+We next isolate the effect of the nonlinear efficiency curve by
+setting $c^{G,\text{su}} = 0$ and comparing segments${} = 1$ (linear)
+with segments${} = 6$ (piecewise-linear with decreasing marginal
+efficiency, see Fig.~\ref{fig:convex_hull_geom_full}). Under linear efficiency, IPP and CHP allocations coincide
+and belong to the core. Under nonlinear efficiency, IPP is blocked by
+$S^* = \{u_1, u_2, u_4, u_5\}$, while CHP is not.
+The gap is concentrated in $t = 0$--$8$, when the electrolyzer is off
+in the IPP solution. IPP fixes $z^{on} = 0$ and prices electricity
+against the remaining uses only, yielding
+$\pi^{E,\text{com}} \approx 55$\,EUR/MWh; CHP assigns
+$\approx 70$\,EUR/MWh. The electrolyzer's feasible set is discontinuous---
+off at the origin or on with consumption no less than
+$\underline{p}^G = 0.15$\,MW---and CHP fills this gap by mixing off
+and on columns. Because the first-segment intercept is negative
+($\phi^0_1 < 0$), the resulting chord from the origin to the first
+segment boundary $\bar{P}_1$ has slope $19.78$\,kgH$_2$/MWh, lower
+than the segment-1 slope $\phi^1_1 = 21.12$
+(Fig.~\ref{fig:convex_hull_geom}). This chord rate is closer to
+the decreasing slopes of subsequent segments
+($\phi^1_2 = 18.8, \phi^1_3 = 17.4, \ldots$) and thus better
+reflects the diminishing marginal efficiency of the nonlinear
+production curve. CHP dual prices reflect this lower conversion rate,
+raising both $\pi^{E,\text{com}}$ and $\pi^{G,\text{com}}$ relative
+to IPP. The deflated IPP electricity price over-compensates $u_3$ (heat
+pump) at the expense of $u_1$ and $u_2$; the blocking coalition $S^*$
+is precisely the electricity--hydrogen value chain that excludes the
+heat sector benefiting from this cross-subsidy.
+
+\begin{figure}[htbp]
+\centering
+% Row 1: IP overestimated
+\begin{subfigure}[b]{0.4\textwidth}
+    \centering
+    \includegraphics[height=0.35\textwidth, width=\textwidth, keepaspectratio]{day_27_wind_profile.png}
+    \caption{\footnotesize Wind CP profile (IPP overestimated $\pi^{E,com}$)}
+    \label{fig:caseA_wind}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.56\textwidth}
+    \centering
+    \includegraphics[height=0.4\textwidth, width=\textwidth, keepaspectratio]{day_27_community_prices_comparison_elec.png}
+    \caption{\footnotesize Community electricity prices (IPP overestimated)}
+    \label{fig:caseA}
+\end{subfigure}
+\vspace{0.5em}
+% Row 2: IP underestimated
+\begin{subfigure}[b]{0.4\textwidth}
+    \centering
+    \includegraphics[height=0.35\textwidth, width=\textwidth,keepaspectratio]{day_1_wind_profile.png}
+    \caption{\footnotesize Wind CP profile (IPP underestimated $\pi^{E,com}$)}
+    \label{fig:caseB_wind}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.56\textwidth}
+    \centering
+    \includegraphics[height=0.4\textwidth, width=\textwidth, keepaspectratio]{day_1_community_prices_comparison_elec.png}
+    \caption{\footnotesize Community electricity prices (IPP underestimated)}
+    \label{fig:caseB}
+\end{subfigure}
+\caption{Effect of electrolyzer unit commitments}
+\label{fig:uc_cases}
+\end{figure}
+
+
+
+\begin{figure}[htbp]
+\label{sec:nonlinear_eff}
+\centering
+\begin{subfigure}[b]{0.85\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth, height=0.45\textwidth]{convex_hull_geometry_pwl_full.pdf}
+    \caption{Nonlinear electrolysis efficiency curve (segments=6)}
+    \label{fig:convex_hull_geom_full}
+\end{subfigure}
+\vspace{0.5em}
+\begin{subfigure}[b]{0.85\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth, height=0.45\textwidth]{convex_hull_geometry_pwl.pdf}
+    \caption{Convexified electrolysis efficiency on the first segment of the efficiency curve}
+    \label{fig:convex_hull_geom}
+\end{subfigure}
+\caption{Effect of nonlinear electrolysis efficiency on one representative day (segments${} = 6$).}
+\label{fig:eff}
+\end{figure}
+
+
+
+\subsection{Sensitivity Analysis based on Various Economic and Operational Scenarios}
+\label{sec:various_scenarios}
+To assess the robustness of the pricing mechanisms beyond the baseline setting, we consider four scenarios that each perturb one economic or operational aspect of the community. Table~\ref{tab:scenarios_stability} summarizes the modified parameters and stability results. All parameters not explicitly stated remain at their baseline values (Table~\ref{tab:baseline_params}).
+
+\begin{table*}[t]
+\centering
+\caption{Economic and operational scenarios examined in the sensitivity analysis. Each scenario modifies a subset of baseline parameters (Table~\ref{tab:baseline_params}); unmodified parameters are indicated by ``---.'' Columns IPP and CHP report the stability results; number of days (out of 31) with core violation and the mean violation magnitude on those days.}
+\label{tab:scenarios_stability}
+\small
+\begin{tabular}{@{}l ccccc cc cc@{}}
+\toprule
+ & \multicolumn{5}{c}{\textbf{Parameter setting}} & \multicolumn{2}{c}{\textbf{IPP}} & \multicolumn{2}{c}{\textbf{CHP}} \\
+\cmidrule(lr){2-6} \cmidrule(lr){7-8} \cmidrule(lr){9-10}
+\textbf{Scenario}
+  & $\pi^{G,\mathrm{emkt}}$ & $\alpha^{\mathrm{imp}}$
+  & $\alpha^{G,sto},\alpha^{H,sto}$
+  & $n_{\mathrm{HH}}$
+  & $\bar{e}^k_{\mathrm{cap}}$
+  & Viol.\ & $\overline{|\varepsilon|}$
+  & Viol.\ & $\overline{|\varepsilon|}$ \\
+ & {\scriptsize(EUR/kg)} & {\scriptsize(ratio)} & {\scriptsize(ratio)} & & {\scriptsize(ratio)} & & & & \\
+\midrule
+Baseline
+  & 3.33 & 1.5 & 0 & 700  & 1.0
+  & 3/31  & 4.01 & 0/31  & --- \\
+\addlinespace
+Low H$_2$ margin
+  & 2.0  & 3.0 & --- & ---  & ---
+  & 14/31 & 7.13 & 6/31  & 2.05 \\
+\addlinespace
+Multi-carrier storage
+  & ---  & --- & 3.0 & ---  & ---
+  & 3/31  & 1.52 & 0/31  & --- \\
+\addlinespace
+Oversupply
+  & ---  & --- & --- & 350  & ---
+  & 1/31  & 5.18 & 0/31  & --- \\
+Undersupply
+  & ---  & --- & --- & 1000 & ---
+  & 17/31 & 6.75 & 14/31 & 1.68 \\
+\addlinespace
+Export cap 20\%
+  & ---  & --- & --- & ---  & 0.2
+  & 18/31 & 9.63 & 11/31 & 0.45 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\paragraph{Low H$_2$ Margin.}
+This scenario reduces the hydrogen selling (export) price from its baseline of 3.33\,EUR/kg to 2.0\,EUR/kg and widens the import--export spread ($\alpha^{\text{imp}} = 3.0$), which increases the electricity purchase cost for electrolysis. Together, the electrolyzer's profitable operating window shrinks to the few hours when electricity is near-free.
+This widens the commitment divergence zone: in the grand coalition, access to $u_1$'s wind electricity makes it worthwhile to run the electrolyzer across multiple time blocks with additional startups, whereas the sub-coalition $\{u_2, u_5\}$ concentrates operation in one or two hours with a single startup.
+The IPP distortion mechanism is the same as in the baseline, where startup costs are not reflected in the shadow price, but the tight margin means that even a small price distortion suffices to make the sub-coalition's concentrated strategy more attractive.
+CHP pricing reduces violation frequency from 14 to 6 days and substantially lowers the violation magnitude.
+On the remaining 6~days, the sub-coalition's outside option $v(\{u_2, u_5\})$ is so close to the grand coalition's capacity to compensate $u_2$ that even undistorted prices cannot close the gap.
+
+\paragraph{Multi-Carrier Storage.}
+This scenario adds a hydrogen storage tank to the electrolyzer operator $u_2$ and a thermal storage tank to the heat pump operator $u_3$ ($\alpha^{G,sto}=\alpha^{H,sto}=3.0$, i.e., $\bar{s}^{G}=3.0\bar{p}^{G}$, $\bar{s}^{H}=3.0\bar{p}^{H}$), enabling temporal arbitrage within the hydrogen and heat sectors.
+The additional storage narrows the commitment divergence zone.
+Without storage, the electrolyzer's on/off decision is tightly coupled to instantaneous demand: if no hydrogen demand exists at a given hour, the unit must be off.
+Storage decouples production from consumption, allowing the electrolyzer to produce during cheap-electricity hours and store for later, so that more coalitions find it profitable to keep the unit on.
+As a result, commitment decisions agree across coalitions on more days, and IPP violation frequency stays at 3/31 with reduced magnitude ($\bar{|\varepsilon|} = 1.52$ vs.\ 4.01 at baseline).
+CHP pricing eliminates all remaining violations.
+The temporal arbitrage value of storage is itself a linear operation (charge/discharge within capacity bounds), so IPP shadow prices capture it accurately; the improvement comes primarily from the reduced commitment divergence rather than from better pricing of storage.
+
+\paragraph{Oversupply.}
+This scenario reduces the residential household count from the baseline of 700 to 350 ($n_{\text{HH}} = 350$), creating persistent electricity surplus.
+When electricity is cheap throughout the day, running the electrolyzer is profitable in virtually all coalitions, eliminating commitment divergence: IPP violation drops to 1/31 and CHP pricing resolves it entirely.
+Additionally, the sub-coalition's outside option weakens; with low demand and limited export capacity, deviating from the grand coalition offers little incremental value.
+
+\paragraph{Undersupply.}
+This scenario increases the household count to 1000 ($n_{\text{HH}} = 1000$), making electricity scarce. The grand coalition must coordinate the electrolyzer and heat pump to serve both hydrogen and heat demand, often requiring two cold starts.
+The sub-coalition $\{u_2, u_5\}$, which excludes the heat sector, needs only one startup to cover $u_5$'s hydrogen demand.
+This widens the commitment divergence zone, and the larger demand volumes amplify the monetary impact of the price distortion: IPP violates on 17/31 days.
+CHP pricing reduces violation frequency to 14/31 and magnitude from 6.75 to 1.68, but cannot fully close the gap because the increased $v(\{u_2, u_5\})$, driven by large hydrogen demand served with fewer startups, exceeds what the grand coalition can offer $u_2$ under any pricing rule.s
+
+
+\paragraph{Export Cap 20\%.}
+This scenario restricts external export capacity for all three energy carriers to 20\% of the baseline ($\bar{e}^k_{\text{cap}} = 0.2$), forcing the community to absorb more of its own production internally.
+This amplifies the sensitivity of internal prices to commitment decisions: when the electrolyzer is on but cannot export surplus hydrogen, the internal hydrogen price drops below production cost in some hours.
+IPP, which fixes the on-state and cannot see the off-alternative, sets hydrogen prices too low and electricity prices too high in these hours, worsening $u_2$'s position.
+IPP violates on 18/31 days with the largest average magnitude across all scenarios ($\bar{|\varepsilon|} = 9.63$).
+CHP pricing still violates on 11/31 days, but reduces the average magnitude dramatically to 0.45; the residual violations are marginal breaches of $u_2$'s individual rationality in hours where the export constraint binds tightly.
+
+\subsection{Computational Scalability with Increasing Community Size}
+\label{sec:scalability}
+
+\begin{table}[htdp]
+\centering
+\caption{Computational performance of pricing mechanisms and benchmarks across community sizes. Running times are geometric means over 31 days. Violation rate counts days with $|\varepsilon| \geq 10^{-3}$; $\overline{|\varepsilon|}$ is the average absolute violation across all days; $\overline{|\varepsilon|}/W$ expresses this as a percentage of average daily welfare. Row generation was run on two days for $|N|=15$ and terminated after exceeding two hours for $|N|=30$.}
+\label{tab:scalability}
+\small
+\begin{tabular}{l rrr rrr}
+\toprule
+& \multicolumn{3}{c}{$|N|=15$} & \multicolumn{3}{c}{$|N|=30$} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+Method & Time (s) & Viol.\ rate & $\overline{|\varepsilon|}$  & Time (s) & Viol.\ rate & $\overline{|\varepsilon|}$   \\
+\midrule
+IPP     & 1.3  & 8/31  & 2.23  & 3.1   & 31/31 & 2.69 \\
+CHP            & 24.5 & 8/31  & 0.28  & 37.3  & 31/31 & 0.35  \\
+Row generation & 2122 & 0/31   & 0.00    & $>$7200 & ---  & ---       \\
+Brute force    & \multicolumn{3}{c}{$2^{15}-1 = 32{,}767$ MIPs} & \multicolumn{3}{c}{$2^{30}-1 \approx 10^{9}$ MIPs} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+The preceding analyses relied on exhaustive enumeration of all $2^{|N|}-1$ coalitions to verify core stability, which was computationally feasible for the six-player community (63 coalition problems). However, this brute-force approach becomes prohibitive as the community grows. An alternative is the row-generation algorithm of \cite{drechsel2010computing}, which iteratively identifies blocking coalitions to compute a core allocation without exhaustive enumeration. While significantly faster than brute force, this approach cannot ensure a convergence rate quantitatively better than the $2^{|N|}-1$ worst case; moreover, it does not produce market-clearing prices for each energy carrier. A key advantage of the duality-based pricing mechanisms is that they produce an allocation by solving only the grand coalition problem, without evaluating any coalition value $v(S)$. In this subsection, we construct communities of $|N|=15,30$ with prosumers having heterogeneous technology assets as described in Table~\ref{tab:player_config}. We assess (i) how frequently the CHP and IPP allocations satisfy core stability, and (ii) how the computation times compare to brute-force enumeration. For $|N|=15,30$ communities, the number of coalitions reaches 32767, approximately $10^9$, respectively.
+\begin{table}[htbp]
+\centering
+\caption{Player configurations for the 15-player and 30-player communities. Columns indicate technology ownership: wind (W), solar (S), electrolyzer (ELZ), heat pump (HP), electric storage (E-St), hydrogen storage (G-St), thermal storage (H-St), electricity load demand (E-D), hydrogen load demand (G-D), heat load demand (H-D), and flexible electricity demand (E-fl). Players with integer decision variables are marked with $\bullet$ in the last column.}
+\label{tab:player_config}
+\small
+\begin{tabular}{cl ccc cc ccc ccc cc}
+\toprule
+& & \multicolumn{2}{c}{Ren. Generator} & \multicolumn{2}{c}{S-C tech.} & \multicolumn{3}{c}{Storage} & \multicolumn{3}{c}{Demand (nfl.)} & & \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-9} \cmidrule(lr){10-12}
+& Player & W & S & ELZ & HP & E-St & G-St & H-St & E-D & G-D & H-D & E-fl & Int. \\
+\midrule
+\multicolumn{14}{l}{\textit{Baseline ($|N|=6$)}} \\
+& u1  & $\bullet$ &  &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u2  &  &  & $\bullet$ &  &  &  &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u3  &  &  &  & $\bullet$ &  &  &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u4  &  &  &  &  &  &  &  & $\bullet$ &  &  &  &  \\
+& u5  &  &  &  &  &  &  &  &  & $\bullet$ &  &  &  \\
+& u6  &  &  &  &  &  &  &  &  &  & $\bullet$ &  &  \\
+\midrule
+\multicolumn{14}{l}{\textit{Added for $|N|=15$}} \\
+& u7  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u8  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u9  &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & $\bullet$ & $\bullet$ \\
+& u10 & $\bullet$ &  & $\bullet$ &  & $\bullet$ & $\bullet$ &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u11 &  &  &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u12 &  & $\bullet$ &  &  &  &  &  & $\bullet$ &  &  &  &  \\
+& u13 &  &  &  &  &  &  &  &  & $\bullet$ &  &  &  \\
+& u14 &  &  &  & $\bullet$ &  &  &  &  &  & $\bullet$ & $\bullet$ & $\bullet$ \\
+& u15 &  &  &  &  &  &  &  & $\bullet$ &  & $\bullet$ &  &  \\
+\midrule
+\multicolumn{14}{l}{\textit{Added for $|N|=30$}} \\
+& u16 & $\bullet$ &  &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u17 &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u18 &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u19 &  &  & $\bullet$ &  &  &  &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u20 &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & $\bullet$ & $\bullet$ \\
+& u21 &  & $\bullet$ & $\bullet$ &  &  &  &  &  &  &  & $\bullet$ & $\bullet$ \\
+& u22 &  &  &  &  & $\bullet$ &  &  &  &  &  &  &  \\
+& u23 &  & $\bullet$ &  &  &  &  &  & $\bullet$ &  & $\bullet$ &  &  \\
+& u24 &  &  &  &  & $\bullet$ &  &  & $\bullet$ &  & $\bullet$ &  &  \\
+& u25 &  &  &  &  &  &  &  &  & $\bullet$ &  &  &  \\
+& u26 &  & $\bullet$ &  &  &  &  &  &  & $\bullet$ &  &  &  \\
+& u27 &  &  &  &  &  &  &  & $\bullet$ &  & $\bullet$ &  &  \\
+& u28 &  &  &  &  &  &  &  & $\bullet$ &  & $\bullet$ &  &  \\
+& u29 &  &  &  &  & $\bullet$ &  &  & $\bullet$ & $\bullet$ &  &  &  \\
+& u30 &  &  &  &  &  &  &  &  & $\bullet$ & $\bullet$ &  &  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- Player description paragraphs ---
+
+The six-player baseline community consists of one wind producer with electric storage (u1), one electrolyzer (u2), one heat pump (u3), and three pure consumers for electricity, hydrogen, and heat (u4--u6), respectively. To scale this setting, we augment the community with nine additional players that introduce technology heterogeneity, prosumer structures, and inter-sector competition, such as a solar generator with battery storage (u7) and a vertically integrated wind--electrolyzer operator (u10) on the supply side, and a residential prosumer with rooftop solar (u12) and a multi-carrier consumer (u15) on the demand side. Storage ownership is deliberately varied across otherwise similar conversion technologies (e.g., u8 owns hydrogen storage whereas u2 does not), and a standalone battery operator (u11) participates solely through temporal arbitrage. This configuration yields six players with integer commitment variables (u2, u3, u8, u9, u10, u14). The 30-player community retains all 15 players and appends 15 more that broaden each sector proportionally: the supply side gains additional renewable generators, electrolyzers both with and without dedicated storage, and heat pumps, while the demand side is populated with archetypes representative of real energy communities---residential complexes, hydrogen refueling stations, and industrial facilities---several of which also own distributed assets such as rooftop solar (u23, u26) or behind-the-meter batteries (u24, u29). The capacity and demand parameters for all added players are reported in Table~\ref{tab:capacity_multipliers} in Appendix~\ref{app:additional}, with multipliers chosen so that aggregate demand grows roughly in proportion to aggregate supply when scaling from 15 to 30 players. The 30-player community contains ten players with integer commitment variables, and exhaustive enumeration of its $2^{30}-1 \approx 10^9$ coalitions is computationally infeasible.
+
+% --- Results paragraph ---
+
+Table~\ref{tab:scalability} summarizes the computational results. For $|N|=15$, both IPP allocation and CHP produce allocations in roughly one and 25 seconds, respectively, while the row-generation algorithm requires over 35 minutes per instance to certify a core allocation. Brute-force enumeration would demand solving $32{,}767$ coalition MIPs. Both IPP and CHP violate core constraints on 8 of 31 days, but CHP reduces the average violation by an order of magnitude (0.28 versus 2.23\,EUR), consistent with the six-player findings. For $|N|=30$, IPP and CHP solve times increase modestly to 3 and 37 seconds, respectively, whereas row generation exceeds a two-hour time limit without converging. The bottleneck is the separation subproblem: at each iteration, identifying the most violated coalition requires solving a large MIP with poor LP relaxation, whose difficulty grows rapidly with $|N|$. All 31 days exhibit violations under both pricing mechanisms, but the magnitudes remain negligible relative to daily community welfare: 0.045\% for IPP and 0.006\% for CHP. These results demonstrate that the duality-based pricing mechanisms scale gracefully with community size, producing near-core allocations with market-clearing prices in under a minute, even when exact methods become computationally prohibitive.
+
+
+
+\section{Conclusions}
+\label{sec:conclusions}
+
+This paper studied the profit allocation problem in sector-coupled energy communities integrating electricity, hydrogen, and heat through electrolyzers, heat pumps, and storage systems. In the cooperative game perspective, we showed that the linear energy community game is an instance of Owen's linear production games, establishing that marginal pricing on the community balance constraints yields Owen solutions that belong to the core---thereby unifying two strands of duality-based stability results from electricity market design and cooperative game theory that had developed independently. For non-convex dispatch involving unit commitment and nonlinear electrolysis efficiency, we adapted integer programming pricing and convex hull pricing to the cooperative community setting, proving that CHP preserves the linear production game structure in the convexified game through Dantzig-Wolfe reformulation of the community dispatch. Numerical experiments on a realistic community revealed that IPP violates core stability when commitment decisions diverge between the grand coalition and sub-coalitions, while CHP internalizes commitment costs through convexification and eliminates or substantially reduces these violations across diverse economic and operational regimes. The scalability study on communities of up to 30 players confirmed that both pricing mechanisms produce near-core allocations with interpretable market-clearing prices in under a minute, whereas exact methods become computationally prohibitive.
+
+From a managerial and policy perspective, our findings highlight that the design of pricing mechanisms is as critical as the physical integration of sector-coupling technologies. While sector coupling delivers substantial efficiency gains, these benefits may not be sustainable without allocation mechanisms that ensure stability among participants. In particular, conventional marginal pricing can fail in the presence of non-convex technologies such as electrolyzers and heat pumps, leading to cross-subsidies and incentives for coalition deviation. Our results suggest that convex hull pricing provides a practical and scalable approach to align economic incentives with system-wide efficiency in multi-energy communities. For policymakers, this implies that future local energy market designs should explicitly account for non-convex operational characteristics and support pricing rules that internalize commitment and flexibility costs. For system operators and community managers, incorporating such pricing mechanisms can enhance participation incentives, reduce the risk of fragmentation, and ultimately support the long-term viability of sector-coupled energy systems.
+
+Several directions merit further investigation. First, while the core guarantees stability against coalition deviations, it does not address the more subtle concept, \textit{fairness}; exploring fairness-oriented solution concepts such as the Shapley value and their relationship to the duality-based pricing mechanisms developed here would complement the stability analysis. Second, the present model assumes a copperplate community without network constraints; when prosumers are geographically dispersed across a distribution network, dual variables would be separated into locational price components, and whether the linear production game structure needs to be investigated. Third, incorporating renewable generation uncertainty through stochastic cooperative game would allow examining how risk heterogeneity among prosumers affects allocation stability and whether the Owen solution framework can be extended to risk-adjusted settings. Finally, integrating the operational dispatch game with a capacity investment stage would enable jointly designing technology deployment incentives and profit allocation in a consistent two-stage framework, addressing the question of which assets prosumers should invest in to maximize both individual and collective value from cooperation.
+
+
+\section*{Acknowledgments}
+
+Acknowledge funding sources and collaborators. For example: This work was supported by the National Research Council of Science and Technology (No. CRC23033-530) and Korea Environmental Industry and Technology Institute (No. RS-2025-02213125) funded by the Korea government.
+
+% To print the credit authorship contribution details
+\printcredits
+
+%% Loading bibliography style file
+\bibliographystyle{elsarticle-num}
+
+% Loading bibliography database
+\bibliography{reference}
+
+
+\appendix
+
+
+\section{Proofs}
+\label{app:proofs}
+
+\subsection{Proof of Lemma \ref{lem:lpg_reduction}}
+\label{app:proof_lem_lpg_reduction}
+\begin{proof}
+ To match the linear production game structure from Definition \ref{def:lpg}, define for each prosumer $j$ and time period $t$:
+\begin{align*}
+\lambda_j &= (\lambda_j^{q_1}, \ldots, \lambda_j^{q_{|Q_j|}})^\top \in \mathbb{R}^{|Q_j|}, \\
+w_j &= (w_j^{q_1}, \ldots, w_j^{q_{|Q_j|}})^\top \in \mathbb{R}^{|Q_j|}, \\
+A_{jt} &= \begin{pmatrix} a_{jt}^{E,q_1} & \cdots & a_{jt}^{E,q_{|Q_j|}} \\ a_{jt}^{G,q_1} & \cdots & a_{jt}^{G,q_{|Q_j|}} \\ a_{jt}^{H,q_1} & \cdots & a_{jt}^{H,q_{|Q_j|}} \end{pmatrix} \in \mathbb{R}^{3 \times |Q_j|},\;A_{j}=\begin{pmatrix}
+    A_{j1} \\ \cdots \\ A_{j|T|}
+\end{pmatrix} \\
+b_{jt} &= (1, 0, 0, \ldots, 0)^\top \in \mathbb{R}^{n},\;b_{j}=\begin{pmatrix}
+    b_{j1} \\ \cdots \\ b_{j|T|}
+\end{pmatrix}
+\end{align*}
+where $b_j$ has 1 in the $j$-th position and 0 elsewhere. Then \eqref{eq:dwr_obj}--\eqref{eq:dwr_convex} can be written as:
+\begin{align}
+\max_{\lambda} \quad & \sum_{j \in N} w_j^\top \lambda_j + w_0^\top \lambda_0 \label{eq:lpg_form_obj}\\
+\text{s.t.} \quad & A_0 \lambda_0 + \sum_{j \in N} A_j \lambda_j = \sum_{j \in N} b_j, \label{eq:lpg_form_constraint}\\
+& \lambda_0,\lambda_j \geq 0, \quad \forall j \in N, \nonumber
+\end{align}
+where we set $w_0 = 0$, $\lambda_0 = 0$, and $A_0$ be a matrix of zero elements. The constraint then can be equally represented by two inequalities, i.e., $A_{0}\lambda_{0}+\sum_{j\in N}A_{j}\lambda_{j}\leq \sum_{j\in N}b_{j},\;-A_{0}\lambda_{0}+\sum_{j\in N}(-A_{j})\lambda_{j} \leq \sum_{j\in N}(-b_{j})$. This matches the form of linear production games introduced in Definition \ref{def:lpg}, establishing the equivalence.
+\end{proof}
+
+\subsection{Proof of Proposition \ref{prop:owen_dwr}}
+\label{app:proof_prop_owen_dwr}
+\begin{proof}
+The dual problem of Dantzig-Wolfe reformulation  \eqref{eq:dwr_obj}-\eqref{eq:dwr_nonneg} is written as follows:
+\begin{align}
+    (\text{D-DWR}_{N}):\;\min_{\sigma ,\pi}\;&\sum_{j\in N}\sigma_{j} \\
+    s.t.\;&\sum_{k\in \{E,G,H\}}\left(\sum_{t\in T}a_{jt}^{k,q}\pi^{k,com}\right)+\sigma_{j} \geq w_{j}^{q},\;\forall q\in Q_{j},\forall j\in N\quad (\lambda_{j}^{q})\\
+    &\pi^{k,com},\sigma_{j}\text{ free}\;\forall k\in \{E,G,H\},\forall j\in N
+\end{align}
+    For any coalition $S\subseteq N$, following bound holds, implying the core-membership constraints in \eqref{eq:core_membership}.
+    \begin{align*}
+       \sum_{j\in S}\chi^{ow}_{j}= \sum_{j\in S}\sigma_{j}^{*} \geq \text{val}(\text{D-DWR}_{S})=\text{val}(\text{DWR}_{S})=\text{val}(\text{DP}_{S}).
+    \end{align*}
+    The first inequality holds because any feasible solution $\pi,\sigma$ of D-DWR$_{N}$ are necessarily feasible to D-DWR$_{S}$. The second equality holds from strong duality of linear program. 
+\end{proof}
+\subsection{Proof of Theorem \ref{theorem:mp_owen}}
+\label{app:proof_theorem_mp_owen}
+\begin{proof}
+For each prosumer $j\in N$, following complementary slackness conditions holds:
+\begin{align*}
+    &\left(\sigma_{j}^{*}-w_{j}^{q}+\sum_{k\in \{E,G,H\}}\sum_{t\in T}a_{jt}^{k,q}(\pi^{k,com})^{*}\right)(\lambda_{j}^{q})^{*}=0\;\forall q\in Q_{j}
+\end{align*}
+From convexity constraints \eqref{eq:dwr_convex}, there exists at least one extreme point index $q\in Q_{j}$ where positive amount is allocated to $(\lambda_{j}^{q})^{*}$. Then for such $q$,
+\begin{align}
+\sigma_{j}^{*}&=w_{j}^{q}-\sum_{k\in \{E,G,H\}}\sum_{t\in T}a_{jt}^{k,q}(\pi^{k,com})^{*} \label{eq:proof_step1}\\
+&=\sum_{k \in \{E,G,H\}}\sum_{t\in T} \left[ \pi_{t}^{k,emkt} e_{jt}^{k,mkt,q} - \pi_{t}^{k,imkt} i_{jt}^{k,mkt,q} - c_j^k p_{jt}^{k,q} + u_j^k d_{jt}^{k,q} + \pi_{t}^{k,com*} \left( e_{jt}^{k,com,q} - i_{jt}^{k,com,q} \right)\right] \label{eq:proof_step2}\\
+&=\max_{x_{j}\in \mathcal{X}^{LP}_{j}}\left\{\sum_{k \in \{E,G,H\}}\sum_{t\in T} \left[ \pi_{t}^{k,emkt} e_{jt}^{k,mkt} - \pi_{t}^{k,imkt} i_{jt}^{k,mkt} - c_j^k p_{jt}^{k} + u_j^k d_{jt}^{k} + \pi_{t}^{k,com*} \left( e_{jt}^{k,com} - i_{jt}^{k,com} \right)\right]\right\} \label{eq:proof_step3}\\
+&=\max_{x_{j}\in \mathcal{X}^{LP}_{j}}\left\{\sum_{k \in \{E,G,H\}}\sum_{t\in T}  \left[\pi_{t}^{k,emkt} e_{jt}^{k,mkt} - \pi_{t}^{k,imkt} i_{jt}^{k,mkt} - c_j^k p_{jt}^{k} + u_j^k d_{jt}^{k} + \pi_{t}^{k,MP} \left( e_{jt}^{k,com} - i_{jt}^{k,com} \right)\right]\right\} \label{eq:proof_step4}\\
+&=\chi_{j}^{MP}. \label{eq:proof_step5}
+\end{align}
+Equality \eqref{eq:proof_step2} follows from expanding the definitions of $w_{j}^{q}$ and $a_{jt}^{k,q}$. Equality \eqref{eq:proof_step3} holds from the lagrangian duality. Equality \eqref{eq:proof_step4} holds because the set of optimal dual multipliers for the linking constraints \eqref{eq:dwr_balance} in the DWR master equals the set of optimal dual multipliers for the community balance constraints in (DP$_{N}$) (refer to Proposition~6.3 in \cite{desrosiers2024branch}). Since (DP$_{N}$) is a linear program, the latter are precisely the shadow prices, so $(\pi^{k,com})^{*}$ is a valid shadow price $\pi_{t}^{k,MP}$. Equality \eqref{eq:proof_step5} holds because the optimizer of \eqref{eq:proof_step4} is attained at the optimal dispatch $x_{j}^{*}$ of (DP$_{N}$), which recovers the definition of $\chi_{j}^{MP}$ in \eqref{eq:marginal_pricing}.
+\end{proof}
+
+\subsection{Proof of Proposition \ref{prop:chp_core}}
+\label{app:prop_chp_core}
+\begin{proof}
+The proof proceeds in three steps: (i) we verify that the convexified game $\Gamma^{CHP}$ satisfies the structural conditions of Lemma~\ref{lem:lpg_reduction}, (ii) we establish core membership of the dual allocation, and (iii) we show that the CHP allocation coincides with this dual allocation.
+ 
+\medskip
+\noindent\textit{Step~1: LPG structure.}
+Since $\mathcal{X}_j^{MIP}$ is bounded (all capacity, storage, and demand variables have finite upper bounds), its convex hull $\mathcal{X}_j^{CHP} := \mathrm{conv}(\mathcal{X}_j^{MIP})$ is a bounded polyhedron for each $j \in N$.
+The convexified dispatch problem for any coalition $S \subseteq N$ is
+\begin{align}
+(\mathrm{DP}_{S}^{CHP}):\; \max_{x,y}\quad
+& \sum_{\substack{j \in S,\, t\in T, \\ k \in \{E,G,H\}}}
+\left(\pi^{k,emkt}_{t} e_{jt}^{k,mkt} - \pi^{k,imkt}_{t} i_{jt}^{k,mkt}
++ u_{jt}^k d_{jt}^{k,load} - c_{jt}^k p_{jt}^k - c_{j}^{k,su}\, z_{jt}^{k,su}\right)\label{eq:chp_obj}\\
+\mathrm{s.t.}\quad
+& \sum_{j \in S} (i_{jt}^{k,com} - e_{jt}^{k,com}) = 0,
+\quad \forall t\in T,\; \forall k \in \{E,G,H\},\quad (\pi_{t}^{k,com})
+\label{eq:chp_balance}\\
+& (x_j, y_j) \in \mathcal{X}_j^{CHP},\quad \forall j \in S.
+\label{eq:chp_operational}
+\end{align}
+This is a linear program with the same separable structure as (DP$_S$) in the linear case: the community balance constraints~\eqref{eq:chp_balance} are the only coupling constraints, and each $\mathcal{X}_j^{CHP}$ is a bounded polyhedron.
+Applying the Dantzig--Wolfe reformulation to $(\mathrm{DP}_S^{CHP})$, with $Q_j$ indexing the extreme points of $\mathcal{X}_j^{CHP}$, yields the master problem $(\mathrm{DWR}_N^{CHP})$ in \eqref{eq:dwr_mip_obj}--\eqref{eq:dwr_chp_nonneg}.
+The resulting formulation has the identical structure to $(\mathrm{DWR}_N)$ in the linear case, with the only difference being the column set $Q_j$.
+Therefore, the argument of Lemma~\ref{lem:lpg_reduction} carries over verbatim, and $\Gamma^{CHP}$ is an instance of linear production games.
+ 
+\medskip
+\noindent\textit{Step~2: Core membership of the dual allocation.}
+The dual of $(\mathrm{DWR}_N^{CHP})$ is
+\begin{align}
+(\mathrm{D\text{-}DWR}_{N}^{CHP}):\;\min_{\pi,\,\sigma}\;&\sum_{j\in N}\sigma_{j} \nonumber\\
+\mathrm{s.t.}\;&\sum_{k\in \{E,G,H\}} \sum_{t\in T} a_{jt}^{k,q}\,\pi_{t}^{k,com} + \sigma_{j}\geq w_{j}^{q},\;\forall q\in Q_{j},\;\forall j\in N, \label{eq:dual_chp_constraint}\\
+&\pi_{t}^{k,com},\;\sigma_{j}\;\text{free},\;\forall t\in T,\;\forall k\in \{E,G,H\},\;\forall j\in N. \nonumber
+\end{align}
+Let $(\pi^*,\sigma^*)$ be an optimal solution.
+For any coalition $S \subseteq N$, the restriction of $(\mathrm{D\text{-}DWR}_N^{CHP})$ to the constraints indexed by $j \in S$ yields a relaxation of $(\mathrm{D\text{-}DWR}_S^{CHP})$, so $(\pi^*,\{\sigma_j^*\}_{j\in S})$ is feasible for $(\mathrm{D\text{-}DWR}_S^{CHP})$.
+By weak duality of the subcoalition's DWR and strong duality of its LP (which holds because $\mathcal{X}_j^{CHP}$ is bounded and the problem is feasible), we obtain
+\begin{equation*}
+\sum_{j\in S}\sigma_{j}^{*} \;\geq\; \mathrm{val}(\mathrm{D\text{-}DWR}_{S}^{CHP}) \;=\; \mathrm{val}(\mathrm{DWR}_{S}^{CHP}) \;=\; v^{CHP}(S),\quad \forall\, S\subseteq N.
+\end{equation*}
+This is exactly the argument of Proposition~\ref{prop:owen_dwr} applied to the convexified game.
+Together with efficiency $\sum_{j\in N}\sigma_j^* = v^{CHP}(N)$ (from strong duality of the grand coalition problem), the allocation $\sigma^*$ is an Owen solution and belongs to the core of $\Gamma^{CHP}$.
+ 
+\medskip
+\noindent\textit{Step~3: Equivalence with the CHP allocation.}
+Since $(\mathrm{DWR}_N^{CHP})$ and $(\mathrm{DP}_N^{CHP})$ are equivalent LP reformulations, the set of optimal dual multipliers on the community balance constraints coincides (cf.\ Proposition~6.3 of \cite{desrosiers2024branch}), so $\pi_t^{k,*} = \pi_t^{k,CHP}$.
+Applying the complementary slackness argument of Theorem~\ref{theorem:mp_owen} to the convexified game then yields $\sigma_j^* = \chi_j^{CHP}$ for all $j \in N$.
+Hence the CHP allocation is an Owen solution of $\Gamma^{CHP}$ and belongs to its core.
+\end{proof}
+
+\section{Additional Computational Results}
+\label{app:additional}
+
+Table~\ref{tab:capacity_multipliers} reports the capacity and demand multipliers used to parameterize the additional players in the 30-player community discussed in Section~\ref{sec:scalability}.
+
+\begin{table}[h]
+\centering
+\caption{Capacity and demand multipliers for players added in the 30-player community. All values are expressed relative to the corresponding baseline parameter (e.g., 0.8 denotes 80\% of the baseline wind capacity). A dash indicates that the player does not own the corresponding asset or have the corresponding demand.}
+\label{tab:capacity_multipliers}
+\small
+\begin{tabular}{cl l rrr rrr rrr}
+\toprule
+& & & \multicolumn{3}{c}{Generation} & \multicolumn{3}{c}{Storage} & \multicolumn{3}{c}{Demand} \\
+\cmidrule(lr){4-6} \cmidrule(lr){7-9} \cmidrule(lr){10-12}
+& Player & Archetype & W & S & ELZ/HP & E-St & G-St & H-St & E-D & G-D & H-D \\
+\midrule
+\multicolumn{12}{l}{\textit{Supply-side}} \\
+& u16 & Wind producer      & 0.8 & ---  & ---  & 0.8 & --- & --- & --- & --- & --- \\
+& u17 & Solar producer      & --- & 1.3  & ---  & 1.3 & --- & --- & --- & --- & --- \\
+& u18 & H$_2$ producer      & --- & ---  & 1.2  & --- & 1.2 & --- & --- & --- & --- \\
+& u19 & H$_2$ producer      & --- & ---  & 0.6  & --- & --- & --- & --- & --- & --- \\
+& u20 & Heat producer        & --- & ---  & 1.0  & --- & --- & 1.0 & --- & --- & --- \\
+& u21 & Solar--H$_2$         & --- & 0.5  & 0.8  & --- & --- & --- & --- & --- & --- \\
+& u22 & Battery operator     & --- & ---  & ---  & 1.5 & --- & --- & --- & --- & --- \\
+\midrule
+\multicolumn{12}{l}{\textit{Demand-side}} \\
+& u23 & Residential prosumer & --- & 0.3  & ---  & --- & --- & --- & 0.5 & --- & 0.4 \\
+& u24 & Residential prosumer & --- & ---  & ---  & 1.0 & --- & --- & 0.8 & --- & 0.3 \\
+& u25 & Residential          & --- & ---  & ---  & --- & --- & --- & 0.6 & --- & 0.3 \\
+& u26 & Refueling prosumer   & --- & 0.4  & ---  & --- & --- & --- & --- & 0.6 & --- \\
+& u27 & Refueling station    & --- & ---  & ---  & --- & --- & --- & --- & 0.5 & --- \\
+& u28 & Industrial           & --- & ---  & ---  & --- & --- & --- & 0.9 & 0.5 & --- \\
+& u29 & Industrial prosumer  & --- & ---  & ---  & 1.0 & --- & --- & 0.7 & 0.4 & --- \\
+& u30 & Heat consumer        & --- & ---  & ---  & --- & --- & --- & --- & --- & 0.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\end{document}

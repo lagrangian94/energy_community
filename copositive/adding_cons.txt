@@ -1,0 +1,231 @@
+# Two Additional Homogeneous Coupling Constraints: Reserve (Up/Down) and Peak Penalty
+
+**Context.** Beyond the community energy balance (our baseline coupling
+constraint), this note formalizes two additional **homogeneous coupling
+constraints** — i.e. coupling constraints whose right-hand side is zero once the
+shared variable is moved to the left — adapted from the community-market
+literature: **frequency reserve provision (asymmetric up/down)** and a
+**community peak-power penalty**. Both preserve the linear-production-game (LPG)
+structure through an active common-technology block $(A_0, c_0, x_0)$.
+
+Notation follows the preprint: prosumers $j\in N$, carriers $k\in\{E,G,H\}$,
+periods $t\in T$, coalition $S\subseteq N$. Market exchange carries superscript
+$mkt$, community exchange $com$. Hourly resolution, so $\Delta T = 1$ throughout
+(stated as a footnote; power in kW and energy-per-hour in kWh coincide
+numerically).
+
+All three coupling constraints (balance, reserve, peak) are **homogeneous** in the
+sense that their right-hand side is $0 = \sum_{j\in S} 0$: no coalition member
+endows the constraint. In the LPG template
+$$
+v(S)=\max_{x_j, x_0\ge 0}\Bigl\{\sum_{j\in S}c_j^\top x_j + c_0^\top x_0
+:\ \sum_{j\in S}A_j x_j + A_0 x_0 \le \sum_{j\in S}b_j\Bigr\},
+$$
+these rows have $b_j = 0$, with any shared decision carried by the
+common-technology block $(A_0, c_0, x_0)$.
+
+---
+
+## 1. Baseline recap: the balance coupling
+
+$$
+\sum_{j\in S}\bigl(i_{jt}^{k,com} - e_{jt}^{k,com}\bigr) = 0,
+\qquad \forall t\in T,\ \forall k\in\{E,G,H\}.
+\tag{C0}
+$$
+This is the $b_j = 0$, $A_0 = \mathbf 0$ case: common technology inactive. Reserve
+and peak **activate** $(A_0, c_0, x_0)$.
+
+---
+
+## 2. Coupling constraint I — frequency reserve (asymmetric up/down)
+
+### 2.1 Design decision (justified by the literature scan)
+Reserve is a **single electricity-side service** sold to the grid. There is **no
+hydrogen or heat reserve** as a traded ancillary service (hydrogen is buffered by
+line-pack; heat by thermal inertia; neither is bid as an ancillary product). Every
+sector-coupling asset — electric storage, electrolyzer, heat pump — contributes to
+the *same* power reserve. Hence reserve variables carry **no carrier index**.
+
+Following the electrolyzer-reserve literature (Saretta et al. 2023; Samani et al.
+2020), we split reserve into **separate upward and downward products** rather than
+a single symmetric one, since sector-coupling loads have asymmetric headroom
+(a partially-loaded electrolyzer can shed or add different amounts of power).
+The two community-wide variables are
+$$
+r^{up}\ge 0 \quad(\text{sold at }\pi^{up}),
+\qquad
+r^{dn}\ge 0 \quad(\text{sold at }\pi^{dn}).
+$$
+
+### 2.2 Per-prosumer reserve headroom (stays inside $\mathcal X_j$)
+Let $r_{jt}^{+}, r_{jt}^{-}\ge 0$ be prosumer $j$'s aggregate up/down reserve
+offered at $t$ (summed over its storage, electrolyzer, heat pump). Each asset's
+contribution is bounded by its own power and energy headroom, using only
+prosumer $j$'s variables.
+
+**Electric storage** (state of charge $s_{jt}^E$, charge/discharge
+$b_{jt}^{E,ch}, b_{jt}^{E,dis}$, efficiencies $\nu_j^{E,ch}, \nu_j^{E,dis}$):
+$$
+\bigl(b_{jt}^{E,dis}-b_{jt}^{E,ch}\bigr) + r_{jt}^{+,\mathrm{sto}}
+\le \overline b_j^{E,dis},
+\qquad
+\bigl(b_{jt}^{E,ch}-b_{jt}^{E,dis}\bigr) + r_{jt}^{-,\mathrm{sto}}
+\le \overline b_j^{E,ch},
+$$
+$$
+r_{jt}^{+,\mathrm{sto}}\le \nu_j^{E,dis}\bigl(s_{jt}^E-\underline s_j^E\bigr),
+\qquad
+r_{jt}^{-,\mathrm{sto}}\le \tfrac{1}{\nu_j^{E,ch}}\bigl(\overline s_j^E-s_{jt}^E\bigr).
+$$
+
+**Electrolyzer** (a load: upward reserve = reduce consumption toward its minimum;
+downward = increase toward capacity), gated by the on/standby state:
+$$
+\tilde d_{jt}^{E\to G,sc} - r_{jt}^{+,\mathrm{els}}
+\ge \underline d^{E\to G,sc} z_{jt}^{G,on} + c^{G,lb} z_{jt}^{G,sb},
+$$
+$$
+\tilde d_{jt}^{E\to G,sc} + r_{jt}^{-,\mathrm{els}}
+\le \overline d^{E\to G,sc} z_{jt}^{G,on} + c^{G,lb} z_{jt}^{G,sb}.
+$$
+
+**Heat pump** (same load logic, gated by its on-state):
+$$
+d_{jt}^{E\to H,sc} - r_{jt}^{+,\mathrm{hp}}
+\ge \underline c^H\,\overline d^{E\to H,sc} z_{jt}^{H,on},
+\qquad
+d_{jt}^{E\to H,sc} + r_{jt}^{-,\mathrm{hp}}
+\le \overline c^H\,\overline d^{E\to H,sc} z_{jt}^{H,on}.
+$$
+
+Aggregating per prosumer,
+$r_{jt}^{+} := r_{jt}^{+,\mathrm{sto}}+r_{jt}^{+,\mathrm{els}}+r_{jt}^{+,\mathrm{hp}}$
+and likewise $r_{jt}^{-}$. **All rows above are prosumer-private** — they enter
+$A_j$, never $A_0$.
+
+### 2.3 The coupling rows (activate the common variables)
+Each sold reserve product cannot exceed what the coalition can deliver in **every**
+hour (the scarcest hour binds), independently for up and down:
+$$
+r^{up} \le \sum_{j\in S} r_{jt}^{+}, \qquad \forall t\in T,
+\tag{C-Res$\uparrow$}
+$$
+$$
+r^{dn} \le \sum_{j\in S} r_{jt}^{-}, \qquad \forall t\in T.
+\tag{C-Res$\downarrow$}
+$$
+Moving the shared variables left gives $r^{up} - \sum_{j\in S} r_{jt}^{+}\le 0
+= \sum_{j\in S}0$ (and similarly for $r^{dn}$): homogeneous, with $x_0 \ni
+(r^{up}, r^{dn})$, $A_0$ carrying $+1$ on the respective shared variable, member
+coefficients $-1$, and $b_j = 0$.
+
+### 2.4 Objective
+Add $+\pi^{up} r^{up} + \pi^{dn} r^{dn}$ (components of $c_0$, positive signs).
+
+---
+
+## 3. Coupling constraint II — community peak penalty
+
+### 3.1 Variable and constraint
+The community pays $\delta^{peak}$ per unit of peak net grid import $p\ge 0$
+(electricity, $k=E$):
+$$
+\sum_{j\in S}\bigl(i_{jt}^{E,mkt} - e_{jt}^{E,mkt}\bigr) \le p, \qquad \forall t\in T.
+\tag{C-Peak}
+$$
+Moving $p$ left: $\sum_{j\in S}(i_{jt}^{E,mkt}-e_{jt}^{E,mkt}) - p \le 0
+= \sum_{j\in S}0$: homogeneous, $x_0 \ni p$, $A_0$ carrying $-1$ on $p$, member
+coefficients $\pm 1$ on grid exchange, $b_j = 0$. Since $p$ carries only the
+negative cost $-\delta^{peak}p$, at optimum $p = \max_t \sum_{j\in S}
+(i_{jt}^{E,mkt}-e_{jt}^{E,mkt})$, the coalition's net-import peak.
+
+### 3.2 Objective
+Add $-\delta^{peak} p$ (a component of $c_0$, **negative** sign).
+
+### 3.3 Where the netting benefit lives
+Net import is summed over members *before* the max, so simultaneous
+import/export of different prosumers partially cancels — entirely within the
+coalition sum on the LHS of a single row, with no cross-prosumer term in $A_0$.
+Fully LPG-compatible.
+
+---
+
+## 4. Combined common-technology block
+
+$$
+x_0 = \bigl(r^{up},\, r^{dn},\, p\bigr)^\top \ge 0,
+\qquad
+c_0 = \bigl(+\pi^{up},\, +\pi^{dn},\, -\delta^{peak}\bigr)^\top.
+$$
+
+| Row (per $t$) | $r^{up}$ | $r^{dn}$ | $p$ | member coeff | RHS |
+|---|---|---|---|---|---|
+| balance (C0) | $0$ | $0$ | $0$ | $i^{com}-e^{com}$ (eq.) | $0$ |
+| reserve up (C-Res$\uparrow$) | $+1$ | $0$ | $0$ | $-r_{jt}^{+}$ | $0$ |
+| reserve down (C-Res$\downarrow$) | $0$ | $+1$ | $0$ | $-r_{jt}^{-}$ | $0$ |
+| peak (C-Peak) | $0$ | $0$ | $-1$ | $i^{mkt}-e^{mkt}$ | $0$ |
+
+Everything else is inside $\mathcal X_j$.
+
+---
+
+## 5. Why the reduction survives
+
+Dual of the grand-coalition problem:
+$$
+\min_\mu\ \mu^\top\!\Bigl(\sum_{j\in N}b_j\Bigr)
+\ \ \text{s.t.}\ \ A_j^\top\mu\ge c_j\ \forall j\in N,\ \
+A_0^\top\mu\ge c_0,\ \ \mu\ge 0.
+$$
+Let $\mu^*$ be optimal, $\chi_j := (\mu^*)^\top b_j$. For any $S\subseteq N$, the
+dual $(\mathrm D_S)$ has constraint set
+$\{A_j^\top\mu\ge c_j: j\in S\}\cup\{A_0^\top\mu\ge c_0\}\cup\{\mu\ge0\}$, a
+**subset** of $(\mathrm D_N)$'s constraints — the common-block row
+$A_0^\top\mu\ge c_0$ appears in *both*, unchanged, because it has no $j$-index.
+Hence $\mu^*$ is feasible for $(\mathrm D_S)$, and by weak duality on the bounded
+coalition LP,
+$$
+\sum_{j\in S}\chi_j = (\mu^*)^\top\!\sum_{j\in S}b_j \ge v(S)\quad\forall S,
+\qquad \sum_{j\in N}\chi_j = v(N),
+$$
+so $\chi$ is in the core. The sign of $c_0$ is irrelevant (reserve's $+\pi^{up},
++\pi^{dn}$ and peak's $-\delta^{peak}$ are all fine); the argument uses only the
+coalition-invariance of the homogeneous common-block row $A_0^\top\mu\ge c_0$.
+
+---
+
+## 6. Referee-facing caveats (rational, not optimistic)
+
+1. **Coalition-invariant tariffs are a standing assumption, not a fact.** The
+   common technology requires $c_0, A_0$ independent of $S$. A *community-level*
+   peak or reserve scheme could push the DSO/TSO to reprice with community size; if
+   any of $\delta^{peak}, \pi^{up}, \pi^{dn}$ scaled with $S$, then $c_0$ would be
+   $S$-dependent and the §5 subset argument would fail. State fixed-tariff as an
+   explicit hypothesis and flag its limitation.
+
+2. **Reserve introduces variables the current numerics do not exercise.** The
+   scenario data carry no reserve prices or requirements. If reserve enters the
+   manuscript as more than a structural extension, at least one worked instance
+   must include it; otherwise a referee asks "where is the experiment?". A
+   defensible middle course: present reserve as a *structural extension* (this
+   note) plus one illustrative case, rather than re-running all scenarios with
+   assumed reserve prices that invite "why these values?".
+
+3. **Reserve/peak are LPG-safe only in the linear relaxation.** With UC binaries
+   ($z^{G,on}, z^{G,sb}, z^{H,on}$, startup), the electrolyzer/heat-pump reserve
+   headroom rows in §2.2 couple to the commitment variables, so $v(S)$ becomes
+   mixed-integer, the LPG structure is lost, and the paper's non-convex pricing
+   (IP/CHP) is what delivers a near-core allocation. This is consistent with — and
+   reinforces — the thesis that **integrality, not the reserve/peak coupling per
+   se, is the source of difficulty.** Reserve/peak are "free" only where the model
+   is already linear; do not oversell them.
+
+4. **Up/down doubles the shared-variable count and the market-data burden.**
+   Relative to a symmetric product, the asymmetric split adds a second common
+   variable and a second price series to justify. It buys a tighter representation
+   of asymmetric sector-coupling headroom, but that gain is orthogonal to the
+   paper's stability contribution. Worth a sentence acknowledging the trade-off,
+   since a referee may ask whether the extra product is load-bearing for the
+   paper's claims (it is not — the symmetric version yields the same LPG/core
+   result with one fewer variable).

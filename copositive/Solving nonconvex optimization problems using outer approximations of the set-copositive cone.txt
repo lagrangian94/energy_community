@@ -1,0 +1,1893 @@
+```
+Mathematical Programming
+https://doi.org/10.1007/s10107-025-02210-
+FULL LENGTH PAPER
+Series B
+```
+```
+Solving nonconvex optimization problems using outer
+approximations of the set-copositive cone
+```
+```
+Markus Gabl^1 · Kurt M. Anstreicher^2
+```
+```
+Received: 23 February 2024 / Accepted: 12 February 2025
+© Springer-Verlag GmbH Germany, part of Springer Nature and Mathematical Optimization Society 2025
+```
+```
+Abstract
+We consider the solution of nonconvex quadratic optimization problems using an
+outer approximation of the set-copositive cone that is iteratively strengthened with
+cutting planes and conic constraints. Our methodology utilizes an MILP-based oracle
+for a generalization of the copositive cone that considers additional linear equality
+constraints. In numerical testing we evaluate our algorithm on a variety of different
+nonconvex quadratic problems.
+```
+```
+Keywords Copositive programming·Set-copositivity·Cutting planes·Nonconvex
+quadratic programming
+```
+```
+Mathematics Subject Classification 90C11·90C20·90C22·90C25·90C
+```
+```
+1 Introduction
+```
+```
+In this paper we are interested in an optimization problem of the form
+```
+```
+CPOPT:min C • Y
+s.t. Bi • Y = bi , i = 1 ,..., m
+Y ∈CP n +^1 ,
+```
+```
+whereCP k , the cone of k × k completely positive matrices, consists of those matrices
+that can be written in the form
+```
+```
+∑ r
+i = 1 uiu
+T
+i with each ui ∈R
+```
+```
+k
++. In CPOPT the matrix
+Y has the form
+Y =
+```
+### (
+ 
+```
+Y 00 xT
+xX
+```
+### )
+ 
+### .
+ 
+BKurt M. Anstreicher
+kurt-anstreicher@uiowa.edu
+Markus Gabl
+markus@gabl.com
+ 
+(^1) Institute of Operations Research, Karlsruhe Institute of Technology, Karlsruhe, Germany
+(^2) Department of Business Analytics, University of Iowa, Iowa City, IA, USA
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+and the constraints of CPOPT include the constraint that _Y_ 00 =1. The matrix _X_ can
+then be viewed as a relaxation of the rank-one matrix _xxT_ , where _x_ ≥0. Since the
+constraints of CPOPT include _Y_ 00 =1, and all of the equality constraints are written
+in terms of _Y_ , we can assume without loss of generality that _bi_ =0 for all other
+constraints. For convenience we will also consider the rows and columns of _Y_ to be
+indexed 0, 1 ,..., _n_ , so that _Yij_ = _Xij_ for _i_ , _j_ ≥1.
+Consider a mixed-integer quadratic optimization problem
+ 
+```
+MIQP:min xTQx + qTx
+s.t. Ax ̄ = d
+x ≥ 0 , xi ∈{ 0 , 1 }, i ∈I,
+```
+whereI⊂{ 1 , 2 ,..., _n_ }, _Q_ may be indefinite and _A_ ̄is a _p_ × _n_ matrix. By the result of
+Burer [ 9 ], any problem of the form MIQP can be exactly represented using a problem
+of the form CPOPT with _m_ = 2 _p_ + 1 +|I|; note that if the original problem includes
+inequality constraints then they are written as equalities with slack variables added
+in MIQP. The difficulty with CPOPT is that for _k_ ≥5 the coneCP _k_ is very difficult
+to explicitly represent. A tractable relaxation forCP _k_ isDNN _k_ , the cone of _k_ × _k_
+doubly-nonnegative (DNN) matrices, and usingDNN _n_ +^1 in place ofCP _n_ +^1 results
+in a computable relaxation of the original problem. However the solution of this DNN
+relaxation will not in general solve CPOPT. If the DNN relaxation is not tight then
+its solution _Y_ ∗∈/CP _n_ +^1 , and one approach to strengthening the DNN relaxation
+would then be to generate a cut that separates _Y_ ∗fromCP _n_ +^1 ; such a cut has the form
+_S_ • _Y_ ≥0 where _S_ is a copositive matrix having _S_ • _Y_ ∗<0. This approach is applied
+in the case where _Y_ ∗has a certain block structure in [ 16 ], but the results of [ 16 ]are
+not applicable to the general case. In general the problem of determining if a matrix
+is CP is NP-hard [ 14 ], and if not then finding a cut that separates the matrix from the
+CP cone is computationally difficult.
+A different approach to strengthening the DNN relaxation of CPOPT is to use a
+hierarchy of conesC _rk_ , _r_ ≥0, whereC 0 _k_ =DNN _k_ andCP _k_ ⊂C _rk_ + 1 ⊂C _rk_ for each
+ 
+_r_ ; see for example [ 15 , 26 ]. In such a hierarchy, the conesC _kr_ better approximateCP _k_
+as _r_ increases, so replacingCP _k_ withC _rk_ , _k_ >0 improves upon the DNN relaxation.
+However these hierachies involve extended-variable formulations whose size grows
+very rapidly in _r_ , and therefore the use ofC _kr_ for _r_ >1 is typically impractical unless
+_k_ is very small. The computational results in [ 26 ] include examples with _k_ ≤14 and
+_r_ ≤3, and note that computations for a problem with _k_ =17 and _r_ =4 were not
+possible at the time the paper was written.
+An alternative to working with the problem CPOPT is to use its conic dual. The
+dual problem has the form
+ 
+```
+COPOPT:max bT v
+```
+```
+s.t. C −
+```
+```
+∑ m
+```
+```
+i = 1
+```
+```
+v iBi = S
+```
+```
+S ∈COP n +^1 ,
+```
+ 
+Solving nonconvex optimization problems using outer...
+ 
+whereCOP _k_ is the cone of _k_ × _k_ copositive (COP) matrices,COP _k_ ={ _M_ ∈S _k_ :
+_xTMx_ ≥ 0 ∀ _x_ ∈R _k_ +}. Under a regularity condition, for example the existence of an
+interior solution in CPOPT, the primal and dual problems have equal solution values
+[ 29 ]; see [ 12 ] for a discussion of the structure of the interior ofCP _k_. In the case where
+CPOPT is used to represent the problem MIQP, [ 11 ] proves that strong duality holds
+whenever MIQP has a bounded feasible region. Corresponding to the relaxations of
+CP _k_ described above there are dual cones that are interior toCOP _k_. For example, the
+dual ofDNN _k_ is the coneSPN _k_ of matrices that can be written as the sum of a _k_ × _k_
+non-negative matrix and a _k_ × _k_ positive semidefinite (PSD) matrix.
+Our interest here is to work with the dual problem COPOPT, but replacingCOP _n_ +^1
+with an _outer_ approximation which will then be strengthened via the addition of linear
+cuts and conic constraints. In order to use this approach we need an initial outer approx-
+imation forCOP _n_ +^1 matrices, and a way to determine if a matrix is copositive and if
+not generate a cut that separates it fromCOP _n_ +^1. From a theoretical standpoint the
+problem of determining whether or not a matrix is copositive is also very difficult [ 14 ].
+However, recent papers [ 2 , 20 , 30 ] haveshownthat theproblem of determiningwhether
+or not a matrix is copositive, and if not generating a cut that separates it from the COP
+cone, can be formulated as a mixed-integer linear programming (MILP) problem. The
+availability of very efficient software for MILP problems makes this problem compu-
+tationally much more practical than the corresponding detection/separation problem
+for CP matrices.
+There are different algorithmic frameworks in which one can employ cuts based
+on the failure of a matrix to be copositive. One possibility is to use an ellipsoid-type
+algorithm that at each iteration _k_ ≥0 has a candidate solutionv _k_ for COPOPT and
+an ellipsoidE _k_ centered atv _k_ that must contain the optimal solutionv∗of COPOPT.
+If _Sk_ = _C_ −
+ 
+```
+∑ m
+i = 1 v
+k
+iBi ∈/COP
+```
+_n_ + (^1) , then a cut vector _u_ ≥0 with _uTSku_ <0is
+generated, and the cut
+∑ _m
+i_ = 1 v _i_ ( _u
+TBiu_ )≤ _uTCu_ − _uTSku_ is added. If _Sk_ is copositive
+then an objective cut _bT_ v≥ _bT_ v _k_ is added. Following the addition of the cut, a new
+pointv _k_ +^1 andellipsoidE _k_ + 1 aregenerated.Algorithmsofthistypeincludethecentral-
+cut ellipsoid algorithm [ 22 ], the analytic center cutting-plane method (ACCPM) [ 19 ],
+and the volumetric cutting plane algorithm with central cuts [ 1 ]. These algorithms
+have the advantage of all being provably convergent, with the ellipsoid algorithm
+and the volumetric cutting-plane algorithm requiring a polynomial number of steps,
+and the ACCPM being more efficient in practice. However in all cases the problem
+of determining the next iteratev _k_ +^1 becomes numerically ill-conditioned and the
+algorithm may fail before a sufficiently accurate solution is found.
+The application of ellipsoid-type algorithms to a copositive programming problem
+of the form
+min _C_ • _X_
+s.t. _Bi_ • _X_ ≤ _bi_ , _i_ = 1 ,..., _m_ , (1)
+_X_ ∈COP _n_ ,
+was first suggested in [ 13 ](seealso[ 3 ]), and developed further in [ 5 ]. These papers
+all consider applying a problem of the type ( 1 ) to determining if a given matrix _C_ is
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+completely positive. A complexity result for this problem using the ellipsoid algoriithm
+is given in [ 3 , 13 ] while [ 5 ] gives computational results using the ellipsoid algorithm,
+the volumetric cutting-plane method and the ACCPM.
+An alternative to an ellipsoid-type algorithm for solving COPOPT is to use a
+simpler outer approximation (OA) algorithm. On each iteration of such an algo-
+rithm we consider the problem COPOPT but withCOP _n_ +^1 replaced by an outer
+approximationC⊃COP _n_ +^1. This problem is solved, generating an iteratev _k_ and
+_Sk_ = _C_ −
+ 
+```
+∑ m
+i = 1 v
+k
+iBi .If S
+```
+_k_ ∈COP _n_ + (^1) thenv _k_ solves COPOPT. If _Sk_ ∈/COP _n_ + 1
+then we generate a cut _u_ ≥0 with _uTSku_ <0, and the cut _uTSu_ ≥0 is added to
+C. There are several advantages to this approach. First, although ellipsoid-type meth-
+ods are provably convergent they are very susceptible to numerical ill-conditioning.
+Second, the placement of the cut∑ _uTSu_ ≥0 does not need to be “backed off” to
+_m
+i_ = 1 v _i_ ( _u
+TBiu_ )≤ _uTCu_ − _uTSku_ as in an ellipsoid-type method using central cuts.
+Finally, we wish to consider the possibility of adding additional conic constraints that
+are more general than linear cuts. It is possible that the theory of the methods described
+above could be extended to deal with such constraints, but the algorithms as currently
+developed only incorporate linear cuts.
+In the next section we describe how to initially approximate the coneCOP _n_ +^1 using
+linear and conic constraints, and how a cut _u_ ≥0 with _uTSku_ <0 can be generated
+when _Sk_ ∈/COP _n_ +^1. In Section 3 we modify the cut-generation procedure to explicitly
+incorporate additional linear constraints _Ax_ = _d_ from CPOPT. In Section 4 we apply
+our outer-approximation algorithm to two different classes of non-convex quadratic
+optimization problems, and in Section 5 we consider the application of our algorithm to
+nonconvex quadratic problems arising from adjustable robust optimization. In Section
+6 we make some concluding remarks.
+**Notation.** For matrices _A_ and _B_ ofthesamesizeweuse _A_ • _B_ to denote the matrix
+inner product _A_ • _B_ =tr( _ABT_ ), and _A_ ◦ _B_ to denoted the Hadamard or componentwise
+product. For vectors _x_ and _y_ we use( _x_ ; _y_ )to denote the vector( _xT_ , _yT_ ) _T_ .Weuse _e_
+to denote a vector of arbitrary dimension with each component equal to one.
+**2 Approximating the copositive cone**
+In order to implement an OA algorithm for COPOPT we need an initial outer approx-
+imation for the coneCOP _n_ +^1 and a way to generate a cut for a matrix _S_ ∈/COP _n_ +^1.
+In this section we consider these two topics.
+For an initial outer approximation, any _S_ ∈COP _n_ +^1 certainly satisfies the con-
+straints
+( _ei_ + _ej_ ) _TS_ ( _ei_ + _ej_ )≥ 0 , 1 ≤ _i_ ≤ _j_ ≤ _n_ + 1 , (2)
+where _ei_ ∈R _n_ +^1 is the elementary vector with a one in the _i_ th coordinate and zeros
+elsewhere. The use of ( 2 ) as an outer approximation forCOP _n_ +^1 is dual to using the
+cone of nonnegative diagonally dominant matricesDD _n_ ++^1 as an inner approximation
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+ofCP _n_ +^1 [ 21 ], and was used as an initial outer approximation for the copositive cone
+in [ 3 , 13 ].
+The inner approximationDD _n_ ++^1 ∈CP _n_ +^1 can be expanded by considering sym-
+metric diagonal scalings of matrices inDD _n_ ++^1 , leading to the coneSDD _n_ ++^1 [ 21 ]. This
+cone corresponds to matrices all of whose 2×2 principal submatrices are completely
+positive, whose dual is the cone of matrices all of whose 2×2 principal submatrices
+are copositive. Since for _k_ ≤4 the conesCOP _k_ andSPN _k_ are the same, we can then
+improve on the outer approximation ( 2 ) by using the constraints
+ 
+```
+S ̄ ij^2 ≤ SiiSjj , Sij ≥ S ̄ ij , 1 ≤ i < j ≤ n + 1. (3)
+```
+Compared to ( 2 ), the constraints ( 3 ) require one additional variable _S_ ̄ _ij_ and a rotated
+second-order cone (SOC) constraint for each _i_ < _j_. A reasonable approach to avoid
+generating all of these constraints _a-priori_ would be to first solve a problem using the
+approximation ( 2 ), and then add violated constraints from ( 3 ). Note that for a given _i_ , _j_ ,
+checking if the constraint from ( 3 ) is satisfied amounts to checking if _Sij_ ≥−
+ 
+### √
+ 
+_SiiSjj_ ,
+which is trivial. The use of the constraints ( 3 ) to strengthen an initial approximation
+of the copositive cone was also suggested in [ 23 ].
+Let _siT_ denote the _i_ th row of _S_ ,letν∈R _n_ +++^1 and assume thatθis a positive integer.
+The approach for checking if a matrix _S_ is copositive from [ 2 ] is based on solving the
+MILP problem
+ 
+```
+MILPCOP:maxγ
+s.t. siTu ≤−γ+ν i ( 1 − zi ), i = 1 ,..., n + 1
+γ≥ 0 , 0 ≤ u ≤ z ,
+z ∈{ 0 , 1 } n +^1 , eTz ≥θ.
+```
+Forθ=1 the solution value in MILPCOPis zero if and only if _S_ ∈COP _n_ +^1 , and
+assuming that diag( _S_ )≥0 the same is true forθ =2. If _S_ ∈/COP _n_ +^1 then the
+solution of MILPCOPhasγ>0, and _u_ ≥0 with _uTSu_ <0 demonstrates that the
+principal submatrix of _S_ corresponding to{ _i_ : _zi_ = 1 }is not copositive. Although the
+equivalence between copositivity of _S_ andγ=0 in the solution of MILPCOPholds
+for anyν>0, in practice the components ofνshould be related to the values in _S_ to
+avoid the possibility of a very small but positive optimal value. A simple suggestion
+given in [ 2 ]is
+ 
+```
+ν i = 1 +
+```
+### ∑
+ 
+```
+j = i
+```
+```
+{ sij : sij > 0 }, i = 1 ,..., n + 1.
+```
+As described above, the constraints ( 3 ) correspond to all 2×2 submatrices of _S_
+being copositive. By solving MILPCOPwith the constraint 1≤ _eTz_ ≤4 we can
+also check to see if there are 3×3or4×4 principal submatrices of _S_ that fail to
+be copositive. In the case where such a submatrix is found, we could use the fact
+thatCOP _k_ =SPN _k_ for _k_ ≤4 to impose a constraint involving a PSD matrix that
+would enforce copositivity of the submatrix. Instead we will describe a method [ 24 ]for
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+generating an SOC constraint that improves upon the linear cut found by MILPCOP
+while avoiding the computational expense of working with a PSD matrix.
+Suppose that _T_ ∈COP _k_ for _k_ ∈{ 3 , 4 }. Then _T_ = _T_ ̄+ _N_ , where _T_ ̄ 0 and
+_N_ ≥0. Assume that _T_ ̄has the form:
+ 
+### T ̄=
+ 
+### (
+ 
+```
+τˆ tT
+t ˆ T ˆ
+```
+### )
+ 
+### , (4)
+ 
+whereτ≥0 andˆ _t_ ∈R _k_ −^1. Then
+ 
+```
+T ̄ 0 ⇐⇒ τ T ˆ− t ˆ t ˆ T 0 ,
+⇐⇒ ˆv T (τ T ˆ− t ˆ t ˆ T )vˆ≥ 0 ∀ˆv∈R k −^1
+⇐⇒ ( t ˆ T v)ˆ^2 ≤τvˆ TT ˆvˆ ∀ˆv∈R k −^1. (5)
+```
+For fixedvˆ, the constraint in ( 5 ) is a rotated second-order cone, which implicitly
+includes the constraintsτ≥0 andvˆ _TT_ ˆvˆ≥0. Our goal is to use a constraint of the
+form ( 5 ) as a strengthening of the linear cutv _TT_ ̄v≥0 which is cheaper to implement
+than the PSD constraint _T_ ̄ 0. To this end, assume that _T_ ̄has the form ( 4 ) with
+τ≥0, and consider a fixedv=(ν;ˆv)whereν∈Randvˆ∈R _k_ −^1. We claim that the
+constraint in ( 5 ) implies thatv _TT_ ̄v≥0. To see this, note that
+ 
+```
+v TT ̄v=(νvˆ T )
+```
+### (
+ 
+```
+τ t ˆ T
+t ˆ T ˆ
+```
+### )(
+ 
+```
+ν
+vˆ
+```
+### )
+ 
+```
+=τν^2 + 2 νˆ tT vˆ+ˆv TT ˆv.ˆ
+```
+Ifτ =0 then ( 5 )impliesthat _t_ ˆ _Tu_ ˆ =0, sov _TT_ ̄v=ˆv _TT_ ˆvˆ ≥0. Ifτ>0, then
+v _TT_ ̄v≥0 is equivalent toτv _TT_ ̄v=τ^2 ν^2 + 2 τν _t_ ˆ _T_ vˆ+τv _TT_ ˆv≥0, and ( 5 ) implies
+that
+ 
+```
+τ^2 ν^2 + 2 τν t ˆ T vˆ+τvˆ TT ˆvˆ≥τ^2 ν^2 + 2 τν t ˆ T v+(ˆ tT v)ˆ^2 =(τ ν+ˆ tT v)ˆ^2 ≥ 0.
+```
+Now suppose that MILPCOPfinds a _u_ ≥0 with 3≤ _eTz_ ≤4 where the constraint
+_uTSu_ ≥0 is violated by the current value of _S_ .Let _T_ = _S_ ββ, where _S_ ββis the
+principal submatrix of _S_ corresponding to the rows and columns inβ={ _i_ : _zi_ = 1 },
+and similarly letv= _u_ βbe the corresponding components of _u_. We can then apply
+the constraints
+ 
+```
+S ββ≥ T ̄,( t ˆ T v)ˆ^2 ≤τvˆ Tt ˆvˆ (6)
+```
+where the variable matrix _T_ ̄has the form ( 4 ) andv=(ν;ˆv). These constraints
+are stronger than the linear cut _uTSu_ = _uT_ β _S_ ββ _u_ β =v _TT_ v≥0, but avoid the
+ 
+computational expense of imposing the PSD constraint on _T_ ̄.
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+**3 Set-copositivity detection with linear constraints**
+ 
+An outer approximation algorithm based on MILPCOP, as described in the previous
+section, uses MILPCOPto check if _S_ ∈COP _n_ +^1 for an iterate _S_ , and if not to
+generate a cut _u_ ≥0 with _uTSu_ <0. Exactly such an approach is implemented in
+[ 23 ] to solve the copositive dual of a unit-commitment problem in order to obtain a
+copositive pricing matrix that applies to an underlying problem with discrete variables.
+In our own preliminary implementation of such an algorithm, we observed cases where
+MILPCOPrepeatedly generated cuts, but the addition of these cuts produced very little
+change in the objective. On closer inspection, it was clear that in these cases the cut
+vector _u_ had no relationship to the feasible region of the original problem MIQP,
+which contains equality constraints of the form _Ax_ ̄ = _d_. Our goal here is to modify
+MILPCOPso as to explicitly incorporate information from these constraints.
+Assume now that the problem MIQP includes constraints _Ax_ ̄ = _d_ , _x_ ≥0 where _A_ ̄
+is an _p_ × _n_ matrix. Following the methodology of [ 9 ], each such constraint _a_ ̄ _iTx_ = _di_
+produces two constraints in CPOPT,
+ 
+```
+(
+0 a ̄ iT
+a ̄ i 0
+```
+### )
+ 
+- _Y_ = 2 _di_ ,
+ 
+### (
+ 
+### 00
+ 
+```
+0 a ̄ ia ̄ iT
+```
+### )
+ 
+- _Y_ = _di_^2 , (7)
+ 
+and if desired these constraints can be homogenized using the fact that _Y_ 00 =1. To
+homogenize the original constraints, let _y_ =( _y_ 0 ; _x_ )and _A_ =[− _d_ , _A_ ̄]. Then _Ax_ ̄ = _d_
+can be written as _Ay_ =0, _y_ 0 =1. Since _Y_ 00 =1 in CPOPT, we can also consider _y_
+to be column zero of the matrix _Y_.
+For an arbitrary convex coneK⊆R _k_ ,letCOP(K)denote the matrices that are
+copositive overK,
+ 
+```
+COP(K)={ M ∈S k : yTMy ≥ 0 ∀ y ∈K}.
+```
+The usual copositive cone is thenCOP _k_ =COP(R _k_ +). We are now interested in the
+coneCOP(K)with
+ 
+```
+K={ y ≥ 0 : Ay = 0 }, (8)
+```
+where _A_ is an _p_ × _k_ matrix. ClearlyCOP _k_ ⊂COP(K)for any such matrix _A_ .We
+callCOP(K)the _set-copositive matrix cone_ with respect to the _ground cone_ K⊆R _k_.
+The dual of this cone, i.e.CP(K)=conv
+ 
+### {
+ 
+```
+xxT : x ∈K
+```
+### }
+ 
+we call the _set-completely
+positive matrix cone_. Some basic properties of these types of cones are summarized
+in a recent review paper [ 8 , Section 2]; see especially Proposition 11. Such cones also
+appear in earlier literature on copositive reformulations such as [ 7 , 10 , 31 ]. Within this
+literature the coneCOP(K)is sometimes referred to as a _set-semidefinite cone_ [ 17 ],
+but we prefer the set-copositive nomenclature. Let COPOPT(K)denote the problem
+COPOPT but with the constraint _S_ ∈COP _n_ +^1 replaced by _S_ ∈COP(K), whereK
+is given by ( 8 ).
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+**Lemma 1** _Assume that_ CPOPT _includes the constraints Ay_ = 0 _, and has an optimal
+solution Y that is rank-one; Y_ = _yyT,Ay_ = 0 _,y_ ≥ 0 _,y_ 0 = 1_. Then if strong duality
+holds between_ CPOPT _and_ COPOPT _, it also holds between_ CPOPT _and_ COPOPT(K)_._
+ 
+**Proof** The objective gap between solutions _Y_ and(v, _S_ )that are feasible in CPOPT
+and COPOPT, respectively, is
+ 
+```
+C • Y − bT v=
+```
+### (
+ 
+### S +
+ 
+```
+∑ m
+```
+```
+i = 1
+```
+```
+v iBi
+```
+### )
+ 
+### • Y −
+ 
+```
+∑ m
+```
+```
+i = 1
+```
+```
+v ibi
+```
+### =
+ 
+```
+∑ m
+```
+```
+i = 1
+```
+```
+v i ( Bi • Y − bi )+ S • Y
+```
+```
+= S • Y ,
+```
+and _Y_ ∈CP _n_ +^1 , _S_ ∈COP _n_ +^1 implies that _S_ • _Y_ ≥0. Under the assumptions of the
+lemma, there is an optimal solution _Y_ of the form _Y_ = _yyT_ , _y_ ≥0, _y_ 0 =1, _Ay_ =0.
+For such a _Y_ we have _S_ • _Y_ = _yTSy_ ,so _S_ ∈COP(K)implies that _S_ • _Y_ ≥0.
+Moreover if(v, _S_ )is an optimal solution of COPOPT then _Y_ • _S_ =0, and(v, _S_ )
+remains feasible whenCOP _n_ +^1 is replaced byCOP(K). 
+ 
+When CPOPT is obtained from a problem MIQP, the assumption that CPOPT has
+a rank-one solution holds under the assumption that the feasible region of MIQP
+is bounded [ 9 ], which also ensures that strong duality holds between CPOPT and
+COPOPT [ 11 ]. Motivated by Lemma 1 , we consider replacing the problem MILPCOP
+with a generalization that determines whether or not a matrix _S_ ∈COP(K)rather
+than _S_ ∈COP _n_ +^1. To do this, consider the problem
+ 
+```
+QP( S , A ):min uTSu
+s.t. Au = 0
+eTu ≤ 1
+u ≥ 0.
+```
+The KKT conditions for QP( _S_ , _A_ )are necessary, since it has only linear constraints,
+and therefore there are(λ, γ , _t_ )so that( _u_ ,λ,γ, _t_ )satisfies the system:
+ 
+```
+Su + AT λ+γ e = t
+γ≥ 0 , t ≥ 0 ,γ( 1 − eTu )= 0 , uTt = 0.
+```
+Note that the solution _u_ satisfies _uTSu_ = _uT_ ( _t_ − _AT_ λ−γ _e_ )=−γ. In addition, note
+that it is possible that the solution of QP( _S_ , _A_ )hasγ=0, but the solution hasγ> 0
+if the constraints _Au_ =0 are dropped.
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+We now define a generalization of MILPCOPthat takes into account the presence
+of the equality constraints _Ay_ =0inKfrom ( 8 ):
+ 
+```
+MILPCOP(K):maxγ
+s.t. Su + AT λ≤−γ e +ν◦( e − z ),
+Au = 0 , 0 ≤γ≤α eTu ,
+0 ≤ u ≤ z , z ∈{ 0 , 1 } n +^1.
+```
+**Lemma 2** _Assume that_ ν∈R _n_ ++ _,_ α∈R+ _, and let_ K _be as in_ ( 8 )_. Then S_ ∈COP(K)
+_if and only if the solution of_ MILPCOP(K) _has_ γ= 0_._
+ 
+**Proof** We will prove the equivalent statement that the solution of MILPCOP(K)has
+γ>0 if and only if the solution value of QP( _S_ , _A_ )is negative. Suppose that there is
+asolutionofMILP _COP_ (K)withγ>0. Then _eTu_ >0 sinceα>0. Note also that
+_ui_ > 0 ⇒ _zi_ =1, so _uT_ [ν◦( _e_ − _z_ )]= _uT_ ( _e_ − _z_ )=0. Therefore
+ 
+```
+uTSu = uTSu + uTAT λ≤−γ eTu ≤−γ^2 /α,
+```
+and scaling _u_ by 1/( _eTu_ )obtains a feasible solution in QP( _S_ , _A_ )withanegative
+objective value. Next assume that the solution value in QP( _S_ , _A_ )is negative. Then
+there is a solution of the KKT system withγ>0, _u_ =0. Let _zi_ =1if _ui_ >0, and
+_zi_ =0 otherwise. Scaling( _u_ ,λ,γ)then obtains a solution withγ>0 that is feasible
+for all of the constraints of MILPCOP(K)except for possiblyγ≤α _eTu_. Reducing
+γif necessary to satisfy this constraint, we obtain a solution of MILPCOP(K)with
+γ>0. 
+ 
+Note that the conditionγ ≤α _eTu_ in MILPCOP(K)prevents the possibility that
+γ>0but _u_ =0. In MILPCOPthis was prevented by the condition _eTz_ ≥θ≥1, but
+it is not obvious that this suffices in MILPCOP(K)due to the term _AT_ λ. It should also
+be noted that there is a somewhat counter-intuitive aspect to usingCOP(K)in place of
+COP _n_ +^1 in COPOPT. SinceCOP _n_ +^1 ⊂COP(K), it appears that usingCOP(K)in
+place ofCOP _n_ +^1 is weakening rather than strengthening the constraints of COPOPT,
+but Lemma 1 shows that this change has no effect on the solution. Our motivation in
+usingCOP(K)is not to strengthen the constraints of COPOPT but rather to restrict the
+cuts being generated to be more relevant to the underlying problem, which includes
+the constraints _Ay_ =0.
+Finally, we will discuss a consequence of Lemmas 1 and 2 that relates the certificates
+generated by MILPCOP(K)to optimal solutions of CPOPT. Recall that COPOPT(K)
+denotes the problem COPOPT but with the constraint _S_ ∈COP _n_ +^1 replaced by
+_S_ ∈COP(K).
+ 
+**Lemma 3** _Under the assumptions of Lemmas 1 and 2 , further suppose that_ ( _S_ ,v)
+_is a feasible solution to_ COPOPT(K) _such that_ (γ , _u_ , _z_ ) _is an optimal solution to_
+MILPCOP(K) _with_ γ = 0_. If there is a_ β> 0 _such that_ β= _bi_ ( _uTBiu_ )−^1 _for all
+i_ = 1 ,..., _m, then Y_ = _yyTwith y_ =
+ 
+### √
+ 
+```
+β u is an optimal solution to CPOPT.
+```
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+**Proof** First, we observe feasibility of _Y_ ,as _Y_ • _Bi_ =β _uTBiu_ = _bi_ and _Y_ ∈CP _n_ +^1
+since _y_ =
+ 
+### √
+ 
+β _u_ ≥0. To argue optimality, note that( _S_ ,v)is feasible for COPOPT(K)
+since _S_ ∈COP(K)by Lemma 2. This also implies _uTSu_ ≥0, and from the hypothe-
+sized(γ , _u_ , _z_ )we also get _uTSu_ ≤−γ^2 /α=0 so that actually _uTSu_ =0. Therefore
+ 
+```
+0 =β uTSu = yTCy −
+```
+```
+∑ m
+```
+```
+i = 1
+```
+```
+yTBiy = yTCy − bT v,
+```
+so _Y_ is a feasible solution to CPOPT that has zero duality gap with( _S_ ,v), and is
+therefore optimal. 
+ 
+The requirement of an appropriate scalarβ>0 may limit the general applicability
+oftheaboveresult.However,considerthecaseofMIQPwithI=∅,sothat _m_ = 2 _p_ + 1
+and the constraint coefficients( _Bi_ , _bi_ )other than the constraint for _Y_ 00 =1areall
+constructed as in ( 7 ). Then _Au_ =0 is equivalent to _A_ ̄ _u_ ̄= _u_ 0 _d_ where _u_ =( _u_ 0 ; ̄ _u_ ),
+and if the feasible region is bounded then _u_ =0 is equivalent to _u_ 0 >0. Under the
+assumption that _u_ =0, it is then easy to see thatβ= 1 / _u_^20 >0 would be the desired
+scalar satisfying the conditions of Lemma 3. However, even if the feasible region of
+MIQP is bounded, the formulation of MILPCOP(K)does not guarantee that _u_ = 0
+whenγ=0.
+Inourexperiments,wedidnotattempttogenerateprimalsolutionsfromsolutionsof
+MILPCOP(K)withγ=0. However, [ 18 ] does that for a generalization of the approach
+discussed here. In particular, [ 18 ] uses the set-copositive cutting plane technique to
+solve subproblems arising from a Benders decomposition of a nonconvex quadratically
+constrained quadratic program (QCQP), and the certificates from the set-copositivity
+test are used as building blocks to generate primal solutions of the original QCQPs.
+Computational experiments in [ 18 ] report favorable quality of the primal solutions
+constructed in this way.
+ 
+**4 Computational results**
+ 
+In this section we consider applying an algorithm that uses cuts based on an outer
+approximation of the set-copositive cone, incorporating additional constraint infor-
+mation as described in the previous section. We consider two different classes of
+problems: nonconvex continuous quadratic programming instances from the well-
+known MINLPLib library, and binary quadratic programming problems. All instances,
+possibly after reformulation, have bounded feasible regions, so strong duality holds
+between CPOPT and COPOPT by the result of [ 11 ]. All computations in this section,
+and the following section, were performed on an Intel(R) Core(TM) i5-9300H CPU
+running at 2.40GHz with 16GB RAM. Linear and mixed integer linear problems were
+solved via Gurobi 9.1 while nonlinear conic problems were solved via Mosek 9.2. We
+used Mosek rather than Gurobi for the solution of conic problems because we found in
+preliminary experiments that Mosek was more stable for these problems. Both Gurobi
+and Mosek were accessed from Matlab via the YALMIP interface [ 25 ].
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+**4.1 MINLPLib instances**
+ 
+To begin, we consider problems from MINLPLib corresponding to nonconvex quad-
+ratic programming (QP) problems, with only continuous variables. Using the results
+from [ 9 ] such problems can be exactly represented in the form CPOPT under mild
+assumptions. In order to put problems into the required form for this representation,
+all variables must be nonnegative and slacks added to any inequalities to convert them
+to equalities. We considered instances where the number of variables after splitting
+free variables and/or adding slacks was no more than 70. The optimal values for these
+problems are known, having been computed using global optimization software such
+as BARON [ 28 ] that relies on spatial branching to refine convex bounds for nonconvex
+terms on smaller and smaller domains. By contrast, we are attempting to solve these
+problems without the use of spatial branching, instead relying on the constraints that
+are generated by MILPCOP(K).
+In Table 1 we give the results of applying our outer approximation algorithm to 62
+nonconvex QP instances. In the table we give the optimal value for each problem, the
+gap between the optimal value and the value for the DNN relaxation of CPOPT (equal
+to the value for the SPN restriction of COPOPT), the gap obtained by applying our
+outer approximation algorithm using cuts based on MILPCOP(K), and the number of
+cuts and time (seconds) used by the OA algorithm. The OA algorithm was terminated
+once the time exceeded 3600s, or the time attempting to generate a cut exceeded 600s,
+or the number of cuts exceeded 100.
+In Table 2 we summarize the number of MINLIBLib problems on which the DNN
+relaxation and COP-OA algorithm are numerically exact. Out of the 62 total problems,
+the DNN relaxation and the COP outer approximation algorithm are exact on almost
+the same number of problems, 46 for the DNN relaxation and 47 for the COP-OA algo-
+rithm, but the two methods are simultaneously exact on only 38 problems. Although
+the COP-OA algorithm is exact on one more instance than the DNN relaxation, it
+should be noted that there are several instances on which the COP-OA gap is much
+higher then the DNN gap, with most of these corresponding to larger problems where
+the algorithm was terminated after exceeding the 3600s time limit. Another way of
+looking at the summary in Table 2 is that of the 16 problems on which the DNN
+relaxation is _not_ exact, the COP-OA algorithm is exact on 9. The DNN relaxation is
+computationally relatively inexpensive, but as noted in Sect. 1 there is no practical way
+to strengthen it when it does not provide the optimal solution.
+The results in Tables 1 and 2 were obtained by initializing the relaxation of COPOPT
+using the constraints ( 2 ) and then generating cuts using MILPCOP(K). In preliminary
+work we attempted, unsuccessfully, to solve these same problems using the cuts from
+MILPCOPrather than those from MILPCOP(K), where the algorithm failures were
+caused by MILPCOPrepeatedly generating cuts that produced little or no change in
+the objective. In fact it was the failure of the algorithm using cuts from MILPCOP
+on these problems that led us to develop the cut-generation methodology based on
+MILPCOP(K).
+We also experimented with versions of the COP-OA algorithm using conic con-
+straints in addition to the linear cuts from MILPCOP(K), including:
+ 
+ 
+## M. Gabl, K. M. Anstreicher
+ 
+**Table 1** Results on MINLPLib problems
+ 
+- ex2_1_1 11 1 − Instance nm Opt val DNN gap OA gap OA iter OA time
+- ex2_1_10
+- ex2_1_2 13 2 −
+- ex2_1_3 32 9 −
+- ex2_1_4 15 5 −
+- ex2_1_5 31 11 −
+- ex2_1_6 25 5 −
+- ex2_1_7 30 10 −
+- ex2_1_8
+- ex2_1_9
+- meanvar
+- nemhaus
+- qp2
+- st_bpaf1a 30 10 −
+- st_bpaf1b 30 10 −
+- st_bpk1 10 6 −
+- st_bpv1
+- st_bpv2 13 5 −
+- st_bsj2
+- st_bsj4 16 4 −
+- st_cqpf 11 6 −
+- st_e22 9 5 −
+- st_e23 6 2 −
+- st_e24
+- st_e25
+- st_e26 8 4 −
+- st_fp7a 30 10 −
+- st_fp7b 30 10 −
+- st_fp7c 30 10 −
+- st_fp7d 30 10 −
+- st_fp7e 30 10 −
+- st_fp8
+- st_ht 7 3 −
+- st_jcbpaf2 33 13 −
+- st_m1 31 11 −
+- st_m2 51 21 −
+- st_pan1 7 4 −
+- st_ph1 11 5 −
+- st_ph11 7 4 −
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+**Table 1** continued
+ 
+Instance _nm_ Opt val DNN gap OA gap OA iter OA time
+ 
+st_ph12 7 4 − 22. 625 0. 463 0. 000 2 0. 55
+st_ph13 13 10 − 11. 281 0. 180 0. 000 2 0. 59
+st_ph14 13 10 − 229. 722 0. 000 0. 000 2 0. 60
+st_ph15 8 4 − 392. 704 0. 000 0. 000 3 0. 83
+st_ph2 11 5 − 1028. 117 0. 000 0. 000 5 1. 51
+st_ph20 12 9 − 158. 000 0. 000 0. 000 3 0. 86
+st_ph3 11 5 − 420. 235 0. 000 0. 000 5 1. 87
+st_phex 7 5 − 85. 000 0. 000 0. 000 3 1. 50
+st_qpc-m0 4 2 − 5. 000 0. 000 0. 000 2 0. 82
+st_qpc-m1 5 10 − 473. 778 0. 000 0. 000 3 1. 46
+st_qpc-m3a 20 10 − 382. 695 0. 000 0. 000 3 1. 47
+st_qpc-m3b 20 10 0. 000 0. 000 0. 000 101 39. 70
+st_qpc-m3c 20 10 0. 000 0. 000 0. 141 17 5. 76
+st_qpc-m4 20 10 0. 000 0. 000 0. 000 17 5. 76
+st_qpk1 6 4 − 3. 000 0. 000 0. 000 2 0. 63
+st_qpk2 18 12 − 12. 250 0. 000 0. 000 2 0. 75
+st_qpk3 33 22 − 36. 000 0. 000 0. 000 2 2. 08
+st_rv1 15 5 − 59. 944 0. 000 0. 040 3 1. 25
+st_rv2 30 10 − 64. 481 0. 000 3. 358 38 3663. 46
+st_rv3 40 20 − 35. 761 0. 000 14. 861 6 3618. 24
+st_rv7 50 20 − 138. 188 0. 000 89. 394 6 3622. 44
+st_rv8 60 20 − 132. 662 0. 000 15. 626 6 3626. 00
+st_rv9 70 20 − 120. 153 0. 274 75. 355 7 3725. 03
+ 
+**Table 2** Solution status for
+DNN relaxation and COP-OA
+algorithm
+ 
+```
+COP-OA
+Gap=0Gap> 0 Total
+DNN Gap = 0 38 8 46
+Gap> 09716
+Total 47 15 62
+```
+- Linear and SOC constraints ( 3 ) obtained from 2×2 submatrices;
+- Linear and SOC constraints ( 6 ) obtained from 3×3or4×4 submatrices.
+ 
+Note that neither of these additional constraints makes use of information from the lin-
+ear constraints _Ay_ =0. In our experiments the use of these additional conic constraints
+did not produce any consistent improvements, and in some instances the performance
+of the algorithm was degraded. In the first case, we added SDD constraints ( 3 ) where
+on every iteration we added the most violated constraint, determined by checking
+all principal 2-by-2 submatrices. We refer to this method henceforth as SDD. In the
+second case, we added the constraints ( 6 ), where on each iteration the submatrix was
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+**Table 3** Effect of using additional conic constraints on MINLPLib problems
+ 
+Method # with Diff Fewer iter. than base More iter. than base
+# Max Median # Max Median
+ 
+SDD 9 4 87 3 5 39 3
+4B4 10 4 97 3 6 75 2
+ 
+identified by solving MILPCOPwith an additional constraint _eTz_ ≤4. A constraint
+was only added if a noncopositive 3×3or4×4 submatrix was successfully identified.
+We refer to this method as 4B4.
+The use of these additional conic constraints introduced a greater amount of numer-
+ical instability and consumed more computational resources, resulting in failures on
+some instances that were solved by the base algorithm using only the cuts from
+MILPCOP(K). In particular, SDD failed on instances qp2 and ex2_1_5 while 4B
+failed on instances qp2, st_cqpf and st_qpc-m4. There was one instance, st_cqpf, that
+was not solved by the original algorithm but was solved by the two methods with addi-
+tional constraints, where SDD took 19 iterations and 4B4 took 5 iterations. Among
+the 47 instances that were solved by all three approaches, 38 were solved by SDD in
+the same number of iterations as the base method. Among the 9 remaining instances,
+4 were solved in fewer iterations by SDD. Similarly 4B4 was equal to the base method
+in terms of iterations in 37 instances, and in the remaining 10 instances 4B4 required
+fewer iterations on 4. In Table 3 we summarize the extent of the advantage or disad-
+vantage in the number of iterations on instances where differences occurred.
+ 
+**4.2 Binary QPs**
+ 
+Forthissetofexperimentsweconsiderbinaryquadraticprogramming(BQP)problems
+of the form
+ 
+```
+BQP:min xTQx + qTx
+s.t. Ax ≤ b
+xi ∈{ 0 , 1 }, i = 1 ,..., n ,
+```
+where _A_ is an _m_ × _n_ matrix. Using the methodology of [ 9 ], any such problem has
+an exact representation as a problem of the form CPOPT, obtained by adding slacks
+to convert the inequalities _Ax_ ≤ _b_ to equalities _Ax_ + _s_ = _b_ , _s_ ≥0 and also adding
+explicit constraints _x_ + _t_ = _e_ , _t_ ≥0. In the end we thus have a problem with variables
+_x_ ̄=( _x_ ; _s_ ; _t_ )and equality constraints _A_ ̄ _x_ ̄= _d_ ̄, where
+ 
+### A ̄=
+ 
+### (
+ 
+### AI 0
+ 
+### I 0 I
+ 
+### )
+ 
+```
+, d ̄=
+```
+### (
+ 
+```
+b
+e
+```
+### )
+ 
+### .
+ 
+For each of the above equality constraints we include the original constraint as well
+as the “squared” constraint from ( 7 ). Finally, the binary conditions are incorporated
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+**Table 4** Results on BQP problems
+ 
+Instance Solved Ave. Time (s)
+_nm_ Type Gurobi COP-OA DNN Gurobi COP-OA DNN
+ 
+5 1 I 5 5 5 0.0802 0.4589 0.
+5 1 II 5 5 4 0.0784 0.5677 0.
+5 2 I 5 5 5 0.0798 0.4604 0.
+5 2 II 5 5 3 0.0790 0.5504 0.
+10 2 I 5 5 5 0.0922 1.2223 0.
+10 2 II 5 5 3 0.0840 1.4727 0.
+10 4 I 5 5 3 0.0938 1.3318 0.
+10 4 II 5 5 2 0.0898 1.3546 0.
+15 2 I 5 5 3 0.0912 14.8099 0.
+15 2 II 5 5 0 0.0906 27.0382 0.
+15 5 I 5 5 4 0.0952 79.4416 0.
+15 5 II 5 5 0 0.0942 95.5523 0.
+ 
+via the added equality constraints _x_ =diag( _X_ ); note that these constraints are not
+considered in any way by the MILPCOP(K)cut-generation procedure since they do
+not correspond to linear constraints in the original variables.
+For our numerical experiments we considered two different methodologies for
+randomly generating the objective coefficients _Q_ and _q_. For the first (Type I), _Q_ =
+( _Q_ ˆ+ _Q_ ˆ _T_ )/2, where _Q_ ˆis an upper triangular matrix with elements uniformly chosen
+from{− 1 , 0 , 1 }for 1≤ _i_ ≤ _j_ ≤ _n_ , and the elements of _q_ are similarly uniformly
+chosen from{− 1 , 0 , 1 }. For the second (Type II), _Q_ =( _Q_ ˆ+ _Q_ ˆ _T_ ), where _Q_ ˆ is an
+upper triangular matrix with elements uniformly chosen on the interval[− 5 , 5 ]for
+1 ≤ _i_ ≤ _j_ ≤ _n_ , and the elements of _q_ are similarly uniformly chosen on[− 5 , 5 ].
+We iteratively generated constraints with the coefficient of the first variable always
+equal to one, and the rest of the coefficients equal to zero with probability 60%, 1
+with probability 20% and−1 with probability 20%. For the right-hand side _bi_ we
+drew a random number between zero and max( _aiTe_ , 0 )where _aiT_ is the _i_ th row of
+_A_. After each constraint was generated the problem was checked for feasibility, and
+if it became infeasible the constraint was discarded and the process repeated until
+a feasible problem with the desired number of constraints was obtained. We also
+discarded problems where the feasible set was reduced to a singleton.
+In Table 4 we summarize results for problems of the two types and several choices
+of( _n_ , _m_ ). For each problem type and value of( _n_ , _m_ )we generated 5 instances and
+attempted to solve each instance using Gurobi and our COP-OA algorithm. For each
+instance we also computed the value for the DNN relaxation of CPOPT. As seen in
+Table 4 , Gurobi and the COP-OA algorithm successfully solve all of the instances. The
+number of exact values for the DNN relaxation decreases with _n_ , and is also always
+lower for the Type II problems; most notably the DNN relaxation is not exact for any of
+the Type II problems with _n_ =15. Although the COP outer approximation algorithm
+successfully solves all of the problems, it is clear from Table 4 that it is much slower
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+than Gurobi on these problems, and that the time for the COP-OA algorithm is growing
+rapidly in the problem size. It is worthwhile to note that for these instances the COP-OA
+algorithm never required more than 3 cuts to converge, and therefore we can conclude
+that the MILPCOP(K)cut-generation problems were substantially harder for Gurobi
+to solve than the original BQP problems themselves. In this regard it is important to
+note that advanced MILP codes such as Gurobi utilize considerable logic to identify
+constraint structure and then automatically add valid inequalities to strengthen the LP
+relaxation of problems with discrete variables. For example, in the BQP problems
+inequalities such as triangle inequalities will be automatically generated, and these
+inequalities will dramatically reduce the amount of branching that would otherwise be
+required. On the other hand, problems such as MILPCOP(K)may not have constraint
+structure that can be readily exploited in this way.
+ 
+**5 Application to robust newsvendor problems**
+ 
+In this section we consider a robust multi-item newsvendor problem:
+ 
+```
+max
+x ∈R n
+```
+```
+min
+u ∈U
+```
+```
+∑ n
+```
+```
+i = 1
+```
+```
+( ri − ci ) xi −min{ ri ( xi − ui ), si ( ui − xi )}
+```
+```
+=max
+x ∈R n
+```
+```
+min
+u ∈U
+```
+```
+∑ n
+```
+```
+i = 1
+```
+```
+max{( ri − ci ) xi − ri ( xi − ui ), ( ri − ci ) xi − si ( ui − xi )}
+```
+where _x_ , _r_ , _c_ , _u_ , _s_ , all inR _n_ are vectors of quantities of stocked goods, revenues, costs,
+uncertain demand and shortage costs, respectively. We assume that the uncertainty set
+Uis constructed via the following factor model:
+ 
+### U=
+ 
+### {
+ 
+```
+u ∈R n :
+u = ̄ u +Diag
+```
+### (
+ 
+```
+u ˆ
+```
+### )
+ 
+```
+Fz ,
+z ∈R n ,‖ z ‖∞≤ 1 ,‖ z ‖ 1 ≤ρ
+```
+### }
+ 
+### =
+ 
+### {
+ 
+```
+u ∈R n :
+```
+### (
+ 
+### 1
+ 
+```
+u
+```
+### )
+ 
+### ∈K
+ 
+### }
+ 
+### ,
+ 
+### K=
+ 
+### {(
+ 
+```
+u 0
+u
+```
+### )
+ 
+```
+∈R n +^1 :
+u = u 0 u ̄+Diag
+```
+### (
+ 
+```
+u ˆ
+```
+### )
+ 
+```
+Fz ,
+z ∈R n ,‖ z ‖∞≤ u 0 ,‖ z ‖ 1 ≤ u 0 ρ
+```
+### }
+ 
+### .
+ 
+### (9)
+ 
+In ( 9 ) the vectors _u_ ̄and _u_ ˆare given, as areρand the matrix _F_ ; _u_ ̄can then be seen
+as an average value of the uncertainty parameter around which the uncertainty set
+is constructed. We also assume _F_ to be a matrix of full rank. The factor model ( 9 )
+is a prominent model in the robust optimization literature. However, any polyhedral
+uncertainty set can in principle be handled by our approach, since any polyhedron can
+be described as a conic intersection with a polyhedral cone of the form conducive to our
+set-copositivity detection. In practice some reformulation steps might be necessary,
+such as introducing slack variables for inequality constraints etc.
+This problem was studied in [ 4 ] and later treated by [ 32 ] in the context of copositive
+optimization. The problem has an adjustable robust optimization (ARO) reformulation
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+since the inner-most max problem is a function of the uncertainty parameter:
+ 
+```
+max
+x , y (·)
+```
+```
+min
+u ∈U
+```
+```
+∑ n
+```
+```
+i = 1
+```
+```
+yi ( u )
+```
+```
+yi ( u )≤( ri − ci ) xi − ri ( xi − ui ), u ∈U, i = 1 ,..., n ,
+yi ( u )≤( ri − ci ) xi − si ( ui − xi ), u ∈U, i = 1 ,..., n.
+```
+### (10)
+ 
+There are several known ways to approach ( 10 ) via copositive optimization tech-
+niques, most notably those discussed in [ 31 , 32 ]. The former article presents an exact
+copositive reformulation while the latter investigates copositive reformulations of the
+so-called quadratic policy approximation. The quadratic policy approximation is itself
+inexact, and is further conservatively approximated using an inner approximation of
+the copositive cone. Hence, there are two sources of approximation errors and so far
+their individual respective contributions to the total error has not been investigated
+either analytically or empirically. Since we can now solve both the exact reformula-
+tion and the quadratic policy approximation using our cutting plane algorithm, while
+the conservative approximation of the quadratic policy can be solved with conic opti-
+mization solvers, we have the tools to examine these errors empirically for the first
+time.
+In the following we will give a short review of the main techniques introduced in [ 31 ,
+32 ], applying them to the ARO reformulation of the robust newsvendor problem. After
+that, we present numerical experiments investigating the gaps between the different
+approaches.
+ 
+**5.1 Three approaches based on copositive optimization**
+ 
+In [ 32 ] the authors considered conservative approximations, where the second-stage
+functions _y_ (·)are restricted to the space of quadratic functions, so that
+ 
+```
+y ( u )=
+```
+### ⎛
+ 
+### ⎜
+ 
+### ⎝
+ 
+```
+uTY 1 u + y 1 Tu +γ 1
+..
+.
+uTYnu + ynTu +γ n
+```
+### ⎞
+ 
+### ⎟
+ 
+### ⎠.
+ 
+This restriction is called the _quadratic policy_ or _quadratic decision rule_ since the
+second-stage response to the outcome of the uncertain process is modeled as a function
+that is quadratic in the uncertainty parameter. After applying this quadratic policy, the
+constraints in ( 10 )aregivenby
+ 
+```
+uTYiu + yiTu +γ i ≤( ri − ci ) xi − ri ( xi − ui ), u ∈U, i = 1 ,..., n ,
+uTYiu + yiTu +γ i ≤( ri − ci ) xi − si ( ui − xi ), u ∈U, i = 1 ,..., n ,
+```
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+which can be reformulated into set-copositive constraints
+ 
+```
+λ i ≥ 0 ,
+```
+### (
+ 
+```
+− cixi −γ i^12 ( riei − yi ) T
+1
+2 ( riei − yi ) − Yi
+```
+### )
+ 
+```
+−λ ie 1 e 1 T ∈COP(K),
+```
+```
+μ i ≥ 0 ,
+```
+### (
+ 
+```
+( ri − ci + si ) xi −γ i −^12 ( siei + yi ) T
+−^12 ( siei + yi ) − Yi
+```
+### )
+ 
+```
+−μ ie 1 eT 1 ∈COP(K),
+```
+_i_ = 1 ,..., _n_. The objective function in ( 10 ) can be reformulated similarly after it is
+cast as a constraint by means of introducing an epigraphical variable.
+In [ 32 ] the authors proposed a conservative and therefore inner approximation
+of these constraints. The COP-OA cutting plane algorithm, however, lets us solve the
+resulting model exactly so that we are now able to assess the quality of the conservative
+approximation by comparing its performance with the results from the exact evaluation
+of the quadratic policy. We next give the details of applying our approach, as well as
+formulating the conservative approximation. To start, note that the coneKfrom ( 9 )
+can be written asK= _M_ K ̄, where
+ 
+### K ̄=
+ 
+### {(
+ 
+```
+u 0
+z ,
+```
+### )
+ 
+```
+: z ∈R n ,‖ z ‖∞≤ u 0 ,‖ z ‖ 1 ≤ u 0 ρ
+```
+### }
+ 
+### , M =
+ 
+### (
+ 
+### 10 T
+ 
+```
+u ̄ Diag
+```
+### (
+ 
+```
+u ˆ
+```
+### )
+ 
+### F
+ 
+### )
+ 
+Then, from the definition of set-copositive matrix cones we get that
+ 
+### COP(K)=COP
+ 
+### (
+ 
+### M K ̄
+ 
+### )
+ 
+### = M −TCOP
+ 
+### (
+ 
+### K ̄
+ 
+### )
+ 
+### M −^1
+ 
+so that we can focus on the simpler coneCOP
+ 
+### (
+ 
+### K ̄
+ 
+### )
+ 
+. Following the approach in [ 32 ],
+we can approximate this cone via the conservative inner approximation
+ 
+```
+{
+S + PTWP : S ∈S n ++^1 , W ≥ 0
+```
+### }
+ 
+### ⊆COP
+ 
+### (
+ 
+### K ̄
+ 
+### )
+ 
+### ,
+ 
+where _P_ ∈R _k_ ×( _n_ +^1 )isamatrixsothat
+ 
+### P
+ 
+### (
+ 
+```
+u 0
+z
+```
+### )
+ 
+```
+≥ 0 ⇔‖ z ‖∞≤ u 0 ,‖ z ‖ 1 ≤ u 0 ρ,
+```
+which exists since both norms are polyhedral convex functions (see e.g. [ 27 , Corollary
+19.1.2.]).
+In order to apply our cutting plane algorithm, to solve the quadratic policy model
+exactly, we need to be able to test whether _S_ ∈COP(K). There are two adaptations
+we have to make since, firstly,( _u_ 0 ; _u_ )∈R _n_ +^1 is not restricted to be nonnegative
+and, secondly,Kis described in terms of equations and inequalities rather than just
+equations. However, it is easy to see thatv _TS_ v≥ 0 ∀v∈Kif and only if
+ 
+```
+(
+u +
+u −
+```
+### )(
+ 
+### S − S
+ 
+### − ST S
+ 
+### )(
+ 
+```
+u +
+u −
+```
+### )
+ 
+### ≥ 0
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+for all( _u_ +, _u_ −)such that
+ 
+```
+u +− u −=( u + 0 − u − 0 ) u ̄+Diag
+```
+### (
+ 
+```
+u ˆ
+```
+### )
+ 
+```
+F ( z +− z −),
+```
+```
+P
+```
+### (
+ 
+```
+u + 0 − u − 0
+z +− z −
+```
+### )
+ 
+```
+= p ,
+```
+```
+( u + 0 ; u +)∈R n ++^1 ,( u − 0 ; u −)∈R n ++^1 , z +∈R n +, z −∈R n +, p ∈R k +,
+```
+where the latter conditions describe a cone of the required form for our set-copositivity
+algorithm testing to be applicable.
+We now discuss a third and final approach to ( 10 ) from [ 31 ], where the authors
+derive an exact copositive reformulation of a form that can also be solved via our
+cutting plane algorithm. Thus, the algorithm allows us to do both: solve ( 10 ) exactly
+via the exact copositve reformulation from [ 31 ], but also solve the approximations of
+( 10 ) based on quadratic decision rules exactly, without the need to employ a further
+approximation ofCOP(K). Thus, we can assess the gap introduced by the quadratic
+policy in isolation for the first time.
+To establish the exact reformulation, we observe that ( 10 )isoftheform
+ 
+```
+max
+x , y (·)
+```
+### {
+ 
+```
+min
+U ̄
+```
+### {
+ 
+```
+eTy ( u )
+```
+### }
+ 
+```
+: Ax + By ( u )≥ Cu ,∀ u ∈U ̄
+```
+### }
+ 
+### , (11)
+ 
+with
+ 
+### A =
+ 
+### (
+ 
+```
+−Diag( c )
+Diag( r − c + s )
+```
+### )
+ 
+### , B =
+ 
+### (
+ 
+### − I
+ 
+### − I
+ 
+### )
+ 
+### , C =
+ 
+### (
+ 
+```
+−Diag( r )
+Diag( s )
+```
+### )
+ 
+### (
+ 
+```
+u ̄+Diag( u ˆ) F
+```
+### )
+ 
+### ,
+ 
+andU ̄=
+ 
+### {
+ 
+```
+u ∈K ̄: eT 1 u = 1
+```
+### }
+ 
+### .
+ 
+The following equivalences hold by a classical argument in robust optimization
+(see [ 6 ]) and by strong duality in linear optimization:
+ 
+```
+max
+x , y ( u )
+```
+### {
+ 
+```
+min
+u ∈U ̄
+```
+### {
+ 
+```
+eTy ( u )
+```
+### }
+ 
+```
+: Ax + By ( u )≥ Cu ,∀ u ∈U ̄
+```
+### }
+ 
+```
+=max
+x
+cTx +min
+u ∈U ̄
+```
+```
+max
+y
+```
+### {
+ 
+```
+eT 1 ueTy : Axe 1 Tu + By ≥ Cu
+```
+### }
+ 
+```
+=max x cTx + min
+( u ,w)∈U ̄×R m +
+```
+### {
+ 
+```
+w T
+```
+### (
+ 
+```
+C + Axe 1 T
+```
+### )
+ 
+```
+u : BT w= eeT 1 u
+```
+### }
+ 
+### .
+ 
+By the same argument used in [ 31 ] we can add redundant constraints||( _u_ ;w)|| ≤τ
+for some large enoughτ∈R. The feasible set of the inner minimization problem can
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+be written as
+ 
+### F=
+ 
+### {(
+ 
+```
+u
+w
+```
+### )
+ 
+```
+∈Kˆ: eT 1 u = 1 ,
+```
+### ∥
+ 
+### ∥
+ 
+### ∥
+ 
+### ∥
+ 
+```
+u
+w
+```
+### ∥
+ 
+### ∥
+ 
+### ∥
+ 
+```
+∥≤τ
+```
+### }
+ 
+### ,
+ 
+### Kˆ=
+ 
+### {(
+ 
+```
+u
+w
+```
+### )
+ 
+```
+∈K ̄×R^2 + n : BT w= ee 1 Tu
+```
+### }
+ 
+### =
+ 
+### {(
+ 
+```
+u
+w
+```
+### )
+ 
+```
+∈R n +^1 ×R^2 + n : BT w= ee 1 Tu , Pu ≥ 0
+```
+### }
+ 
+### ,
+ 
+where _Pu_ ≥0 encodes the∞-norm and 1-norm constraints, as above. Then, the
+problemv( _x_ )=min( _u_ ,w)∈F×R _m_ +w _T_
+ 
+### (
+ 
+```
+C + AxeT 1
+```
+### )
+ 
+_u_ has an exact completely positive
+reformulation whose dual is given by
+ 
+```
+max
+λ,μ
+```
+```
+λ+τμ
+```
+```
+s.t.:
+```
+### (
+ 
+(^012)
+ 
+### (
+ 
+```
+C + AxeT 1
+```
+### ) T
+ 
+```
+1
+2
+```
+### (
+ 
+```
+C + AxeT 1
+```
+### )
+ 
+### 0
+ 
+### )
+ 
+```
++λ e 1 eT 1 −μ I ∈COP
+```
+### (
+ 
+### Kˆ
+ 
+### )
+ 
+### ,
+ 
+and its optimal value is equal tov( _x_ )sinceμ _I_ can be scaled to give a Slater point.
+Hence, we can solve max _x_ ∈R _ncTx_ +v( _x_ )as a copositive optimization problem. As
+noted in [ 31 ], strong duality may fail to hold in case we do not create a Slater point in
+the dual by introducing the redundant constraint to bound the conic primal. However,
+in any given iteration of our algorithm, we only solve linear approximations of that
+problem for which strong duality does not hinge on the existence of a Slater point,
+and therefore the termμ _I_ can be omitted. Again, membership inCOP(Kˆ)can be
+certified via our set-copositivity test via a reformulation similar to the one used for
+certifyingCOP(K). In order to execute this strategy we employ similar techniques to
+those used when reformulating the quadratic policy, described above, and we omit the
+details here.
+ 
+**5.2 Computational experiments**
+ 
+For our experiments we chose the following specifications for the problem data
+ 
+```
+r = 80 e , s = 60 e , c = 40 e + 20 c ̃, u ̄= 60 e , u ˆ=v e ,
+```
+where _c_ ̃ _i_ ∼Uniform[ 0 , 1 ]for each _i_ , and the parameterv∈Rwas varied across the
+instances.Forthematrix _F_ wegeneratedarandommatrix _F_ ̄with _F_ ̄ _ij_ ∼Uniform[ 0 , 2 ]
+for each _i_ , _j_ , and populated the rows of _F_ with the rows of _F_ ̄normalized by their 1-
+norm. The impact of _F_ on the uncertainty set is governed by the scaling via _u_ ˆ, which
+we controlled viav. The parameterρ, which controls the shape of the uncertainty
+set, was also varied. Note thatρ =1 eliminates the∞-norm component from the
+description ofU, since in this case the respective 1-norm ball is contained in the
+respective∞-norm ball. For _n_ >ρ>1 both components are relevant.
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+**Table 5** Results for newsvendor problems
+ 
+Instances Average gap (%) Num. Opt.
+_n_ ρv Ex-Quad Ex-Cons Quad-Cons Quad Cons
+ 
+21.010 0. 000 0.000 0. 000 10 10
+21.050 0. 000 0.000 0. 000 10 10
+21.510− 0. 011 0.014 0. 024 10 9
+21.550 0. 000 0.000 0. 000 10 10
+31.010 0. 001 0.000 0. 000 9 9
+31.050 0. 000 0.000 0. 000 10 10
+32.510− 0. 009 0.025 0. 034 9 5
+32.550 0. 056 0.074 0. 018 8 4
+41.010 0. 002 0.000 − 0. 002 10 10
+41.050 0. 001 0.003 0. 002 9 9
+42.510 0. 131 0.266 0. 135 4 0
+42.550 0. 638 1.356 0. 708 2 0
+ 
+In Table 5 we have summarized the results of our experiments. The instances con-
+sidered are organized by the values of( _n_ ,ρ,v). For each of these configurations 10
+instances were generated and the respective rows summarize the results over these
+instances. All instances of the exact and quadratic policy models were successfully
+solved using the COP-OA algorithm. In the columns headed by “Average Gap" we
+report the gap between the exact optimal solutions and the solutions obtained from
+solving the quadratic policy approximation exactly (“Ex-Quad”) the gap from the solu-
+tion of the conservative approximation of the quadratic policy model (“Ex-Cons”) and
+finally the gap between the exact solution under the quadratic policy and its conser-
+vative approximation (“Quad-Cons”). For all of these values we present the avarage
+value of the percentage gaps over the ten instances we created. The final three columns,
+headed by “Num. Opt.”, count the number of times the quadratic model (“Quad”) and
+its conservative approximation (“Cons”), respectively, gave the exact optimal value
+within numerical tolerances.
+Several features of these results are worth discussing in greater detail. First, the
+quality of both the quadratic policy and its conservative approximation deteriorate
+with dimension. This is, secondly, especially the case for instances where the struc-
+ture of the uncertainty set is more complicated, i.e. where both norm constraints
+are relevant. Thirdly, the quality of the conservative approximation of the quadratic
+model is still quite good at least in the instances we considered. This demonstrates
+that comparatively cheap approximations of set-copositive constraints can still yield
+satisfactory results. Finally, the small but theoretically impossible negative values in
+the first and third columns are a testament to the numerical instabilities encountered
+using the COP-OA algorithm to compute the exact and quadratic policy values, and
+also the interior-point solver used to compute values for the conservative approxima-
+tion. For example, numerical degeneracies may develop as cutting planes are added
+in the COP-OA algorithm, and the indicator for set-copositivityγin MILPCOP(K)
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+**Table 6** Time and iterations to
+solve newsvendor problems
+Instances Average time (s) Ave. Iter.
+_n_ ρvExact Quad Cons Exact Quad
+21.010 0. 307 7 .412 0.095 1.0 7. 8
+21.050 0. 299 8 .546 0.094 1.0 8. 5
+21.510 1. 281 8 .361 0.090 4.3 8. 8
+21.550 1. 342 9 .326 0.089 4.7 9. 6
+31.010 0. 655 26 .021 0.122 1.0 13. 5
+31.050 0. 528 33 .116 0.139 1.0 14. 0
+32.510 2. 895 46 .748 0.185 6.1 20. 5
+32.550 2. 662 48 .610 0.152 7.1 24. 6
+41.010 7.301 391.577 0.315 1.0 18. 1
+41.050 7.964 286.086 0.358 1.0 21. 3
+4 2.5 10 21 .515 526.407 0.486 8.2 31. 5
+4 2.5 50 16 .696 430.150 0.437 8.8 45. 7
+ 
+may be close to zero for a super-optimal solution. These issues are especially taxing
+for the quadratic policy instances, since many set-copositivity tests and subsequent
+cutting planes are implemented on every iteration of the algorithm. For the purpose
+of reporting the number of optimal values in the final two columns we consider small
+negative gaps to correspond to optimal solutions.
+In Table 6 we give the average times and number of iterations required for the same
+problems considered in Table 5. As we can see, the exact reformulation was much
+easier to solve for our algorithm than the quadratic policy model. The reason is that
+the latter requires testing set-copositivity for 2 _n_ matrix blocks of order _n_ +1(4 _n_ + _k_ + 2
+after the reformulation described in Sect.5.1) on every iteration, while for the exact
+model only a single test per iteration has to be performed where the order of the matrix
+block is 3 _n_ +1(4 _n_ + _k_ +2 after reformulation). In addition, the larger number of
+copositive matrix blocks substantially increased the number of iterations needed for
+the quadratic policy. Hence solving the quadratic policy exactly does not yield much
+benefit other than certifying the quality of the conservative approximation, at least for
+our solution approach.
+ 
+**6 Conclusion**
+ 
+Inthispaperwehavedescribedanalgorithmfornonconvexquadraticproblemsthatcan
+be formulated as completely positive (CPOPT) optimization problems, whose duals
+are copositive optimization (COOPT) problems. Our method iteratively strengthens
+an outer approximation of the set-copositive cone that incorporates linear constraints
+from the original CPOPT problem. We extend a previous MILP-based method for
+generating a cut that separates a matrix from the copositive cone to incorporate such
+linear constraints. Computational results show that the method is capable of globally
+solving small nonconvex problems to optimality, with the computational bottleneck
+ 
+ 
+Solving nonconvex optimization problems using outer...
+ 
+being the MILP-based separation routine. This observation suggests that modifications
+to the separation problem that make it more computationally tractable would be very
+beneficial; some possibilites include warm-starting the solution process and/or termi-
+nating it early, if a feasible solution with positive objective value is found. In addition,
+CPOPT formulations often include linear constraints that combine the original vari-
+ables _x_ and lifted matrix variables _X_ ; examples include constraints obtained from the
+reformulation–linearization technique (RLT) and constraints of the form _x_ =diag( _X_ )
+for binary _x_. An extension of our methodology that could incorporate such constraints
+in the separation routine would be an attractive enhancement.
+ 
+**Acknowledgements** Research for this paper was begun when one author (Anstreicher) was visiting the
+Vienna Center for Operations Research (VCOR) at the University of Vienna, Austria, where the other
+author (Gabl) was completing his dissertation. Support from the VCOR and especially Prof. Immanuel
+Bomze is gratefully acknowledged. The authors are also grateful to two anonymous referees for their very
+careful readings of the paper and many suggestions for improvements.
+ 
+**References**
+ 
+1. Anstreicher, K.M.: Towards a practical volumetric cutting plane method for convex programming.
+    SIAM J. Optim. **9** , 190–206 (1999).https://doi.org/10.1137/S10526234973180
+2. Anstreicher, K.M.: Testing copositivity via mixed-integer linear programming. Linear Algebra Appl.
+    **609** , 218–230 (2021).https://doi.org/10.1016/j.laa.2020.09.002
+3. Anstreicher, K.M., Burer, S., Dickinson, P.J.: An algorithm to compute the CP-factorization of a
+    completely positive matrix. Oberwolfach Rep. **52** , 3079–3081 (2017)
+4. Ardestani-Jaafari, A., Delage, E.: Linearized robust counterparts of two-stage robust optimization prob-
+    lems with applications in operations management. INFORMS J. Comput. **33** (3), 1138–1161 (2020).
+    https://doi.org/10.1287/ijoc.2020.0959
+5. Badenbroek, R., de Klerk, E.: An analytic center based cutting plane method to determine complete
+    positivity of a matrix. INFORMS J. Comput. **34** , 1115–1125 (2022).https://doi.org/10.1287/ijoc.2021.
+    1108
+6. Ben-Tal, A., Goryashko, A., Guslitzer, E., Nemirovski, A.: Adjustable robust solutions of uncertain
+    linear programs. Math. Prog. **99** (2), 351–376 (2004).https://doi.org/10.1007/s10107-003-0454-y
+7. Bomze, I., Gabl, M.: Interplay of non-convex quadratically constrained problems with adjustable
+    robust optimization. Math. Meth. Oper. Res. **93** , 115–151 (2021).https://doi.org/10.1007/s00186-
+    020-00726-6
+8. Bomze, I.M., Gabl, M.: Optimization under uncertainty and risk: quadratic and copositive approaches.
+    Eur. J. Oper. Res. **310** (2), 449–476 (2023).https://doi.org/10.1016/j.ejor.2022.11.020
+9. Burer, S.: On the copositive representation of binary and continuous nonconvex quadratic programs.
+    Math. Prog. **120** , 479–495 (2009).https://doi.org/10.1007/s10107-008-0223-z
+10. Burer, S.: Copositive programming. In: Handbook on Semidefinite, Conic and Polynomial Optimiza-
+tion, pp. 201–218. Springer, Berlin (2012)
+11. Cifuentes, D., Dey, S., Xu, J.: Sensitivity analysis for mixed binary quadratic programming. Tech. rep.,
+School of IsyE, Georgia Institute of Technology (2023).arXiv: https://arxiv.org/abs/2312.06714
+12. Dickinson, P.J.: An improved characterization of the interior of the completely positive cone. Electron.
+J. Lin. Alg. **20** , 723–729 (2010).https://doi.org/10.13001/1081-3810.1404
+13. Dickinson, P.J.: The copositive cone, the completely positive cone and their generalizations. Ph.D.
+thesis, University of Groningen (2013)
+14. Dickinson, P.J.C., Gijben, L.: On the computational complexity of membership problems for the
+completely positive cone and its dual. Comput. Optim. Appl. **57** , 403–415 (2014).https://doi.org/10.
+1007/s10589-013-9594-z
+15. Dong, H.: Symmetric tensor approximation hierarchies for the completely positive cone. SIAM J.
+Optim. **23** , 1850–1866 (2013).https://doi.org/10.1137/100813816
+ 
+ 
+```
+M. Gabl, K. M. Anstreicher
+```
+16. Dong, H., Anstreicher, K.: Separating doubly nonnegative and completely positive matrices. Math.
+    Prog. **137** , 131–153 (2013).https://doi.org/10.1007/s10107-011-0485-8
+17. Eichfelder, G., Povh, J.: On the set-semidefinite representation of nonconvex quadratic programs
+    over arbitrary feasible sets. Optim. Lett. **7** (6), 1373–1386 (2013).https://doi.org/10.1007/s11590-
+    012-0450-3
+18. Gabl, M., Bomze, I.: Finding quadratic underestimators for optimal value functions of
+    nonconvex all-quadratic problems via copositive optimization. arXiv preprint (2024).arXiv:
+    https://arxiv.org/abs/2409.20355
+19. Goffin, J.L., Luo, Z.Q., Ye, Y.: Complexity analysis of an interior cutting plane method for convex feasi-
+    bility problems. SIAM J. Optim. **6** (3), 638–652 (1996).https://doi.org/10.1137/S1052623493258635
+20. Gondzio, J., Yıldırım, E.A.: Global solutions of nonconvex standard quadratic programs via mixed
+    integer linear programming reformulations. J. Global Optim. **81** , 293–321 (2021).https://doi.org/10.
+    1007/s10898-021-01017-y
+21. Gouveia, J., Pong, T.K., Saee, M.: Inner approximating the completely positive cone via the cone of
+    scaled diagonally dominant matrices. J. Global Optim. **76** , 383–405 (2020).https://doi.org/10.1007/
+    s10898-019-00861-3
+22. Grötschel, M., Lovász, L., Schrijver, A.: Geometric Algorithms and Combinatorial Optimization.
+    Springer-Verlag, Berlin (1988)
+23. Guo, C., Bodur, M., Taylor, J.A.: Copositive Duality for Discrete Energy Markets. University of
+    Toronto, Tech. Rep. (2021)
+24. Kim, S., Kojima, M.: Exact solutions of some nonconvex quadratic optimization problems via
+    SDP and SOCP relaxations. Comput. Optim. Appl. **26** , 143–154 (2003).https://doi.org/10.1023/A:
+    1025794313696
+25. Löfberg, J.: Yalmip : A toolbox for modeling and optimization in matlab. In: Proceedings of the CACSD
+    Conference. Taipei, Taiwan (2004)
+26. Peña, J., Vera, J., Zuluaga, L.F.: Computing the stability number of a graph via linear and semidefinite
+    programming. SIAM J. Optim. **18** , 87–105 (2007).https://doi.org/10.1137/05064401X
+27. Rockafellar, R.T.: Convex Analysis. Princeton University Press, Princeton (2015)
+28. Sahinidis, N.: BARON: a general purpose global optimization software package. J. Glob. Optim. **8** ,
+    201–205 (1996).https://doi.org/10.1007/BF00138693
+29. Shapiro, A.: On duality theory of conic linear problems. In: Goberna, M.Á., López, M.A. (eds.) Semi-
+    Infinite Programming: Recent Advances, pp. 135–165. Springer, Boston (2001)
+30. Xia, W., Vera, J., Zuluaga, L.F.: Globally solving nonconvex quadratic programs via linear integer
+    programming techniques. INFORMS J. Comput. **32** , 40–56 (2020).https://doi.org/10.1287/ijoc.2018.
+    0883
+31. Xu, G., Burer, S.: A copositive approach for two-stage adjustable robust optimization with uncertain
+    right-hand sides. Comput. Optim. Appl. **70** (1), 33–59 (2018).https://doi.org/10.1007/s10589-017-
+    9974-x
+32. Xu, G., Hanasusanto, G.A.: Improved decision rule approximations for multi-stage robust optimization
+    via copositive programming. Oper. Res. (2023).https://doi.org/10.1287/opre.2018.0505
+ 
+**Publisher’s Note** Springer Nature remains neutral with regard to jurisdictional claims in published maps
+and institutional affiliations.
+ 
+Springer Nature or its licensor (e.g. a society or other partner) holds exclusive rights to this article under
+a publishing agreement with the author(s) or other rightsholder(s); author self-archiving of the accepted
+manuscriptversionofthisarticleissolelygovernedbythetermsofsuchpublishingagreementandapplicable
+law.

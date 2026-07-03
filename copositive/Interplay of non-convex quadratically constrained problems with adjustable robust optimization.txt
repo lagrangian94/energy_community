@@ -1,0 +1,3511 @@
+```
+Mathematical Methods of Operations Research (2021) 93:115–
+https://doi.org/10.1007/s00186-020-00726-
+ORIGINAL ARTICLE
+```
+## Interplay of non-convex quadratically constrained
+ 
+## problems with adjustable robust optimization
+ 
+```
+Immanuel Bomze^1 · Markus Gabl^1
+```
+```
+Received: 21 March 2019 / Revised: 24 July 2020 / Published online: 6 October 2020
+© The Author(s) 2020
+```
+```
+Abstract
+In this paper we explore convex reformulation strategies for non-convex quadratically
+constrained optimization problems (QCQPs). First we investigate such reformulations
+using Pataki’s rank theorem iteratively. We show that the result can be used in conjunc-
+tion with conic optimization duality in order to obtain a geometric condition for the
+S-procedure to be exact. Based upon known results on the S-procedure, this approach
+allows for some insight into the geometry of the joint numerical range of the quadratic
+forms. Then we investigate a reformulation strategy introduced in recent literature
+for bilinear optimization problems which is based on adjustable robust optimization
+theory. We show that, via a similar strategy, one can leverage exact reformulation
+results of QCQPs in order to derive lower bounds for more complicated quadratic
+optimization problems. Finally, we investigate the use of reformulation strategies in
+order to derive characterizations of set-copositive matrix cones. Empirical evidence
+based upon first numerical experiments shows encouraging results.
+```
+```
+Keywords Robust optimization·Quadratic optimization·Conic optimization·
+S-Lemma·Copositivity
+```
+#### 1 Introduction and outline
+ 
+```
+In this text we explore the connections between robust optimization and quadratically
+constrained quadratic optimization. For the sake of this introduction we briefly review
+the most important concepts in these areas and then give an outline on the aims of this
+text.
+```
+### BMarkus Gabl
+ 
+```
+markus.gabl@univie.ac.at
+Immanuel Bomze
+immanuel.bomze@univie.ac.at
+```
+(^1) ISOR/VCOR/VGSCO and ds:univie, University of Vienna, Vienna, Austria
+ 
+ 
+116 I. Bomze, M. Gabl
+ 
+**1.1 Quadratically constrained quadratic optimization**
+ 
+A quadratically constrained quadratic optimization problem (QCQP) consists of min-
+imizing a quadratic function subject to quadratic constraints, formally given by
+inf **x** ∈K
+ 
+##### {
+ 
+```
+x TQ x + q T x +ω: x TA i x + a T i x ≤ bi , i ∈[ 1 : m ]
+```
+##### }
+ 
+,whereQ,A _i_ arereal,sym-
+metric matrices of order _n_ ,K⊆R _n_ is a cone, **q** , **a** _i_ are real vectors, _bi_ are real numbers
+and[ 1 : _k_ ]:={ 1 ,..., _k_ }. General QCQPs are hard, and form a large and quite ver-
+satile class of optimization problems. Neither the objective function nor the feasible
+set of a QCQP need to be convex, the latter may even be disconnected. One way to
+(approximately) solve QCQPs is to look for convex relaxations which in the best case
+yield exact reformulations. An important strategy for achieving such reformulations is
+to lift the space of variables, thereby linearizing the quadratic terms and convexifying
+the feasible set, such that its extreme points correspond to rank-one matrices, which
+will decompose into vectors feasible to the original problem:
+ 
+**Theorem 1** _Let_ F:=
+ 
+##### {
+ 
+```
+x ∈K: x TA i x + a T i x ≤ bi , i ∈[ 1 : m ]
+```
+##### }
+ 
+⊆R _nbe a feasible set
+of a QCQP and denote by_
+ 
+```
+G(F):=clconv
+```
+##### {
+ 
+```
+( x , xx T): x ∈F
+```
+##### }
+ 
+##### ,
+ 
+_where_ clconv(A) _stands for the closure of the convex hull of a set_ A_.
+Then for any_ Q∈S _nand_ **q** ∈R _nwe have_
+ 
+```
+inf
+x ∈F
+```
+##### (
+ 
+```
+x TQ x + q T x +ω
+```
+##### )
+ 
+```
+= inf
+( x ,X)∈G(F)
+```
+##### (
+ 
+```
+trace(QX)+ q T x +ω
+```
+##### )
+ 
+##### .
+ 
+**Proof** See, e.g. (Burer and Anstreicher 2013 ; Eichfelder and Povh 2013 ). 
+ 
+The central object in the above theorem isG(F). Its characterization is the major
+challenge when employing the reformulation strategy depicted in Theorem 1 and a
+general workable description ofG(F)is not known. There are, however, characteriza-
+tions for specific instances ofF. In practice such characterizations are regularly given
+by a conic intersection involving some matrix coneCand appropriate linear constraints
+parametrized by matricesA ̄ _i_ and real numbers _b_ ̄ _i_ , _i_ ∈[ 1 : ̄ _m_ ]. Thus, typically we have
+reformulations of the form:
+ 
+```
+inf
+( x ,X)∈G(F)
+```
+##### (
+ 
+```
+trace(QX)+ q T x +ω
+```
+##### )
+ 
+```
+=inf
+Y∈C
+```
+```
+{trace(MY):trace(A ̄ i Y)≤ b ̄ i , i ∈[ 1 : ̄ m ]},
+```
+whereM,A ̄ _i_ and _b_ ̄ _i_ depend on the problem data. Important examples for such reformu-
+lations can be found in Anstreicher and Burer ( 2010 ), Burer ( 2009 ), Burer and Dong
+( 2012 ), Burer and Yang ( 2015 ), Eichfelder and Povh ( 2013 ), Yang et al. ( 2016 ), some
+of which we will discuss in more detail later in the text.
+ 
+ 
+Interplay of non-convex quadratically constrained... 117
+ 
+**1.2 The S-procedure**
+ 
+Another strain of literature that is concerned with a dual perspective on QCQPs is the
+theory of the _S-procedure._ The central question is when for a given set of matrices
+{Q,A 1 ,...,A _m_ }the following two statements are equivalent
+ 
+```
+i )the following system of inequalities has no solution x ∈R n :
+x TQ x <0 and x TA i x ≤ 0 ∀ i ∈[ 1 : m ];
+ii )the following conic inequality has a solutionλ∈R m +:
+```
+##### Q+
+ 
+```
+∑ m
+```
+```
+i = 1
+```
+```
+λ i A i ∈S+ n.
+```
+If equivalence between (i) and (ii) can be established, we say that the S-procedure
+is exact for this set of matrices. Actually, if equivalence holds for arbitraryQ, then
+copositivity overK:= { **x** ∈R _n_ : **x** TA _i_ **x** ≤ 0 , _i_ ∈[ 1 : _m_ ]}(see the notations and
+preliminaries section for the definition) is characterized by∑ COP(K)={Q:Q+
+_m
+i_ = 1 λ _i_ A _i_ ∈S
+ 
+_n_
++for someλ∈R
+_m_
++}. Note that ’⊇’ always holds since obviously _ii_ )
+always implies _i_ ). The first such exactness result, known as the S-Lemma, has been
+establishedinYakubovich( 1971 )forthecase _m_ =1undertheconditionthat **x** T 0 A 1 **x** 0 <
+0 holds for some **x** 0 ∈R _n_. The result is obtained by invoking a convexity result
+derived in Dines ( 1941 ) concerning the so called _joint numerical range_ of quadratic
+functions defined asJ(Q,A 1 ,...,A _m_ ):=
+ 
+##### {
+ 
+```
+( x TQ x , x TA 1 x ,..., x TA m x ): x ∈R n
+```
+##### }
+ 
+.It
+was shown thatJ(Q,A 1 )is a convex cone. From this convexity result it is deduced
+that wheneverJis disjoint from the negative quadrant, i.e., (i) holds, these two sets
+can be separated by a hyperplane. The coefficients of that hyperplane can further be
+shown to be two nonnegative numbers, where the first is actually positive, by using
+the assumption on **x** 0 , which eventually implies (ii).
+ 
+**1.3 Robust and adjustable robust optimization**
+ 
+Robust optimization aims at making a decision under uncertainty by looking for the
+decision with the best worst-case performance among those decisions that will be
+feasible for all realizations of the uncertain data (see Ben-Tal et al. 2009 ; Gorissen
+et al. 2015 and references therein). Formally the robust counterpart of an uncertain
+optimization problem is
+ 
+```
+inf
+x ∈X
+```
+##### {
+ 
+```
+sup
+u ∈U
+```
+##### {
+ 
+```
+f ̄ 0 ( x , u )
+```
+##### }
+ 
+```
+: f ̄ i ( x , u )≥ 0 ∀ u ∈U, i ∈[ 1 : m ]
+```
+##### }
+ 
+##### . (1)
+ 
+The parameters of the functions _f_ ̄ _i_ are uncertain and governed by the uncertainty
+parameter **u** that lives in an uncertainty setU. This set encompasses all possible real-
+izations of **u** .ThesetX⊆R _n_ is some feasible set for the decision vector, that is not
+affected by uncertainty. The solutions obtained by this approach can be overly con-
+servative, a fact that motivated substantial research into redeeming this shortcoming.
+ 
+ 
+118 I. Bomze, M. Gabl
+ 
+One solution to this problem is known as adjustable robust optimization (ARO). In this
+setting, the decision variables are grouped into two categories. The _first stage decision
+variables_ represent decisions to be made “here and now”, i.e. at a point in time when
+there is uncertainty in some of the relevant problem data. The _second stage decision
+variables_ represent decisions that can be delayed until uncertainty is removed. Of
+course, one could in the first stage make a decision on all of the variables and require
+the solution to be feasible for any realization of the uncertainty parameter. But then
+potential flexibility is not harnessed since this is equivalent to the classical robust
+approach, i.e. the solution will be unnecessarily conservative. The idea is that, rather
+than requiring that the decision on all variables is feasible in any case, we merely
+require our first stage decision to allow for a second stage adjustment that renders the
+overall solution to be feasible in any case. Said differently, we look for the best among
+those first stage decisions on **x** ∈Xfor which there exists a function **y** ( **u** )that, given
+any realization of the uncertainty parameter **u** , maps to a vector for the second stage
+decision that in total gives a feasible solution to the optimization problem. ARO was
+introduced in Ben-Tal et al. ( 2004 ) and has received much attention. For a detailed
+survey see (Yanikoglu et al. 2019 ). Generically ARO can be written, in a way slightly
+differing from ( 1 ), as
+ 
+```
+inf
+x ∈X, y ( u )
+```
+##### {
+ 
+```
+sup
+u ∈U
+```
+```
+{ f 0 ( x , y ( u ), u )}: fi ( x , y ( u ), u )≥ 0 ∀ u ∈U, i ∈[ 1 : m ]
+```
+##### }
+ 
+##### . (2)
+ 
+The first stage decision **x** ∈Xis again vector valued, but the second stage variable
+**y** ( **u** )is allowed to adapt to the uncertainty and is thus a function of **u**. Since the space
+of all functions is intractable, so is ( 2 ), and thus it is much harder to solve in practice
+than ( 1 ). However, there are many powerful approaches to (approximately) solve
+it, see (Yanikoglu et al. 2019 ) and references therein. Recently, (Zhen et al. 2019 )
+proposed an adjustable robust approach to disjoint bilinear optimization where the
+problem inf( **x** , **y** )∈X×Y **x** TQ **y** was reformulated into an instance of ARO. The resulting
+problem can then be tackled by the numerous techniques that are usually applied in
+the adjustable robust framework.
+ 
+**Contribution**
+ 
+- In Sect. 3 we discuss a strategy by which convex reformulations of QCQPs have
+    been used in literature for the purpose of reformulating semi-infinite constraints
+    with quadratic index. The strategy is not new, but it has so far not been discussed
+    in a general manner. We think this generic perspective is instructive and helps
+    familiarize the two fields with each other, and also allows for a discussion of the
+    critical elements of that approach. We give small illustrative examples, also to
+    highlight the important role of dual attainability in the reformulation.
+- In Sect. 4 we give an example of a class of homogeneous QCQPs for which we
+    can close the relaxation gap for the so called Shor relaxation (see Theorem 3 ). We
+    show that the result can be transferred to a class of non-homogeneous QCQPs (see
+ 
+ 
+Interplay of non-convex quadratically constrained... 119
+ 
+```
+Theorem 5 ) which are special cases of QCQPs for which the tightness of the Shor
+relaxation is known.
+```
+- Also in Sect. 4 we show that our reformulation result implies a sufficient condition
+    on quadratic forms for the S-procedure to be exact (see Theorem 7 ). Our sufficient
+    condition can be shown to relate to another known sufficient condition in a way
+    that allows us to infer some information on the geometry of the joint numerical
+    range (see Proposition 11 ).
+- In Sect. 5 we give an alternative, copositive perspective on the general reformu-
+    lation strategy for semi-infinite constraints. The so obtained reformulation can be
+    used to characterize the gap that occurs if the underlying QCQP-reformulation
+    fails to exhibit dual attainability (see Theorem 15 ).
+- Finally, in Sect. 6 , we show that a class of QCQPs can be reformulated as adjustable
+    robust optimization problems (see Theorem 18 ) which themselves allow for a
+    bound based on the general reformulation strategy for semi-infinite constraints
+    (see Theorem 19 ). The resulting lower bound is tested against known lower bounds
+    found in literature. Empirical evidence suggests that for some range of the problem
+    parameters our lower bound can be beneficial in terms of computation time and
+    solution quality.
+ 
+#### 2 Notation and preliminaries
+ 
+Throughout the paper matrices are denoted by sans-serif capital letters (e.g. the _n_ × _n_ -
+identity matrix will be denoted byE _n_ , whileOwill denote the zero matrix), vectors
+by boldface lower case letters (e.g. **e** _i_ will denotes the _i_ -th column ofE _n_ , and **o** will
+denote the zero vector) and scalars (real numbers) by simple lower case letters. We
+use _xi_ to denote the _i_ -th entry of a vector **x**. The analogous holds between matrices
+and vectors, and between matrices and numbers with double indices. For example, for
+amatrixX,the _i_ -th column or row vector (which will be pointed out as we go along)
+is given by **x** _i_ , and the _j_ -th entry in the _i_ -row will by denoted _xij_. Sets will be denoted
+using calligraphic letters, e.g., cones will often be denoted byK.WeuseS _n_ to indicate
+the set of symmetric matrices andS++ _n_ /S−− _n_ ,S+ _n_ /S− _n_ for the sets of positive-/negative-
+definiteandthesetofpositive-/negative-semidefinitesymmetricmatrices,respectively.
+Moreover, we useN _n_ to denote the set of entrywise nonnegative, symmetric matrices.
+For notational convenience, we will define the block matrix
+ 
+##### M(A,B,C):=
+ 
+##### (
+ 
+##### A^12 B
+ 
+```
+1
+2 B
+```
+##### T C
+ 
+##### )
+ 
+##### (3)
+ 
+whereA,B,Care matrices of appropriate size. Also, for a vector **v** ∈R _n_ we will
+denote by Diag( **v** )∈S _n_ the diagonal matrix whose diagonal entries are the respective
+entries of **v**.
+For a given setAwe denote its interior, closure, relative interior, relative boundary,
+convex hull and conic hull by int(A),cl(A),ri(A),bd(A), conv(A), cone(A), where
+for the latter operation we stick to the convention that cone(A):= {λ **x** : **x** ∈A,λ≥ 0 }
+ 
+ 
+120 I. Bomze, M. Gabl
+ 
+for notational ease (note that by this definition cone(A)is the union of{ **o** }and the
+smallest cone containingA).
+LetVbe eitherR _n_ orS _n_ , whereby we use the standard inner product inR _n_ , while
+inS _n_ the inner product is given by the Frobenius productA•B=trace(AB). For an
+arbitrary coneK⊆Vwe denote the dual cone byK∗⊆Vwhere
+ 
+```
+K∗:={ y ∈V:〈 x , y 〉≥0 for all x ∈K}=[clK]∗.
+```
+It is well known thatK∗∗=clconv(K). The closure and the convex-hull operations
+can be omitted ifKis closed and/or convex, respectively. We also have
+ 
+```
+int(K∗)={ y ∈V:〈 x , y 〉>0 for all x ∈K\{ o }}.
+```
+We say a convex coneKis _pointed_ if it does not contain a line or, equivalently, if
+int(K∗) =∅.
+Throughout the text, we will make use of conic linear optimization tools. A conic
+linear optimization problem is given by
+ 
+```
+p ∗=inf
+x ∈K
+```
+```
+{〈 c , x 〉:〈 a i , x 〉= bii ∈[ 1 : m ]}, (P)
+```
+which is just a linear optimization problem with an extra constraint that restricts the
+decision variable **x** to lie in a closed, convex coneK. The dual problem is given by
+ 
+```
+d ∗=sup
+λ∈R m
+```
+```
+{ m
+∑
+```
+```
+i = 1
+```
+```
+−λ ibi : c +
+```
+```
+∑ m
+```
+```
+i = 1
+```
+```
+λ i a i ∈K∗
+```
+##### }
+ 
+##### . (D)
+ 
+Slater’s condition says that a relative interior feasible point of (P) guarantees _p_ ∗= _d_ ∗
+and existence of an optimal solution to (D) if it is feasible, and likewise with (D) and
+(P) interchanged.
+A large portion of our discussion will revolve around _set-copositive_ and _set-
+completely positive_ matrix cones, which for arbitrary conesK⊆R _n_ are defined
+in the following way, putting _k_ =
+ 
+```
+( n + 1
+2
+```
+##### )
+ 
+```
+=dimS n :
+```
+```
+COP n (K):=
+```
+##### {
+ 
+```
+Q∈S n : x TQ x ≥0 for all x ∈K
+```
+##### }
+ 
+##### ,
+ 
+```
+CPP n (K):=
+```
+```
+{ k
+∑
+```
+```
+i = 1
+```
+```
+x i x T i : x i ∈K, i ∈[ 1 : k ]
+```
+##### }
+ 
+```
+=conv
+```
+##### {
+ 
+```
+xx T: x ∈K
+```
+##### }
+ 
+```
+={XXT:X∈R n × k , x i ∈K, i ∈[ 1 : k ]}
+```
+```
+⊆S n.
+```
+The index _n_ will henceforth be suppressed if the dimension is clear from the context.
+The above matrix cones are convex cones that are dual to each other ifKis closed since
+in generalCOP(K)∗=cl[CPP(K)]=CPP(clK)holds (Sturm and Zhang 2003 ,
+ 
+ 
+Interplay of non-convex quadratically constrained... 121
+ 
+Proposition 1 and Lemma 1). In fact, an easy continuity argument shows thatCOP(K)
+is always closed even ifKis not. SinceS+ _n_ =COP(R _n_ )=CPP(R _n_ ), this also shows
+that the cone of positive-semidefinite matrices is self-dual, i.e.(S _n_ +)∗=S _n_ +. The con-
+cept of copositivity was first introduced in Motzkin ( 1952 ) for the caseK=R _n_ +.To
+determine whether a given matrix is an element of eitherCOP(R _n_ +)orCPP(R _n_ +)is
+NP-hard. This leaves the impression that using these cones in optimization yields
+a complication rather than a solution of a problem. However, both cones can be
+approximated by tractable matrix cones, and recent literature shows that even sim-
+ple approximations yield good bounds for several kinds of optimization problems. We
+will not go into further detail but instead refer to Bomze ( 2012 ), Dür ( 2010 ), Hiriart-
+Urruty and Seeger ( 2010 ). Here, let us just mention the most elementary examples of
+tractable approximations given by
+ 
+```
+COP(R n +)⊇S n +N n =:NND n ,
+CPP(R n +)⊆S n +∩N n =:DNN n
+```
+##### (4)
+ 
+where the mnemonicsNND,DNN abbreviate _non-negative-decomposable_ and
+_doubly-non-negative_ respectively. In fact, the inclusions in ( 4 ) hold with equality in
+case _n_ <5. We also have the useful equality
+ 
+```
+COP(R n ×R+)=CPP(R n ×R+)=S+ n +^1
+```
+which holds sinceCOP(R _n_ ×R+)⊇S+ _n_ +^1 while on the other hand( **x** T, _x_ 0 )A( **x** ; _x_ 0 )≥
+0 ∀( **x** , _x_ 0 )∈R _n_ ×R+implies( **x** T, _x_ 0 )A( **x** ; _x_ 0 )=(− 1 )^2 (− **x** T,− _x_ 0 )A(− **x** ;− _x_ 0 )≥
+0 ∀( **x** , _x_ 0 )∈R _n_ ×R−. The equalityCPP(R _n_ ×R+)=S+ _n_ +^1 then follows from
+selfduality ofS+ _n_ +^1 and the fact thatR _n_ ×R+is a closed, convex cone and hence
+COP(R _n_ ×R+)=CPP(R _n_ ×R+)∗.
+ 
+#### 3 Convex reformulations of QCQPs and robust optimization
+ 
+We will now proceed in describing the general strategy by which these reformulation
+results can be leveraged in order to cope with cases where the semi-infinite con-
+straints present in robust optimization depend quadratically on the uncertainty vector
+**u**. Assume that _f_ ( **x** , **u** )= **u** TQ( **x** ) **u** + **q** ( **x** )T **u** +ω( **x** )whereQ( **x** ), **q** ( **x** ), ω( **x** )are
+matrix-, vector- and scalar-valued functions of the decision vector **x**. For ease of nota-
+tion we refer to them asQ, **q** andω, suppressing the dependence on **x**. We thus consider
+the semi-infinite constraint and its (possibly non-smooth) single-constraint equivalent
+ 
+```
+u TQ u + q T u +ω≥ 0 ∀ u ∈U ⇐⇒ inf
+u ∈U
+```
+##### [
+ 
+```
+u TQ u + q T u +ω
+```
+##### ]
+ 
+##### ≥ 0. (5)
+ 
+Now suppose that for genericQ, **q** andωthe minimization problem in ( 5 ) has an exact
+convex, conic reformulation of the following form, using an appropriate matrix cone
+Cand appropriate matricesA _i_ ∈S _n_ +^1 , real numbers _bi_ ∈R, _i_ ∈[ 1 : _m_ ], so that,
+using notation ( 3 ),
+ 
+ 
+122 I. Bomze, M. Gabl
+ 
+```
+inf
+u ∈U
+```
+##### [
+ 
+```
+u TQ u + q T u +ω
+```
+##### ]
+ 
+```
+=inf
+Y∈C
+```
+```
+{M(Q, q ,ω)•Y:A i • Y≤ bi , i ∈[ 1 : m ]}.
+```
+Further, assume that for this reformulation and its dual we can establish zero duality
+gap and dual attainability (e.g., if the primal satisfies Slater’s condition), so that
+ 
+```
+inf
+Y∈C
+```
+```
+{M(Q, q ,ω)•Y:A i • Y≤ bi , i ∈[ 1 : m ]}
+```
+```
+=sup
+λ∈R m +
+```
+##### {
+ 
+```
+− b Tλ:M(Q, q ,ω)+
+```
+```
+∑ m
+```
+```
+i = 1
+```
+```
+λ i A i ∈C∗
+```
+##### }
+ 
+##### .
+ 
+Sincedualattainabilityguaranteestheexistenceofthedualmaximizers,wecanenforce
+the semi-infinite constraint in ( 5 ) by demanding that
+ 
+```
+b Tλ≤0 and M(Q, q ,ω)+
+```
+```
+∑ m
+```
+```
+i = 1
+```
+```
+λ i A i ∈C∗ for someλ∈R m +. (6)
+```
+In summary, the strategy is to bypass the need to directly dualize the implicit QCQP
+in ( 5 ) by providing a linear conic reformulation, a dual of which can be formed by
+invoking linear conic duality, which is a very well developed and understood subject.
+Many results in recent literature have harnessed this general strategy in order to cope
+with cases where quadratic terms in the uncertainty vector appear (see e.g. Mittal et al.
+2019 ; Xu and Hanasusanto 2019 ). We want to highlight that the critical ingredients
+for the above strategy are:
+ 
+- closing the relaxation gap,
+- closing the duality gap for the conic reformulation and
+- guaranteeing dual attainability.
+ 
+While the first obstacle seems to be the most challenging, duality also comes with some
+subtleties attached. In Sect. 5 we will make an effort to understand the reformulation
+gap, that may occur in case of a failure of dual attainability, while in Sect. 4 we will
+discuss relaxation and duality gaps and their relation to each other. For now, we will
+give some examples that illustrate the above strategy and also demonstrate that the
+gap can be infinite if dual attainability does not hold.
+ 
+**Example 1** Consider the robust optimization problem
+ 
+```
+min x + y
+s.t.: xu^21 + yu^22 ≥ 1 ∀( u 1 , u 2 )∈R^2 +: u 1 + u 2 = 1.
+```
+##### (7)
+ 
+If, out of the infinitely many constraints, we enforced merely 0. 52 _x_ + 0. 52 _y_ ≥1, we
+obtained a relaxed problem with an optimal value of 4 attained at _x_ = _y_ =2. This
+solution is also feasible for the original problem since min
+ 
+##### {
+ 
+2 _u_^21 + 2 _u_^22 : _u_ 1 + _u_ 2 =
+1 ,( _u_ 1 , _u_ 2 )∈R^2 +
+ 
+##### }
+ 
+=1, and thus it is also optimal. We will now show, that the general
+reformulation strategy yields an equivalent problem with finitely many constraints.
+ 
+ 
+Interplay of non-convex quadratically constrained... 123
+ 
+It is well known that min
+ 
+##### {
+ 
+```
+au^21 + bu^22 + cu 1 u 2 : u 1 + u 2 = 1 ,( u 1 , u 2 )∈R^2 +
+```
+##### }
+ 
+##### =
+ 
+min
+ 
+##### {
+ 
+```
+au 11 + bu 22 + cu 21 : u 11 + 2 u 21 + u 22 = 1 ,U∈S+^2 ∩N 2
+```
+##### }
+ 
+(see Bomze et al.
+2002 ). We haveM( 1 / 3 , 2 / 6 , 1 / 3 )∈int
+ 
+##### (
+ 
+##### S+^2 ∩N
+ 
+##### )
+ 
+so by Slater’s condition the latter
+optimization problem is equivalent to max
+ 
+##### {
+ 
+```
+λ:M( a , c , b )−λM( 1 , 2 , 1 )∈S^2 ++N 2
+```
+##### }
+ 
+##### ,
+ 
+and the maximum is attained. We thus have the equivalences
+ 
+```
+xu^21 + yu^22 ≥ 1 ∀( u 1 , u 2 )∈R^2 +: u 1 + u 2 = 1
+```
+```
+⇔min
+```
+##### {
+ 
+```
+xu^21 + yu^22 :( u 1 , u 2 )∈R^2 +: u 1 + u 2 = 1
+```
+##### }
+ 
+##### ≥ 1
+ 
+```
+⇔min
+```
+##### {
+ 
+```
+xu 11 + yu 22 : u 11 + 2 u 21 + u 22 = 1 ,U∈S+^2 ∩N 2
+```
+##### }
+ 
+##### ≥ 1
+ 
+```
+⇔max
+```
+##### {
+ 
+```
+λ:M( x , 0 , y )−λM( 1 , 2 , 1 )∈S+^2 +N 2
+```
+##### }
+ 
+##### ≥ 1
+ 
+```
+⇔λ≥ 1 ,M( x , 0 , y )−λM( 1 , 2 , 1 )∈S+^2 +N 2 for someλ∈R
+```
+Thus we can replace the constraints in ( 7 ) in order to obtain
+ 
+```
+min x + y
+s.t.:λ≥ 1 ,M( x , 0 , y )−λM( 1 , 2 , 1 )∈S+^2 +N 2 ,
+```
+##### (8)
+ 
+and can see by computation that the minimum is attained at _x_ = _y_ =2 andλ=1.
+ 
+**Example 2** To illustrate the issues of a failure of dual attainability for the conic refor-
+mulation we consider the robust optimization problem
+ 
+```
+min x + y
+s.t.:( x + y ) u^21 ≥ u 2 u 3 ∀( u 1 , u 2 , u 3 )∈[ 0 , 1 ]×[ 0 , 1 ]×{ 0 }
+x + y ≤ 0
+```
+##### (9)
+ 
+Note that the semi-infinite constraint is equivalent to _x_ + _y_ ≥0, so that the con-
+straints overall imply _x_ + _y_ = 0 and the minimum is 0. We claim that for any
+_a_ ∈Rwe have _q_ ( _a_ ):=min
+ 
+##### {
+ 
+```
+au^21 − u 2 u 3 :( u 1 , u 2 , u 3 )∈[ 0 , 1 ]×[ 0 , 1 ]×{ 0 }
+```
+##### }
+ 
+##### =
+ 
+min
+ 
+##### {
+ 
+```
+au 11 − u 23 : u 11 ≤ 1 , u 22 ≤ 1 , u 33 = 0 ,U∈S+^3
+```
+##### }
+ 
+. The claim follows easily after
+considering thatU∈S+^3 and _u_ 33 =0imply _u_ 23 =0. Note, that this reformulation
+is not based on a characterization ofG(F), but is coincidental, and chosen here in
+order to illustrate a point about dual attainability. Also, we see that _q_ ( _a_ )= _a_ if _a_ < 0
+and zero otherwise. The conic reformulation does not have a Slater point, however its
+dual, given by
+ 
+```
+supλ 1 +λ 2
+```
+```
+s.t.:M D ( a ,λ 1 ,λ 2 ,λ 3 ):=
+```
+##### ⎛
+ 
+##### ⎝
+ 
+```
+a −λ 1 00
+0 −λ 2 − 1 / 2
+0 − 1 / 2 −λ 3
+```
+##### ⎞
+ 
+```
+⎠∈S+^3 ,λ 1 ≤ 0
+```
+ 
+124 I. Bomze, M. Gabl
+ 
+does have a Slater point, whereλ _i_ , _i_ = 1 , 2 ,3 are sufficiently small. Thus the conic
+reformulation and its dual have the same optimal value, but dual attainability is not
+guaranteed. In fact, some elementary analysis reveals that the dual does not attain its
+optimum. We thus merely have the following implications
+ 
+```
+( x + y ) u^21 ≥ u 2 u 3 ∀( u 1 , u 2 , u 3 )∈[ 0 , 1 ]×[ 0 , 1 ]×{ 0 }
+```
+```
+⇔min
+```
+##### {
+ 
+```
+( x + y ) u^21 − u 2 u 3 :( u 1 , u 2 , u 3 )∈[ 0 , 1 ]×[ 0 , 1 ]×{ 0 }
+```
+##### }
+ 
+##### ≥ 0
+ 
+```
+⇔min
+```
+##### {
+ 
+```
+( x + y ) u 11 − u 23 : u 11 ≤ 1 , u 22 ≤ 1 , u 33 = 0 ,U∈S+^3
+```
+##### }
+ 
+##### ≥ 0
+ 
+```
+⇔sup
+```
+##### {
+ 
+```
+λ 1 +λ 2 :M D (( x + y ), λ 1 ,λ 2 ,λ 3 )∈S^3 +,λ 1 ≤ 0
+```
+##### }
+ 
+##### ≥ 0
+ 
+```
+⇐λ 1 +λ 2 ≥ 0 ,M D (( x + y ), λ 1 ,λ 2 ,λ 3 )∈S+^3 ,λ 1 ≤0forsomeλ∈R^3
+```
+The final constraint implies _x_ + _y_ >0 since in case of _x_ + _y_ =0 we hadλ 1 =0 and
+λ 2 can neither be zero nor positive. Thus if we replaced the semi-infinite constraint
+in ( 9 ) by the latter constraint, the problem would become infeasible. This exemplifies
+that closing the relaxation gap as well as the duality gap is in general not enough to
+guarantee an exact reformulation.
+ 
+#### 4 Exactness of the Shor relaxation and the S-Lemma
+ 
+As stressed in Burer ( 2015 ), the key problem when employing Theorem 1 is to
+characterize the setG(F), which of course depends heavily on the choice ofF
+(note that no convexity assumptions are imposed onF). A natural starting point
+is given by the so called Shor relaxation which is constructed in the following
+manner. For notational convenience we defineY(X, **x** ):=M(X, 2 **x** , 1 )as well as
+E _xt_ (K×R+):=
+ 
+##### {
+ 
+```
+xx T: x ∈K×R+
+```
+##### }
+ 
+whereKis a closed cone, so thatCPP(K×
+R+)=clconv(E _xt_ (K×R+))(in fact one can show thatE _xt_ (K×R+)is identical to
+the set of extreme rays ofCPP(K×R+)). We have
+ 
+```
+inf
+x ∈K
+{ x TQ x + q T x +ω: x TA i x + a T i x ≤ bi , i ∈[ 1 : m ]}
+```
+```
+=inf
+x ∈K
+{M(Q, q ,ω)•Y( xx T, x ):M(A i , a i , 0 )•Y( xx T, x )≤ bi , i ∈[ 1 : m ]}
+=infX, x {M(Q, q ,ω)•Y(X, x ):M(A i , a i , 0 )•Y(X, x )≤ bi , i ∈[ 1 : m ],Y(X, x )∈E xt (K×R+)}
+≥inf
+X, x
+{M(Q, q ,ω)•Y(X, x ):M(A i , a i , 0 )•Y(X, x )≤ bi , i ∈[ 1 : m ],Y(X, x )∈CPP(K×R+)}
+```
+```
+=inf
+X, x
+{Q•X+ q T x +ω:A i • X+ a T i x ≤ bi , i ∈[ 1 : m ],Y(X, x )∈CPP(K×R+)}.
+(10)
+```
+We will refer to the latter problem as Shor relaxation since the core idea was introduced
+in Shor ( 1987 ) albeit for the special case ofK=R _n_ , in which caseCPP(R _n_ ×R+)=
+S+ _n_ +^1 (see the notations and preliminaries section). The above derivation makes it
+apparent that the Shor relaxation is not necessarily tight, since its feasible setF _Shor_
+can have extreme points that are not rank one matrices. However, if we find that the
+ 
+ 
+Interplay of non-convex quadratically constrained... 125
+ 
+optimal solution of the Shor relaxation is a rank one matrix, then we have solved
+the original QCQP. If we can show that a rank one solution exists for any choice of
+coefficients(Q, **q** ,ω), we have indeed shown thatF _Shor_ =G(F)(see e.g. Yang et al.
+2016 ). But in generalF _Shor_ ⊇G(F)so that one has to find a strengthening of the Shor
+relaxation if the relaxation gap is to be closed (e.g. see Burer 2009 , 2012 ; Eichfelder
+and Povh 2013 )
+However, another way of establishing exactness of the Shor relaxation stems from
+the fact that the conic dual of the Shor relaxation and the Semi-Lagrangian dual of the
+underlyingQCQP(seeBomze 2015 ;FayeandRoupin 2007 )takethesameform.Tosee
+this consider the following derivation of the dual of a QCQP, using the abbreviations
+**b** ̄ =[ 1 , _b_ 1 ,..., _bm_ ]T∈R _m_ +^1 and, for givenλ=[λ 0 ,λ 1 ,...,λ _m_ ]T∈R _m_ ++^1 ,the
+quadratic form _q_ ( **x** , _x_ 0 ;λ)= **x** TQ **x** + _x_ 0 **q** T **x** + _x_^20 ω+λ 0 _x_ 02 +
+ 
+```
+∑ m
+i = 1 λ i ( x
+TA i x + x 0 a T
+i x ):
+inf
+x ∈K
+{ x TQ x + q T x +ω: x TA i x + a T i x ≤ bi , i ∈[ 1 : m ]}
+```
+```
+= inf
+( x , x 0 )∈K×R+
+```
+```
+{ x TQ x + x 0 q T x +ω x 02 : x TA i x + x 0 a T i x ≤ bi , i ∈[ 1 : m ], x^20 = 1 }
+```
+```
+≥ sup
+λ∈R m ++^1
+```
+```
+inf
+( x , x 0 )∈K×R+
+```
+```
+⎧
+⎨
+⎩ x
+```
+```
+TQ x + x 0 q T x + x 2
+0 ω+λ^0 ( x
+2
+0 −^1 )+
+```
+```
+∑ m
+i = 1
+```
+```
+λ i ( x TA i x + x 0 a T i x − bi )
+```
+```
+⎫
+⎬
+⎭
+```
+```
+= sup
+λ∈R m ++^1
+```
+```
+{
+−λT b ̄+ inf
+( x , x 0 )∈K×R+
+q ( x , x 0 ;λ)
+```
+```
+}
+```
+```
+= sup
+λ∈R m ++^1
+```
+```
+{
+−λT b ̄: q ( x , x 0 ;λ)≥ 0 ∀( x , x 0 )∈K×R+
+```
+```
+}
+```
+```
+= sup
+λ∈R m ++^1
+```
+```
+⎧
+⎨
+⎩
+−λT b ̄:M(Q, q ,ω)+λ 0 M(O, o , 1 )+
+```
+```
+∑ m
+i = 1
+```
+```
+λ i M(A i , a i , 0 )∈COP(K×R+)
+```
+```
+⎫
+⎬
+⎭
+.
+```
+In the second to last equality we used the fact that for any quadratic form _q_ ( **x** )and
+any coneK ̄we have
+ 
+```
+inf
+x ∈K ̄
+```
+```
+q ( x )=
+```
+##### {
+ 
+```
+0if q ( x )≥ 0 ∀ x ∈K ̄
+−∞ otherwise.
+```
+Here, we speak of a Semi-Lagrangian dual, since the constraints( **x** , _x_ 0 )∈K×R+are
+not dualized in that we do not introduce respective dual variables. The final equality
+follows from the definition ofCOP(·)and in fact yields the conic dual of the Shor
+relaxation after a small reformulation,
+ 
+```
+inf
+X, x
+{Q•X+ q T x +ω:A i • X+ a T i x ≤ bi , i ∈[ 1 : m ],Y(X, x )∈CPP(K×R+)}
+```
+```
+= inf
+Y∈CPP(K×R+)
+{M(Q, q ,ω)•Y:M(A i , a i , 0 )•Y≤ bi , i ∈[ 1 : m ],M(O, o , 1 )•Y= 1 }.
+```
+Duality results for QCQPs are regularly obtained by proving that the joint numerical
+rangeofthequadraticformsinvolvedhassomeconvexityproperty(eitherbeingconvex
+itself or becoming convex after adding the positive orthant in Minkowski’s set-sum
+ 
+ 
+126 I. Bomze, M. Gabl
+ 
+sense). For examples, see (Chieu et al. 2019 ; Jeyakumar and Li 2014 ) and references
+therein. If for a fixed feasible setFthe duality result holds for an arbitrary choice
+of the objective function coefficients, the feasible set of the Shor relaxation is in fact
+G(F).
+We will now proceed to give some examples that illustrate the interplay between
+relaxation gaps, duality gaps and exact strengthenings of QCQPs and their relaxations.
+ 
+**Example 3** (Zero duality gap for the QCQP, hence the Shor relaxation is tight) Consider
+the optimization problem min _x_ ∈R+
+ 
+##### {
+ 
+```
+− x^2 : x^2 ≤ 1
+```
+##### }
+ 
+. We will now give an argument for
+full strong duality based on the joint numerical range. In this simple special case the
+difficulties of such an approach are avoided while the core idea of the argument is
+maintained. The following equalities are easily checked:
+ 
+```
+min
+x ∈R+
+```
+##### {
+ 
+```
+− x^2 : x^2 ≤ 1
+```
+##### }
+ 
+```
+=sup
+t ∈R
+```
+##### {
+ 
+```
+t :− x^2 ≥ t for all x ∈R+with x^2 ≤ 1
+```
+##### }
+ 
+```
+=sup
+t ∈R
+```
+##### {
+ 
+```
+t :
+```
+##### {
+ 
+```
+x ∈R+:− x^2 < t , x^2 ≤ 1
+```
+##### }
+ 
+##### =∅
+ 
+##### }
+ 
+##### .
+ 
+In order to close the duality gap we have to show that the condition
+ 
+```
+{
+x ∈R+:− x^2 < t , x^2 ≤ 1
+```
+##### }
+ 
+##### =∅ (11)
+ 
+is equivalent to
+ 
+```
+∃λ≥ 0 :(− x^2 − t )+λ( x^2 − 1 )≥ 0 ∀ x ∈R+ (12)
+```
+Clearly, ( 12 )implies( 11 ), since in case ( 11 ) fails, any member of the respective
+set is an _x_ ∈ R+that invalidates ( 12 ). The reverse implication can be demon-
+strated by appealing to the geometry of the joint numerical range{ J(− 1 , 1 ,R+)=
+(− _x_^2 , _x_^2 )T: _x_ ∈R+
+ 
+##### }
+ 
+. In fact, in this simple case we have
+ 
+##### J(− 1 , 1 ,R+)=
+ 
+##### {
+ 
+```
+δ
+```
+##### (
+ 
+##### − 1
+ 
+##### 1
+ 
+##### )
+ 
+```
+:δ≥ 0
+```
+##### }
+ 
+##### ,
+ 
+which is a half line and thus convex (which also illustrates the classical result in Dines
+( 1941 )). Now assume that ( 11 ) holds, thenJ(− 1 , 1 ,R+)− _t_ **e** 1 − **e** 2 does not meet
+int(R^2 −). Since both sets are convex, they can be separated by a hyperplane, i.e. it holds
+that
+ 
+```
+∃(α, β)T∈R^2 +\{ o }:α(− x^2 − t )+β( x^2 − 1 )≥ 0 ∀ x ∈int(R+)
+```
+where the nonnegativity of the multipliers follows from the fact that we separate from
+the interior of the negative orthant and the int(·)-operator can be dropped by continuity.
+For the latter condition to hold, it must be the case thatα>0, otherwise we hadβ> 0
+ 
+ 
+Interplay of non-convex quadratically constrained... 127
+ 
+and _x_ =0 would take the remaining term to be−β<0. We thus arrive at ( 12 ) with
+λ=β/α. Finally, we have that for any fixed _t_ ∈R( 12 ) is equivalent to
+ 
+```
+∃λ≥ 0 :(− x^2 − ty^2 )+λ( x^2 − y^2 )≥ 0 ∀( x , y )∈R+×{ 1 }
+⇔∃λ≥ 0 :(− x^2 − ty^2 )+λ( x^2 − y^2 )≥ 0 ∀( x , y )∈R^2 +
+⇔∃λ≥ 0 :M(− 1 , 0 ,− t )+λM( 1 , 0 ,− 1 )∈COP(R^2 +),
+```
+so that min _x_ ∈R+
+ 
+##### {
+ 
+```
+− x^2 : x^2 ≤ 1
+```
+##### }
+ 
+```
+= sup t ,λ
+```
+##### {
+ 
+_t_ :M(− 1 , 0 ,− _t_ ) +λM( 1 , 0 ,− 1 )
+∈COP(R^2 +), λ≥ 0
+ 
+##### }
+ 
+. The latter problem is equivalent to supλ{−λ: 1 ≤λ, λ∈R+}
+which is the dual of the Shor relaxation min _x_ ∈S 1
++
+{− _x_ : _x_ ≤ 1 }. Thus it follows that
+ 
+the Shor relaxation is tight.
+ 
+**Example 4** (Positive QCQP-duality gap, inexact Shor relaxation with exact tightening,
+both with zero duality gap) Consider the dual of min
+ 
+##### {
+ 
+_x_^2 − _y_^2 + _x_ : _x_ + _y_ = 1 , _x_ , _y_ ≥
+0
+ 
+##### }
+ 
+```
+given by
+```
+```
+supλ 1 +λ 2
+```
+```
+s.t.:
+```
+##### ⎛
+ 
+##### ⎝
+ 
+```
+101 − 2 λ^1
+0 − 1 λ 21
+1 −λ 1
+2
+```
+```
+λ 1
+2 λ^2
+```
+##### ⎞
+ 
+##### ⎠∈COP(R^3 +)=S^3 ++N 3.
+ 
+The primal QCQP has an optimal value of−1 while the lagrangian dual is infeasible
+since any matrix inCOP(R^3 +)has nonnegative diagonal entries. The Shor relaxation
+given by
+ 
+```
+min X − Y + x
+s.t.: x + y = 1 ,
+⎛
+⎝
+```
+```
+XZx
+ZYy
+xy 1
+```
+##### ⎞
+ 
+##### ⎠∈CPP(R^3 +)=S+^3 ∩N 3.
+ 
+is unbounded, where for the improving ray we have _x_ = _X_ = _Z_ =0, _y_ = 1
+and _Y_ ≥1. Thus the duality gap for the Shor relaxation is actually zero since the
+QCQP and its Shor relaxation share the same langrangian dual. We can strengthen
+the Shor relaxation by introducing the additional constraint _X_ + 2 _Z_ + _Y_ = 1,
+which is the relaxation of the redundant constraint( _x_ + _y_ )^2 =1. This yields an
+exact reformulation by the main results in Burer ( 2009 ), Burer ( 2012 ). After apply-
+ing the simplification steps outlined there, we obtain another exact reformulation,
+namely min
+ 
+##### {
+ 
+##### 2 X − Y : X + 2 Z + Y = 1 ,M( X , 2 Z , Y )∈CPP(R^2 +)
+ 
+##### }
+ 
+which has a
+Slater point at _X_ = _Y_ = 0 .4, _Z_ = 0 .1, so that it exhibits no duality gap.
+ 
+**Example 5** (Exact Shor reformulation with finite duality gap) Let us consider
+min
+ 
+##### {
+ 
+```
+x^21 + x^22 : x^21 = 0 , x 1 x 3 − x 22 =− 1 , x 2 ≥ 0
+```
+##### }
+ 
+, whose optimal value of 1 is
+attained at _x_ 1 = 0 , _x_ 2 =1. The Shor relaxation min
+ 
+##### {
+ 
+##### X 11 +X 22 :X 11 = 0 ,X 13 −X 22 =
+ 
+ 
+128 I. Bomze, M. Gabl
+ 
+##### − 1 ,X∈CPP(R×R+×R)=S^3 +
+ 
+##### }
+ 
+hasthesameoptimalvalue,sinceX 11 =0 together
+withX∈S+^3 forcesX 1 _i_ = 0 , _i_ = 2 ,3. Now the Shor relaxation is in fact a known
+example from (Pataki 2018 ) for an SDP with finite positive duality gap.
+ 
+In summary we have discussed two routes for achieving a convex reformulation of
+a QCQP, either via closing a relaxation gap or via closing a duality gap, and we have
+illustrated the following facts:
+ 
+- If a QCQP enjoys strong duality (e.g. if the joint numerical range is a convex cone),
+    we also have an exact Shor reformulation.
+- If the Shor relaxation is exact and we can close its duality gap we also close the
+    duality gap between the underlying QCQP and its dual.
+- If the Shor relaxation is not exact but we can find an exact tightening, the dual
+    of that reformulation can be used as an alternative to the Lagrangian dual of the
+    QCQP.
+ 
+For some background on these facts see for example (Bomze 2015 ; Chieu et al. 2019 )
+who discuss the caseK=R _n_ +. To the best of our knowledge, these facts have so far not
+been discussed for general convexK, but the generalization is immediate, as shown
+above. Typically, in literature, one of these paths, closing the relaxation gap or closing
+the duality gap, is chosen with no regard for the implications of an obtained result for
+the constitution of the other route. We will now proceed with a demonstration of the
+former path which is a nice example in two regards. First of all, the derivation is simple
+and instructive as it is accessible via some geometric intuition. Second, the conditions
+under which we close the relaxation gap will not only give rise to new conditions for
+a generalized version of the S-Lemma to hold, but also allows some insight into the
+joint numerical range of the quadratic forms which fulfil these conditions.
+ 
+**4.1 Harnessing Pataki’s rank result**
+ 
+In this section we provide the proof of the exactness of the Shor relaxation under a
+geometric condition by iterating an application of Pataki’s rank theorem. We follow a
+proof strategy originally considered in Burer and Anstreicher ( 2013 ), where the claim
+of Theorem 3 was proved for the special case of _m_ =2.
+ 
+**Theorem 2** _Consider a feasible set of a semidefinite optimization problem in block-
+standard form_
+ 
+##### T:=
+ 
+##### ⎧
+ 
+##### ⎨
+ 
+##### ⎩
+ 
+##### [
+ 
+```
+X j
+```
+##### ]
+ 
+```
+j ∈[ 1 : p ]∈×
+```
+```
+p
+j = 1 S
+```
+```
+nj
++:
+```
+```
+∑ p
+```
+```
+j = 1
+```
+```
+A ji • X j = bi , i ∈[ 1 : k ]
+```
+##### ⎫
+ 
+##### ⎬
+ 
+##### ⎭
+ 
+##### .
+ 
+_Let_
+ 
+##### [
+ 
+```
+X 1 ,...,X p
+```
+##### ]
+ 
+_be an extreme point of_ T _and let rj_ :=rank(X _j_ )_. Then it holds that_
+∑ _p
+j_ = 1 _rj_ ( _rj_ +^1 )≤^2 _k._
+ 
+**Proof** See (Pataki 1998 , Theorem 2.2), which is more general than stated here. The
+required specialization is, however, immediate. 
+ 
+ 
+Interplay of non-convex quadratically constrained... 129
+ 
+```
+We consider a further specialisation, namely
+```
+**Corollary 1** _Let_ X _be an extreme point of_ T:= {X∈S+ _n_ :A•X≤ _a_ ,B•X≤ _b_ }_. Then_
+rank(X)≤ 1.
+ 
+**Proof** After introducing slack variables,T is a projection of the set
+ 
+```
+T:= {(X, s , t )∈S+ n ×R^2 +:A•X+ s = a ,B n • X+ t = b }
+```
+ontoS _n_. From Theorem 2 it follows that
+ 
+```
+rank(X)(rank(X)+ 1 )+rank( s )(rank( s )+ 1 )+rank( t )(rank( t )+ 1 )≤ 4
+```
+and thus rank(X)≤1. 
+ 
+The following geometric condition will allow us to leverage Corollary 1 to cases
+where more than two linear inequalities are present.
+ 
+**Condition 1** For a collection of matricesA _i_ ∈S _n_ and real numbers _bi_ , _i_ ∈[ 1 : _m_ ]we
+say that Condition 1 holds if for anyX∈S+ _n_ withA _i_ • X≤ _bi_ for all _i_ ∈[ 1 : _m_ ],
+ 
+A _k_ • X< _bk_ ∀ _k_ ∈[ 1 : _m_ ]\{ _i_ , _j_ }wheneverA _i_ • X= _bi_ andA _j_ • X= _bj_ for _i_ = _j_.
+ 
+The condition requires that for any feasibleX∈S _n_ in above sense that at most two
+constraints can be binding at the same time. Note that, ifF:=
+ 
+##### {
+ 
+X∈S+ _n_ :A _i_ • X≤ _bi_ ,
+_i_ ∈[ 1 : _m_ ]
+ 
+##### }
+ 
+is bounded (as assumed in Theorem 3 ), one can check Condition 1
+by solving( _m_^3 − 3 _m_^2 + 2 _m_ )/6 semidefinite optimization problems of the form
+supX∈F
+ 
+##### {
+ 
+```
+A k • X− bk :A i • X= bi ,A j • X= bj
+```
+##### }
+ 
+. For Condition 1 to hold, all the opti-
+mal values must be strictly smaller than 0.
+We are now able to prove the following result for the homogeneous problem:
+ 
+**Theorem 3** _Suppose that Condition 1 holds for the matrices_ A _i_ ∈S _nand real numbers
+bi_ ∈R, _i_ ∈[ 1 : _m_ ] _.Further,supposethattheset_ F:=
+ 
+##### {
+ 
+```
+X∈S n +:A i • X≤ bi , i ∈[ 1 : m ]
+```
+##### }
+ 
+_is bounded. Then_
+ 
+```
+inf
+x ∈R n
+```
+##### {
+ 
+```
+x TQ x : x TA i x ≤ bi , i ∈[ 1 : m ]
+```
+##### }
+ 
+```
+= inf
+X∈S n +
+```
+```
+{Q•X:A i • X≤ bi , i ∈[ 1 : m ]}.
+```
+**Proof** Its clear that “≥” has to hold as the SDP is a relaxation of the QCQP. Since
+the former has linear objective andFis bounded, its optimal value will be attained
+at extreme points ofF.LetX∗be one such point. By Condition 1 at most two
+inequalities, say _i_ and _j_ , are binding atX∗. If fewer are binding, then one of these
+indices or both can be chosen arbitrarily. It follows thatX∗is also extremal in the
+setF _i_ , _j_ :=
+ 
+##### {
+ 
+```
+X∈S+ n :A i • X≤ bi ,A j • X≤ bj
+```
+##### }
+ 
+. To see this, note that by the strict
+inequalities in Condition 1 there is a ballB(X∗)centered atX∗with radius≥ 0
+such thatA _k_ • X< _bi_ , _k_ ∈[ 1 : _m_ ]\{ _i_ , _j_ }wheneverX∈B(X∗)∩F ⊆F _i_ , _j_ ,
+so thatB(X∗)∩F =B(X∗)∩F _i_ , _j_. If there wasX 1 ,X 2 ∈F _i_ , _j_ such thatXwere
+a convex combination of those, then such points had to exist inFsince the line
+ 
+ 
+130 I. Bomze, M. Gabl
+ 
+betweenX 1 andX 2 would penetrateB(X∗)∩F. By Corollary 1 and extremality
+ofX∗inF _i_ , _j_ we see thatX∗= **x** ∗( **x** ∗)Tso that **x** ∗is feasible for the QCQP, and
+( **x** ∗)TQ( **x** ∗)=Q• **x** ∗( **x** ∗)T=Q•X∗. 
+ 
+**Example 6** Consider the following quadratic program and its Shor relaxation
+ 
+```
+inf
+x ∈R^2
+```
+```
+q 11 x^21 + 2 q 12 x 1 x 2 + q 22 x 22
+```
+```
+s.t.: 2 x 12 + x 22 ≤ 12 ,
+x 12 + 2 x 22 ≤ 12 ,
+4 x 12 + x 22 ≥ 4 ,
+x 12 + 4 x 22 ≥ 4 ,
+```
+```
+inf
+X∈S^2 +
+```
+```
+q 11 x 11 + 2 q 12 x 21 + q 22 x 22
+```
+```
+s.t.: 2 x 11 + x 22 ≤ 12 ,
+x 11 + 2 x 22 ≤ 12 ,
+4 x 11 + x 22 ≥ 4 ,
+x 11 + 4 x 22 ≥ 4 ,
+```
+The feasible sets of these problems are depicted in Fig. 1. For the lifted feasible set
+one can see that no more than two inequalities can be binding at the same time within
+the semidefinite cone. Also, since all matrices at the boundary ofS+^2 are rank-one
+matrices, we see that the extreme points of the lifted feasible set have rank one, so
+that the conclusion of Corollary 1 is quite obvious in this case. By inspection one can
+clearly see that for _q_ 12 = 0 , _q_ 11 = _q_ 22 >0 one finds that the optimal set of the
+QCQP is at the innermost corners, where the third and forth inequality are binding.
+These are the points( _x_ 1 , _x_ 2 )=(± 2 /
+ 
+##### √
+ 
+##### 5 ,± 2 /
+ 
+##### √
+ 
+5 ). For the Shor relaxation we can
+also easily see, that the third and fourth inequalities would be binding in the optimum
+and so would be the semidefiniteness constraint so that _x_ 11 _x_ 22 = _x_^212 for the optimal
+solution. From 4 _x_ 11 + _x_ 22 =4 and _x_ 11 + 4 _x_ 22 =4 we get _x_ 11 = _x_ 22 = 4 /5 so that
+_x_ 12 =± 4 /5. We have
+ 
+```
+( 4
+5 ±
+```
+```
+4
+5
+±^4545
+```
+##### )
+ 
+##### =
+ 
+##### (
+ 
+##### ±√^25
+ 
+##### ±√^25
+ 
+##### )(
+ 
+##### ±√^25
+ 
+##### ±√^25
+ 
+##### )T
+ 
+##### ,
+ 
+as claimed in the theorem. Of course, there are more solutions to the Shor relaxation,
+but these are convex combinations of the two presented here. They can be seen in
+Fig. 1 as the line connecting the two lower corners in the lifted feasible set.
+ 
+The optimization problem in Theorem 3 does not involve linear terms, which raises
+the question whether the result has implications for that case as well. In fact, the theo-
+rem can be transferred to the case where the quadratic functions are non homogeneous
+by applying the following simple lemma:
+ 
+**Lemma 4** _The extreme points of_ T:= {X∈S _n_ +:A 1 • X= _b_ 1 ,A _i_ • X≤ _bi_ , _i_ ∈[ 2 : _m_ ]}
+ 
+_are those extreme points of_ T:= {X∈S+ _n_ :A _i_ • X≤ _bi_ , _i_ ∈[ 1 : _m_ ]} _for which_
+A 1 • X= _b_ 1 _holds._
+ 
+**Proof** AssumeX∈ext(T), the set of extreme points ofT, and assume further that
+there areX 1 ,X 2 ∈T such thatX=λX 1 +( 1 −λ)X 2 for someλ ∈( 0 , 1 ).We
+haveA 1 • X _j_ ≤ **b** 1 for _j_ = 1 ,2. IfA 1 • X _j_ < **b** 1 for at least one _j_ ∈{ 1 , 2 }, then
+ 
+ 
+Interplay of non-convex quadratically constrained... 131
+ 
+**Fig. 1** The feasible setFof the QCQP in Example 6 and the feasible set of its Shor relaxation (which by
+Theorem 3 coincides withG(F)) side by side. The latter figure is based on the projectionM( _x_ , 2 _y_ , _z_ )→
+( _x_ ,
+ 
+√
+2 _y_ , _x_ ), and we see the intersection between the cone of positive-semidefinite matrices and four half-
+spaces
+ 
+A 1 • X=λA 1 • X 1 +( 1 −λ)A 1 • X 2 < _b_ 1 , so actuallyA 1 • X _j_ = **b** 1 for _j_ = 1 ,2, implying
+thatX 1 ,X 2 ∈T so thatX∈/ext(T), a contradiction. Now, assumeX∈ext
+ 
+##### (
+ 
+##### T
+ 
+##### )
+ 
+and
+thatA 1 • X= _b_ 1 , so clearlyX∈T. Again, if there was a pairX 1 ,X 2 ∈T such that
+X=λX 1 +( 1 −λ)X 2 for someλ∈( 0 , 1 )there would be such a pair inT ⊇T,so
+that we arrive at an analogous contradiction. 
+ 
+**Theorem 5** _Assume_ A _i_ = M(W _i_ , **w** _i_ ,ω _i_ ) _and bi_ = 0 _,i_ ∈[ 1 : _m_ ] _, together
+with_ A _m_ + 1 :=M(O, **o** , 1 ) _and bm_ + 1 = 1 _, fulfill Condition 1 and that the set_
+ 
+F _Shor_ :=
+ 
+##### {
+ 
+```
+M(X, 2 x , 1 )∈S+ n +^1 :W i • X+ w T i x +ω i ≤ 0 , i ∈[ 1 : m ]
+```
+##### }
+ 
+```
+is bounded.
+```
+_Then_
+ 
+```
+inf
+x ∈R n
+```
+##### {
+ 
+```
+x TQ x + q T x : x TW i x + w T i x +ω i ≤ 0 , i ∈[ 1 : m ]
+```
+##### }
+ 
+```
+=inf
+X, x
+```
+##### {
+ 
+```
+Q•X+ q T x :W i • X+ w i T x +ω i ≤ 0 , i ∈[ 1 : m ],M(X, 2 x , 1 )∈S+ n +^1
+```
+##### }
+ 
+##### .
+ 
+**Proof** After reformulating the original problem as
+ 
+```
+inf
+x ∈R n , x 0 ∈R+
+```
+##### {
+ 
+```
+M(Q, q , 0 )•M( xx T, 2 x 0 x , x^20 ):A m + 1 • M( xx T, 2 x 0 x , x^20 )= 1 ,
+```
+```
+A i • M( xx T, 2 x 0 x , x 02 )≤ 0 , i ∈[ 1 : m ]
+```
+##### }
+ 
+we see that its Shor relaxation is given by
+ 
+```
+inf
+X, x , x 0
+```
+##### {
+ 
+```
+M(Q, q , 0 )•M(X, x , x 0 ):A m + 1 • M(X, x , x 0 )= 1 ,
+```
+```
+A i • M(X, x , x 0 )≤ 0 , i ∈[ 1 : m ],M(X, x , x 0 )∈S n ++^1
+```
+##### }
+ 
+##### ,
+ 
+ 
+132 I. Bomze, M. Gabl
+ 
+where we again make use of the fact thatCPP(R _n_ ×R+)=S+ _n_ +^1. Note that after
+resolving the inequality we see that the feasible set of the latter problem is exactly
+F _shor_. Proving that all extreme points are rank one is done in a manner analogous
+to Theorem 3 , where the fact that we have one equality instead of an inequality does
+not interfere due to Lemma 4. In the representation of the reformulation we also
+combined the constraintsA _m_ + 1 • M(X, 2 **x** , _x_ 0 )=1 andM(X, 2 **x** , _x_ 0 )∈S+ _n_ +^1 into
+M(X, 2 **x** , 1 )∈S+ _n_ +^1 and also resolved the equality. 
+ 
+Theorem 5 is related to the main result in Yang et al. ( 2016 ) where the authors
+proved the following result.
+ 
+**Theorem 6** _Assume_ F⊆R _nis the feasible set of a QCQP and assume that the for
+theset_ F ̄:=
+ 
+##### {
+ 
+```
+x ∈F: x TW i x + w i T x +ω i ≤ 0 , i ∈[ 1 : m ]
+```
+##### }
+ 
+```
+theadditionalinequalities
+```
+_introduce non-intersecting hollows in_ F_. Then_ G(F ̄)=
+ 
+##### {
+ 
+(X, **x** )∈G(F):W _i_ • X+
+**w** T _i_ **x** +ω _i_ ≤ 0 , _i_ ∈[ 1 : _m_ ]
+ 
+##### }
+ 
+##### .
+ 
+The non-intersection condition is similar to the condition of Theorem 5 .Tosee
+this, note that in the Shor relaxation in Theorem 5 the equality associated withA _m_ + 1
+consumesoneoftwoinequalitieswhichcanbebindingatanytime.Thus,theremaining
+inequalities cannot have intersections within the semidefinite cone, or else Condition 1
+fails. Also note, that under the Condition 1 the setF _Shor_ is bounded if and only if it is
+bounded by merely one of the _m_ inequalities in its description. From this we see that
+we can interpret Theorem 5 as a special case of Theorem 6 whereFis given by a single
+quadratic equality and the non-intersection condition is with respect to the lifted space,
+i.e. a strictly stronger condition than in Theorem 6. It is an open question whether there
+is a direct way to deduce Theorem 6 from Theorem 3. However, Theorem 3 cannot be
+deduced from Theorem 6 , and only the former will allow us to derive a generalization
+of the S-Lemma under geometric condition that is a derivative of Condition 1 ,aswell
+as allow for some insight in the joint numerical range of the quadratic forms that jointly
+fulfil said condition.
+ 
+**4.2 Generalized S-lemma and geometry of the joint numerical range**
+ 
+We are now ready to use Theorem 3 in order to establish a generalization of the
+S-Lemma in the form of a characterization of set-copositivity over a cone given by
+homogeneous quadratic inequalities. The key to this result will be the fact that a strictly
+feasible point of a quadratic program guarantees a Slater point in its Shor relaxation,
+as proved in (Tunçel 2001 , Theorem 5.1).
+ 
+**Theorem 7** _Let_ K:= { **x** ∈R _n_ : **x** TA _i_ **x** ≤ 0 , _i_ ∈[ 1 : _m_ ]} _with_ A _i_ ∈S _n. Assume that
+there is some_ **x** 0 _with_ **x** T 0 A _i_ **x** 0 < 0 _for all i_ ∈[ 1 : _m_ ]_. Further, suppose that for all
+i_ ∈[ 1 : _m_ ]
+ 
+```
+X∈S+ n \{O} and A i • X= 0 ⇒ A j • X< 0 ∀ j ∈[ 1 : m ]\{ i }. (13)
+```
+ 
+Interplay of non-convex quadratically constrained... 133
+ 
+_Then_
+ 
+##### COP(K)=
+ 
+##### {
+ 
+##### Q:Q+
+ 
+```
+∑ m
+```
+```
+i = 1
+```
+```
+λ i A i ∈S+ nfor some λ∈R m +
+```
+##### }
+ 
+##### .
+ 
+**Proof** ObservethatQ∈COP(K)ifandonlyif _q_ ∗:=inf **x**
+ 
+##### {
+ 
+```
+x TQ x : x TE n x ≤ 1 , x ∈K
+```
+##### }
+ 
+##### ≥0,
+ 
+where the latter QCQP has a strictly feasible point **x** 0 /( 2 ‖ **x** 0 ‖). The matricesA _i_ , _i_ ∈
+[ 1 : _m_ ]fulfil ( 13 ) and thus also fulfil Condition 1 together with the pairE _n_ and 1. Thus,
+by Theorem 3 we have _q_ ∗=infX∈S _n_ +{Q•X:E _n_ • X≤ 1 ,A _i_ • X≤ 0 , _i_ ∈[ 1 : _m_ ]},
+and the latter set is bounded (due to the constraintE _n_ • X≤1) and has a Slater
+point by (Tunçel 2001 Theorem 5.1) since the QCQP has a strictly feasible point.
+Thus by strong duality _q_ ∗=supλ∈R _m_ +
+ 
+##### {
+ 
+```
+−μ:Q+
+```
+```
+∑ m
+i = 1 λ i A i +μE n ∈S
+```
+```
+n
++
+```
+##### }
+ 
+```
+which is
+```
+nonnegative if and only ifQ+
+ 
+```
+∑ m
+i = 1 λ i A i ∈S
+```
+```
+n
++for someλ∈R
+```
+```
+m
++. 
+```
+Note that the above theorem is stated in terms of a characterization of copositivity
+over a cone described by homogeneous quadratic functions. Another way of stating the
+result would be a theorem of the alternative, which usually is done when discussing the
+S-procedure, as discussed in the introduction. Such theorems are often derived from
+results on the joint numerical range of the quadratic forms involved. Specifically, if
+the joint numerical range can be shown to be a convex cone, an S-Lemma type result
+can be derived in a straightforward manner (see e.g. Pólik and Terlaky 2007 ). An
+important example of such a result was proved by Polyak in Polyak ( 1998 ) where he
+showed that the S-procedure is exact for the case _m_ =2, _n_ ≥3 (under a condition
+discussed shortly) by invoking a convexity result regarding the joint numerical range
+of three quadratic functions, also provided in Polyak ( 1998 ), namely:
+ 
+**Theorem 8** _Let_ A _i_ ∈S _n,i_ = 0 , 1 , 2 _.Forn_ ≥ 3 _thefollowingassertionsareequivalent._
+ 
+_1. There exists_ μ∈R^3 _such that_
+ 
+```
+μ 0 A 0 +μ 1 A 1 +μ 2 A 2 ∈S++ n.
+```
+_2. The joint numerical range_
+ 
+##### J:=
+ 
+##### {(
+ 
+```
+x TA 0 x , x TA 1 x , x TA 2 x
+```
+##### )
+ 
+```
+: x ∈R n
+```
+##### }
+ 
+```
+is a convex and pointed cone.
+```
+The theorem guarantees that whenever 1. holds andJis disjoint from the interior of
+the negative orthant, it can be separated from the latter set via a hyperplane. Thus, given
+the first condition in Theorem 8 and Slater’s condition hold, one can prove exactness
+of the S-procedure, that is, one can prove the following theorem as shown in Polyak
+( 1998 ):
+ 
+**Theorem 9** _Let n_ ≥ 3 _and_ A _i_ ∈S _n_ , _i_ = 0 , 1 , 2_. Assume that there exists_ μ∈R^3
+_such that_ μ 0 A 0 +μ 1 A 1 +μ 2 A 2 ∈S++ _n and that there is an_ **x** 0 ∈R _nsuch that_
+ 
+ 
+134 I. Bomze, M. Gabl
+ 
+**x** T 0 A _i_ **x** 0 < 0 , _i_ = 1 , 2 _, then the following two statements are equivalent_
+ 
+```
+i ) the following system of inequalities has no solution x ∈R n :
+x TA 0 x < 0 and x TA i x ≤ 0 , i = 1 , 2 ;
+ii ) the following conic inequality has a solution λ∈R^2 +:
+A 0 +λ 1 A 1 +λ 2 A 2 ∈S+ n.
+```
+Obviously, the condition∃μ∈R^3 :μ 0 A 0 +μ 1 A 2 +μ 3 A 3 ∈S++ _n_ is readily fulfilled
+if for at least one pair of _i_ = _j_ there existsμ∈R^2 withμ 1 A _i_ +μ 2 A _j_ ∈S _n_ ++
+and we will refer to the later condition as Condition 1’. Thus, if we fixA 1 andA 2
+such that Condition 1’ is fulfilled, we can characterize copositivity over the cone
+K:= { **x** ∈R _n_ : **x** TA 1 **x** ≤ 0 , **x** TA 2 **x** ≤ 0 }for _n_ ≥3as
+ 
+##### COP(K)=
+ 
+##### {
+ 
+```
+Q:Q+λ 1 A 1 +λ 2 A 2 ∈S+ n for someλ∈R^2 +
+```
+##### }
+ 
+##### .
+ 
+The copositivity condition derived in Theorem 7 is, however, not obtained courtesy of
+any argument involving the joint numerical range, but rather as a consequence of the
+exactness of the Shor relaxation and the existence of a Slater point in conjunction with
+strong conic duality under the assumptions of the theorem. An immediate question
+is therefore, whether we can learn anything about the joint numerical range of the
+quadratic forms that fulfil said assumptions. This question is interesting in its own right
+since the joint numerical range is in general a very ill-behaved object and geometrical
+results are typically hard to obtain. We will gain at least some insight by proving that
+Condition 1’ is implied by ( 13 ) and under additional assumptions both coincide.
+ 
+**Lemma 10** _Let_ K _p_ :=
+ 
+##### {
+ 
+```
+(A 1 • X,A 2 • X):X∈S+ n
+```
+##### }
+ 
+```
+and K d :=
+```
+##### {
+ 
+**y** ∈R^2 : _y_ 1 A 1 + _y_ 2 A 2
+∈S+ _n_
+ 
+##### }
+ 
+_. Then_ K _dis a closed convex cone,_ K _pis a convex cone, and_ K∗ _p_ =K _dso that_
+K∗ _d_ =K∗∗ _p_ ⊇K _p._
+ 
+**Proof** The claims are immediate from the fact thatS+ _n_ is a self-dual cone (therefore
+closed and convex). 
+ 
+**Proposition 11** _For matrices_ A 1 ,A 2 ∈S _n, assume that_ ∃ **x** 0 ∈R _nsuch that_ **x** T 0 A _i_ **x** 0 <
+0 _for i_ ∈{ 1 , 2 }_. Consider the following two statements:_
+ 
+_1. There exists_ μ∈R^2 _such that_
+ 
+```
+μ 1 A 1 +μ 2 A 2 ∈S++ n.
+```
+_2. For any matrix_ X∈S+ _n_ \{O} _and i_ , _j_ ∈{ 1 , 2 } _with i_ = _j we have_
+ 
+```
+A i • X= 0 ⇒ A j • X< 0 ,
+```
+_Then,_ 2. ⇒ 1. _and if we in addition assume that in the description of the set_
+S:= {X∈S+ _n_ :A _i_ • X≤ 0 , _i_ = 1 , 2 } _none of the linear inequalities is redundant,
+then also_ 1. ⇒ 2.
+ 
+ 
+Interplay of non-convex quadratically constrained... 135
+ 
+**Proof** For the first claim, assume that property 1. does not hold. We will show that
+condition 2. then has to fail. Under this hypothesis the linear subspaceM:= {μ 1 A 1 +
+μ 2 A 2 :μ∈R^2 }is disjoint fromS _n_ ++. Thus, by (Rockafellar 2015 , Theorem 11.2) we
+have a hyperplane containingM, and henceS++ _n_ lies entirely in one of its associated
+open halfspaces. SinceMcontains the origin, so does said hyperplane; it actually
+supportsS+ _n_. Thus, one of its normal vectors, sayX,isinS+ _n_ by self-duality of the latter
+matrix-cone. But then for thisX∈S+ _n_ we haveA 1 • X=A 2 • X=0, i.e. property 2. fails
+to hold. For the other direction, assume that property 1. and the additional assumption
+aboutShold. Consider the conesK _p_ := {(A 1 • X,A 2 • X):X∈S+ _n_ }andK _d_ := { **y** ∈
+R^2 : _y_ 1 A 1 + _y_ 2 A 2 ∈S+ _n_ }. By Lemma 10 both are convex,K _d_ is closed andK∗ _p_ =K _d_.
+Since the cone of positive definite matrices has nonempty interior, property 1. is
+sufficient to guarantee thatK _d_ has nonempty interior. Note thatK _p_ has to meet the
+interior of the negative orthant, because of **x** T 0 A _i_ **x** 0 < 0 , _i_ = 1 ,2. Also,K _p_ has to
+meet the interior of second orthant, since otherwise there is noX∈S+ _n_ such that
+A 1 • X< 0 ,A 2 • X>0 or in other words{X∈S+ _n_ :A 1 • X< 0 }={X∈S+ _n_ :A 1 • X<
+0 ,A 2 • X≤ 0 }. The closures of the two sets would coincide, and by (Rockafellar 2015 ,
+Theorem 7.6) we had{X∈S+ _n_ :A 1 • X≤ 0 }={X∈S+ _n_ :A 1 • X≤ 0 ,A 2 • X≤ 0 }in
+contrast to the assumption. By an analogous argument we have nonempty intersection
+ofK _p_ and the interior of the fourth orthant. Now assume that condition 2. fails, i.e.
+there is anX∈S+ _n_ such thatA _i_ • X=0 andA _j_ • X≥0for _i_ = _j_. If in factA _j_ • X= 0
+thenXis a normal vector to a hyperplane that contains the linear combinations of
+A 1 ,A 2 and which supportsS+ _n_ by self-duality. This clearly contradicts 1. as such a
+hyperplane is disjoint fromS++ _n_. Thus assumeA _j_ • X>0. Then(A 1 • X,A 2 • X)
+together with three more points from the intersection ofK _p_ and the interior of the
+second, third and fourth orthant respectively, give four vectors whose positive linear
+combinations spanR^2. This span is contained inK _p_ soK _d_ ={ 0 }=(R^2 )∗, which
+also contradicts property 1. 
+ 
+By this proposition, we could replace ( 13 ) with Condition 1’ in Theorem 7 pro-
+vided there are no redundant constraints. This gives some insight into the geometry
+of the joint numerical rangeJ(Q,A 1 ,...,A _m_ )of _m_ +1 matrices that satisfy the
+assumption of the Theorem 7 .If _n_ ≥3, every projection ofJ(Q,A 1 ,...,A _m_ )onto
+three coordinates is in fact a convex, pointed cone by Theorem 8. We do not know
+whether these geometric properties ofJ(Q,A 1 ,...,A _m_ )are enough to ensure linear
+separability. However, Theorem 7 is not based on a convexity result concerningJ,
+but is a consequence of Pataki’s theorem.
+ 
+#### 5 An alternative perspective via set-copositivity
+ 
+In the following section we want to discuss the fact that the semi-infinite constraints,
+which arise in robust and adjustable robust optimization, can be interpreted as set-
+copositivity constraints. Careful analysis of these constraints will reveal that they
+can be decomposed into linear and copositivity constraints of simpler structure. This
+decomposition will allow for some interesting insights in the following sense. We have
+seen so far, that we can use quadratic optimization tools in conjunction with conic
+ 
+ 
+136 I. Bomze, M. Gabl
+ 
+duality in order to reformulate semi-infinite constraints that quadratically depend on
+an index. However, if we can merely close the duality gap without at the same time
+guaranteeing for dual attainability, the feasible set described by the reformulation
+shrinks. The decomposition will reveal more details on the nature of this shrinkage.
+We will discuss this phenomenon in the context of using results in Burer ( 2009 ),
+Eichfelder and Povh ( 2013 ) for the reformulation of semi-infinite constraints. Let us
+reconsider the semi-infinite constraints we have encountered in ( 5 ):
+ 
+```
+u TQ u + q T u +ω≥0 for all u ∈U⊆R n. (14)
+```
+The quadratic inequality can be homogenized in order to obtain a more compact
+formulation, i.e.,
+ 
+```
+(
+u
+t
+```
+##### )T(
+ 
+```
+Q^12 q
+1
+2 q
+```
+```
+T ω
+```
+##### )(
+ 
+```
+u
+t
+```
+##### )
+ 
+```
+≥0 for all( u , t )T∈U×{ 1 }⊆R n +^1.
+```
+By the definition of set-copositivity the above constraint is equivalent to
+ 
+```
+M(Q, q ,ω)∈COP(cone[U×{ 1 }])⊆S n +^1. (15)
+```
+We thus see that the copositivity constraint ( 15 ) can also be enforced by ( 6 ). Fur-
+ther, from cone
+ 
+##### [(⋃
+ 
+```
+i U i
+```
+##### )
+ 
+##### ×{ 1 }
+ 
+##### ]
+ 
+##### =
+ 
+##### ⋃
+ 
+```
+i cone[U i ×{^1 }]together withCOP(
+```
+##### ⋃
+ 
+⋂ _i_ U _i_ )=
+_i_ COP(U _i_ )we see that
+ 
+```
+COP(cone[(∪ i U i )×{ 1 }])=∩ i COP(cone[U i ×{ 1 }]). (16)
+```
+Thus, as a side note, we can handle unions of setsU=∪ _i_ U _i_ in ( 5 ) whenever we can
+characterizeCOP(cone[U _i_ ×{ 1 }])for each individualU _i_. However, the complicated
+structure of the set over which we we require the quadratic form to be non-negative
+seems to be prohibitive. Nevertheless, this issue can be resolved quite easily. Assume
+thatUis the compact intersection of a (not necessarily convex) coneKwith a hyper-
+plane:
+ 
+```
+U:= { u ∈K: b T u = c }.
+```
+We will prove a result which states that the seemingly complicated copositivity con-
+straint in ( 15 ) can be replaced by a linear constraint and a copositivity constraint
+overK. The key idea is that cone[(K∩H)×{μ}]is actuallyK×{ 0 }under a linear
+transformation. To this end, we need some auxiliary results.
+ 
+**Lemma 12** _Let_ M:= { **u** ∈R _n_ :A **u** = **b** } _be an affine subspace where_ A∈R _m_ × _nand_
+**b** ∈R _m_ \{ **o** }_. Let_ K⊂R _nbe a closed cone with pointed convex hull_ K:=conv(K)
+_such that_ K∩M _is compact. Then the following two statements hold._
+ 
+```
+a) There are α∈int(K∗) and b 0 > 0 such that K∩M={ u ∈K:A u = b ,αT u =
+b 0 }.
+b) If m = 1 , then cone(M∩K)=K.
+```
+ 
+Interplay of non-convex quadratically constrained... 137
+ 
+**Proof** LetM 0 := { **u** ∈R _n_ :A **u** = **o** }=kerAdenote the recession cone ofM. Then,
+by compactness, we haveM 0 ∩K={ **o** }. We look for a supporting hyperplane of
+Kwhich meets this cone only at **o** (i.e., whose normal vector is interior toK
+ 
+∗
+) and
+which containsM 0 (i.e., it is also a supporting hyperplane ofM 0 ). Such a hyperplane
+exists exactly if int(K
+ 
+∗
+)∩M∗ 0
+ =∅, which we will prove to be the case. Assume that
+int(K
+∗
+)∩M∗ 0 =∅, then by (Rockafellar 2015 , Theorem 11.2) there is a hyperplane
+ 
+Hwhich containsM∗ 0 ={ATλ:λ∈R _m_ }while int(K
+∗
+)is contained in one of the
+open halfspaces associated withH.Wehave **o** ∈M∗ 0 ⊂Hso thatHis a supporting
+ 
+hyperplane ofK
+∗
+ 
+. This implies that one of the normal vectors ofH,say **a** , is an element
+ofK. Note thatM 0 =(M 0 )∗∗=(M∗ 0 )⊥(recall thatM 0 is a linear subspace)
+and hence **a** ∈M 0. Thus,MandKhave a common direction of recession, which
+contradicts the compactness ofK∩M. SinceK∗=K
+∗
+, indeedα=ATλ∈int(K∗)
+for some appropriateλ∈R _m_ andαT **u** =λTA **u** =λT **b** is redundant for **u** ∈M.
+Assume w.l.o.g. that _b_ 1 >0. Clearly if _m_ =1wehave **a** 1 ∈int(K∗)so that for all
+**u** ∈Kwe have **a** T 1 **u** >0 and thus there is anλ≥0 such that **a** T 1 (λ **u** )= _b_ 1. This proves
+cone(M∩K)⊇Ksince **o** is in both cones. The converse is trivial. 
+ 
+**Remark** The following procedure can be followed for explicitly determiningαand _b_ 0 ,
+givenA∈R _m_ × _n_ , **b** ∈R _m_ \{ **o** }andK⊂R _n_ as in the existence result in Lemma 12 .We
+first calculate(λ∗,ε∗)=arg max(λ,ε)∈R _m_ + 1
+ 
+##### {
+ 
+```
+ε:(ATλ)T v ≥ε∀ v ∈Kwith a T v = 1
+```
+##### }
+ 
+where **a** is a known element of int(K∗)(e.g. **a** = **e** ifKis the non-negative
+orthant or **a** = **e** 1 ifKis the second order cone). Note that Lemma 12 guar-
+antees the existence of an feasible solution{ (λ,ε)such thatATλ ∈ int(K∗) =
+**y** : **v** T **y** > 0 ∀ **v** ∈K\{ **o** }
+ 
+##### }
+ 
+andε>0. The maximization problem is equivalent to
+max(λ,ε,w)∈R _m_ + 2
+ 
+##### {
+ 
+```
+ε:w≥ε,ATλ−w a ∈K∗
+```
+##### }
+ 
+by a standard duality argument (the
+dual variablewcan be eliminated, which we avoided in order to preserve clarity).
+Finally we can setα=ATλ∗and _b_ 0 =αT **x** for any **x** ∈M.
+ 
+**Lemma 13** _Let_ μ∈R _and_ K _be a closed cone with pointed convex hull and_ H=
+{ **u** ∈R _n_ : **a** T **u** = _b_ } _be a hyperplane such that_ H∩conv(K) _is compact and contains
+a point_ **u** = **o**_. Then, there exists an invertible matrix_ T _of order n_ + 1 _such that_
+ 
+```
+cone[(K∩H)×{μ}] =T(K×{ 0 }):=
+```
+##### {
+ 
+##### T
+ 
+##### (
+ 
+```
+k
+0
+```
+##### )
+ 
+```
+: k ∈K
+```
+##### }
+ 
+##### .
+ 
+**Proof** Without loss of generality we can assume that **a** = **e** _n_ and _b_ =1 (so **u** ∈Hif
+and only if _un_ =1). ChooseTas the following square matrix of order _n_ +1:
+ 
+```
+T:=E n + 1 + ve T n =
+```
+##### ⎛
+ 
+##### ⎝
+ 
+```
+E n − 1 oo
+o T 10
+o T μ 1
+```
+##### ⎞
+ 
+```
+⎠ with v =
+```
+##### (
+ 
+```
+o
+μ
+```
+##### )
+ 
+```
+∈R n +^1.
+```
+Then, for any **u** ∈R _n_ +^1 we haveT **u** = **u** + _un_ **v**. FurtherT−^1 =E _n_ + 1 − **ve** T _n_ exists. We
+will now show that cone(K∩H×{μ})=T(K×{ 0 }).Now **o** is contained in both cones,
+so let **u** = **o** henceforth. First, assume **u** ∈T(K×{ 0 }), so that there is **u** 0 ∈K×{ 0 }
+withT **u** 0 = **u**. By Lemma 12 we have aλ≥0 such thatλ **u** 0 ∈(K∩H)×{ 0 }and
+ 
+ 
+138 I. Bomze, M. Gabl
+ 
+λ **u** =λ **u** 0 + **v** ∈(K×H)×{μ}, and so **u** ∈cone(K∩H×{μ}). On the other
+hand, assume **u** ∈cone[(K∩H×{μ})], thenλ **u** ∈(K∩H)×{μ}for someλ≥ 0
+implyingλT−^1 **u** =λ **u** − **v** ∈(K∩H)×{ 0 }and soT−^1 **u** ∈K×{ 0 }, which gives
+**u** =TT−^1 **u** ∈T(K×{ 0 }). 
+ 
+```
+Finally, for any coneK⊆R n observe that
+```
+##### COP(K×{ 0 })=
+ 
+##### {
+ 
+```
+M(R, f , b )∈S n :R∈COP(K), f ∈R n , b ∈R
+```
+##### }
+ 
+##### , (17)
+ 
+and for any nonsingularA∈R _n_ × _n_
+ 
+```
+COP(AK)={A−TRA−^1 ∈S n :R∈COP(K)}. (18)
+```
+Now we are ready to prove the main result in this section.
+ 
+**Theorem 14** _Let_ μ∈R _,_ K∩H⊆R _nand_ K _be a closed cone with pointed convex
+hull and_ H={ **x** : **a** T **u** = _b_ }⊂R _na hyperplane, such that_ conv(K)∩H _is compact
+and nontrivial (neither empty nor a singleton). Then there is a nonsingular matrix_ A
+_of order n_ + 1 _such that_ cone(K∩H×{μ})=A(K×{ 0 }) _and with_
+ 
+##### C:=
+ 
+##### {
+ 
+```
+A−TM(R, f , b )A−^1 ∈S n +^1 :R∈COP(K), f ∈R n , b ∈R
+```
+##### }
+ 
+_we have_
+ 
+```
+COP(cone[K∩H×{μ}])=C.
+```
+**Proof** We have
+ 
+```
+COP(cone[K∩H×{μ}])=COP(A[K×{ 0 }]) by Lemma 13
+=A−TCOP(K×{ 0 })A−^1 by Equation (18)
+=C. by Equation (17)
+```
+##### 
+ 
+The above theorem allows us to harness other results in quadratic optimization in
+order to characterize or at least approximate set copositive constraints in ( 15 ). As an
+exampleweusethemainresultinEichfelderandPovh( 2013 ),whichisageneralization
+of the celebrated result in Burer ( 2009 ), in the following theorem.
+ 
+**Theorem 15** _Let_ U 0 := { **u** 0 ∈K 0 :A 0 **u** 0 = **b** 0 ,( **u** 0 ) _j_ ∈{ 0 , 1 } _for all j_ ∈I} ={ **o** }
+_be a closed, bounded and nonempty set, where_ K 0 ⊆R _n_^0 _is a closed, convex and
+pointed cone with nonempty interior,_ A 0 ∈R _k_^0 × _n_^0 _,_ **b** 0 ∈ R _k_^0 _and_ I ⊆[ 1 : _n_ 0 ]_.
+Further, let_ K:=cone(U 0 )_. Define_
+ 
+ 
+Interplay of non-convex quadratically constrained... 139
+ 
+```
+COP prx (K):=
+⎧
+⎨
+⎩
+```
+```
+Q∈S n :
+```
+```
+Q+ATλαT+αλTA+ATDiag(μ)A
+−ETναT−ανTE+ 2 ETDiag(ν)E+δααT∈COP
+```
+```
+(
+K 0 ×R
+ny + nz
++
+```
+```
+)
+```
+```
+and 2 λT b +μT b^2 +δ≤ 0 for some (λ,μ,ν,δ)∈R^2 k +|I|+^1
+```
+##### ⎫
+ 
+##### ⎬
+ 
+##### ⎭
+ 
+_for some appropriate matrices_ A _,_ E _and_ Q _, vectors_ **b** _,_ **b**^2 _,_ α _and numbers ny,nzand k
+(which can be formed with minimal effort). Then, the following inclusions hold:_
+ 
+```
+COP(K)⊇COP prx (K)⊇intCOP(K).
+```
+**Proof** In order to apply (Eichfelder and Povh 2013 , Theorem 10) we have to guarantee
+a version of Burer’s key condition holds forU 0 , namely
+ 
+```
+A 0 u 0 = b 0 and u 0 ∈K 0 ⇒ 0 ≤( u 0 ) j ≤1 for all j ∈I.
+```
+Assume( **u** 0 ) _j_ ≤1 is not implied for _ny_ different _j_ ∈Iand 0≤( **u** 0 ) _j_ is not implied
+for _nz_ different _j_ ∈I(i.e. in the worst case _ny_ = _nz_ =|I|, in the best case both are
+zero). This forces us to introduce _ny_ constraints( **u** 0 ) _j_ + _yj_ =1, and _nz_ constraints
+ 
+( **u** 0 ) _j_ − _zj_ =0, where **y** ∈R
+_ny_
++and **z** ∈R
+ 
+_nz_
++are slack variables, which are necessary
+since all linear constraints have to be equality constraints. Note that all these additional
+constraints are redundant. Let _n_ := _n_ 0 + _ny_ + _nz_ and _k_ := _k_ 0 + _ny_ + _nz_. We define
+**b** :=( **b** 0 ; **e** ; **o** )∈R _k_ , where **e** ∈R _ny_ is the all-ones vector and **o** ∈R _nz_. Further,
+**u** :=( **u** 0 ; **y** , **z** )∈K×R
+_ny_ + _nz_
++ andQ:=(Q^0 ,O;O,O)∈S
+_n_. Also we abbreviate by **b** 2
+ 
+the vector whose _i_ -th entry is given by _b_^2 _i_ .NowletA∈R _n_ × _k_ be such thatA **u** = **b**
+gives line by line the equalitiesA 0 **u** 0 = **b** 0 ,( **u** 0 ) _j_ + _yj_ =1 and( **u** 0 ) _j_ − _zj_ =0. It is
+ 
+easy to check, that forU:= { **u** ∈K 0 ×R
+_ny_ + _nz_
++ :A **u** = **b** , _uj_ ∈{^0 ,^1 }for all _j_ ∈I}
+we have inf
+**u** ∈U
+ 
+```
+u TQ u = inf
+u 0 ∈U 0
+```
+```
+u T 0 Q 0 u 0 , thatUis a compact set, and thatK 0 ×R
+ny + nz
++ is a
+```
+closed, convex, pointed cone. Thus, by Lemma 12 , we can add a redundant constraint
+αT **u** =βwhereα∈int((K 0 ×R
+_ny_ + _nz_
++ )
+∗)to the definition ofU. By redundancy and
+ 
+since **y** Tα>0 for all **y** ∈K 0 ×R
+_ny_ + _nz_
++ \{^0 }, we see thatβ>0 so that after a scaling,
+the constraint can be written asαT **u** =1. Then (Eichfelder and Povh 2013 , Theorem
+10) along with a straightforward adaptation of the _reduction step_ outlined in (Burer
+2012 , Theorem 2) gives us the equivalence between the following two optimization
+problems
+ 
+```
+p ∗= inf
+u 0 ∈K 0
+```
+```
+u T 0 Q 0 u 0
+```
+```
+s.t.: AT 0 u 0 = b 0 ,
+( u 0 ) j ∈{ 0 , 1 } j ∈I
+```
+```
+q ∗=inf
+U∈C
+```
+##### Q•U
+ 
+```
+s.t.: a T i Uα= bi , i ∈[ 1 : k ]
+a T i U a i = b^2 i , i ∈[ 1 : k ]
+e T j U e j =αU e j , j ∈I
+αTUα= 1
+(19)
+```
+ 
+140 I. Bomze, M. Gabl
+ 
+whereC:=CPP(K 0 ×R
+_ny_ + _nz_
++ ), so that the latter problem has the following dual,
+abbreviatingE=E|I|:
+ 
+```
+d ∗= sup
+λ,μ,ν,δ
+```
+```
+−( 2 λT b +μT b^2 +δ)
+```
+```
+s.t.: Q+ATλαT+αλTA+ATDiag(μ)A
+−ETναT−ανTE+ 2 ETDiag(ν)E
++δααT∈COP(K 0 ×R
+ny + nz
++ ),
+```
+where the dual variables(λ,μ,ν,δ)∈R^2 _k_ +|I|+^1 and whereλandνwere subject to
+a change of variables fromλ⇒ 2 λandν⇒ 2 νto avoid fractions in the expression.
+Now, sinceα∈int(K 0 ×R
+_ny_ + _nz_
++ )
+∗we haveααT∈intCOP(K 0 ×R _ny_ + _nz_
++ ), so that
+the dual problem has an obvious Slater point and indeed _d_ ∗= _q_ ∗. We are now ready
+to prove the inclusions in the theorem. Note that **o** ∈/Uunder the hypothesis of the
+theorem, hence _p_ ∗>0 if and only ifQ∈intCOP(K). In this case _d_ ∗= _p_ ∗> 0
+implies thatQ∈COP _prx_ (K).IfQ∈COP _prx_ (K)then _p_ ∗= _d_ ∗≥0 which implies
+thatQ∈COP(K). 
+ 
+The argument in the proof is analogous to the general strategy outlined in Sect. 3 ,
+the difference being that the objective in the minimization problem is homogeneous.
+Also, we do not assume dual attainability which is why the reverse inclusions cannot
+be established. The theorem highlights the fact, that in absence of dual attainability the
+feasible set is shrinking, and locates the points that are lost at the boundary of the set-
+copositive cone we sought to characterize. The reformulation results in Burer ( 2009 ),
+Eichfelder and Povh ( 2013 ) have been used in Mittal et al. ( 2019 ), Xu and Hana-
+susanto ( 2019 ) for the sake of reformulating semi-infinite constraints with quadratic
+dependency on the uncertainty vector. We want to point out that in these papers the
+problem of dual attainability was not sufficiently considered when taking uncertain
+constraints into account. In addition, these papers do not harness the _reduction step_ ,
+which by Lemma 12 is always applicable if the uncertainty setUis compact. The
+reduction step reduces the dimension of the set-copositive constraint in the copositive
+reformulation and at least opens the possibility for a primal Slater point to exist, which
+would never be the case if that reduction step was omitted as was pointed out in (Burer
+2012 , Sect. 3). To better understand the situation, consider the example given there
+more carefully. It states, that
+ 
+```
+min{ x TQ x : e T x = 1 , x ∈R n +}
+=min{Q•X: e T x = 1 , e TX e = 1 ,Y(X, x )∈CPP(R n ++^1 )}
+=min{Q•X: e TX e = 1 ,X∈CPP(R n +)}
+```
+The first equality is due to the main result in Burer ( 2012 ) and the second one is the
+reduction step outlined in Sect. 3 of that paper. In fact, equality of the first and the last
+problem was already established at the origins of copositive programming in Bomze
+et al. ( 2002 ). Take any interior pointX∈intCPP(R _n_ +). Since **ee** T∈intCOP(R _n_ +)
+ 
+ 
+Interplay of non-convex quadratically constrained... 141
+ 
+one can rescaleXsuch that **e** TX **e** =1 holds, and we see that the last minimization
+problem indeed has a primal Slater point. In fact, the same line of reasoning remains
+valid if we replaceR _n_ +by any convex coneK 0 and **e** by anyα∈K∗ 0 and1byany
+positive number _b_. The only difference is that we then have to appeal to the results in
+Burer ( 2012 ) or Eichfelder and Povh ( 2013 ) for the reformulation step. In such cases
+we would haveK=cone{ **x** ∈K 0 :αT **x** = _b_ }=K 0 , i.e.X 0 would be a base ofK 0.
+The question is, whether we have any other cases where we end up with a primal
+Slater point after applying the reduction step? Proposition 16 unfortunately gives a
+negative answer to this question: it states that a primal Slater point occurs exactly in
+the case where there is just a single equality constraint. Therefore, Theorem 15 is only
+an approximate result and does not give rise to an exact copositivity characterization
+in general. This unfortunate circumstance is at least partly redeemed by the fact that
+we lose at most some points at the boundary of the set.
+ 
+**Proposition 16** _Consider the conic reformulation in ( 19 ), i.e._
+ 
+```
+q ∗=inf
+U∈C
+```
+##### Q•U
+ 
+```
+s.t.: a T i Uα= bi , i ∈[ 1 : k ]
+a i TU a i = b^2 i , i ∈[ 1 : k ]
+e T j U e j =αU e j , j ∈I
+αTUα=1(20)
+```
+_This problem has a strictly feasible point if and only if_ **a** _i_ = _bi_ α _for all i_ ∈[ 1 : _m_ ]_._
+ 
+**Proof** The “if” part is clear since then all constraints butαTUα=1 are redundant,
+ααT ∈intCPP(K 0 )∗and 1>0 so that any interior point ofCPP(K 0 )can be
+scaled to fulfil the one remaining constraint. So assume there is a Slater pointU∈
+ 
+intCPP(K 0 )⊆intS+ _n_. ThenU
+1 / 2
+exists and is invertible. Set **a** _i_ =U
+1 / 2
+**a** _i_ and
+ 
+α=U
+ 
+1 / 2
+αthen the constraints read asαTα=1, **a** T **a** _i_ = _b_^2 _i_ andαT **a** _i_ = _bi_. The first
+and the second one imply‖α‖=1 and‖ **a** _i_ ‖= _bi_ but then by the equality case of
+Cauchy-Schwarz, the third constraint implies **a** _i_ =β _i_ αfor someβ _i_ ; we actually have
+_bi_ =β _i_ ‖α‖^2 =β _i_ and finally, by invertibility ofU^1 /^2 , **a** _i_ = _bi_ α. 
+ 
+#### 6 Adjustable robust reformulation of disjoint convex-non-convex
+ 
+#### quadratic optimization
+ 
+So far, we have discussed how to use reformulations of QCQPs for the purpose of refor-
+mulating robust optimization problems. However, (Zhen et al. 2019 ) outlined a way
+to use an adjustable robust approach in order to tackle disjoint bilinear optimization
+problems, which are special cases of QCQPs, thus demonstrating that the usefulness
+runs both ways. In this section we will show that the techniques we discussed in this
+text can be used to further their approach. The problem considered in Zhen et al. ( 2019 )
+ 
+ 
+142 I. Bomze, M. Gabl
+ 
+is given by:
+ 
+```
+inf
+( x , y )∈X×Y
+```
+```
+x TQ y. (21)
+```
+The following theorem proved in that article establishes a connection between QCQPs
+and adjustable robust optimization.
+ 
+**Theorem 17** _Let_ Y:=
+ 
+##### {
+ 
+```
+y ∈R
+ny
++:A y y ≥ b y
+```
+##### }
+ 
+```
+, where A y ∈R my × nyand b y ∈R my.
+```
+_Then ( 21 ) has the same optimal value as_
+ 
+```
+sup
+τ
+```
+```
+{
+τ: there is a nonnegative function z ( x ):τ≤ b T y z ( x ),AT y z ( x )≤QT x for all x ∈X
+```
+```
+}
+```
+We will expand this approach to the case where in addition a possibly nonconvex
+quadratic term in **x** and a convex quadratic term in **y** are present in the objective. We
+will also slightly deviate from the definition ofYin that we will assume equality
+constraints. As a consequence, the function **z** ( **x** )will not have a sign restriction, which
+will be useful in in the proof of Theorem 19.
+The following argument is a straightforward but tedious generalization of Theo-
+rem 17. For the readers’ convenience we provide a detailed derivation.
+ 
+**Theorem 18** _Let_ Q _x_ ∈S _n_^1 _,_ Q _xy_ ∈R _n_^1 × _n_^2 _,_ F∈R _k_ × _n_^2 _and_ G∈R _r_ × _n_^2_. Further,
+assume_ X⊆R _n_^1 _is a compact set and_ Y:= { **y** ∈R _n_ +^2 :F **y** = **d** }⊆R _n_^2 _has a Slater
+point and let_ Z( **x** ):= {( **z** , **w** ):FT **z** +GT **w** ≤QT _xy_ **x** }_. Then_
+ 
+```
+inf
+x ∈X, y ∈Y
+```
+```
+x TQ x x + x TQ xy y +‖G y ‖^2 (22)
+```
+```
+=sup
+τ
+```
+```
+{τ: for some z ( x ), w ( x ): x TQ x x + d T z ( x )−^14 ‖ w ( x )‖^2 ≥τ,
+```
+```
+( z ( x ), w ( x ))∈Z( x ) , for all x ∈X}, (23)
+```
+_where_ **z** :R _n_^1 →R _kand_ **w** :R _n_^1 →R _rare function-valued decision variables._
+ 
+**Proof** Observe that
+ 
+```
+inf
+( x , y )∈X×Y
+```
+##### {
+ 
+```
+x TQ x x + x TQ xy y +‖G y ‖^2
+```
+##### }
+ 
+```
+=sup
+τ
+```
+##### {
+ 
+```
+τ: x TQ x x + x TQ xy y +‖G y ‖^2 ≥τ,for all x ∈Xand for all y ∈Y
+```
+##### }
+ 
+##### .
+ 
+Note that the semi-infinite constraint in the last problem implies a minimization prob-
+lem of the constraint function with respect to **y** explicitly given by
+ 
+```
+inf
+y ∈R n +^2
+```
+##### {
+ 
+```
+x TQ xy y +‖G y ‖^2 :F y = d
+```
+##### }
+ 
+##### (24)
+ 
+ 
+Interplay of non-convex quadratically constrained... 143
+ 
+By assumption there is a **y** ∈int(R _n_ +^2 )such thatF **y** = **d** , thus ( 24 ) fulfils Slater’s
+condition, so that zero duality gap and dual attainability is guaranteed for the dual
+given by
+ 
+```
+sup
+( z , w )∈R^2 k
+```
+##### {
+ 
+```
+d T z −^14 ‖ w ‖^2 :FT z +GT w ≤QT xy x
+```
+##### }
+ 
+##### . (25)
+ 
+The dual feasible set is given byZ( **x** ). The following equations hold:
+ 
+```
+sup
+τ
+```
+##### {
+ 
+```
+τ: x TQ x x + x TQ xy y +‖G y ‖^2 ≥τ,for all x ∈X,and for all y ∈Y
+```
+##### }
+ 
+```
+=sup
+τ
+```
+##### {
+ 
+```
+τ:for all x ∈X, there is( z , w )∈Z( x ): x TQ x x + d T z −^14 ‖ w ‖^2 ≥τ,
+```
+##### }
+ 
+```
+=sup
+τ
+```
+##### {
+ 
+```
+τ:for some functions z ( x ), w ( x ): x TQ x x + d T z ( x )−^14 ‖ w ( x )‖^2 ≥τ,
+```
+```
+( z ( x ), w ( x ))∈Z( x )for all x ∈X
+```
+##### }
+ 
+##### .
+ 
+##### 
+ 
+We end up with an adjustable robust optimization problem with second stage vari-
+ables **z** ( **x** )and **w** ( **x** )and uncertainty setX, i.e. the decision vector **x** takes the role of
+the uncertainty parameter.
+The fact that **z** ( **x** )and **w** ( **x** )are function valued variables is a major complication
+since the space of all functions is an intractable search space. The standard way to
+deal with this issue is to contract the search space as to encompass only linear func-
+tions, i.e. **z** ( **x** )=Z **x** + **z** and **w** ( **x** )=W **x** + **w**. The new decision variables then
+become the coefficients that identify the affine functions. If after the contraction step
+the robust constraints become linear in the uncertainty parameter one can employ
+standard reformulation techniques based on linear conic duality in order to obtain a
+tractable reformulation of the semi-infinite constraints. However, at least one of the
+adjustable robust constraints in ( 23 ) depends quadratically on **x** rather than linearly.
+Thus, approximations based on linear duality cannot be employed here.
+However,thegeneralreformulationstrategyallowsusnotonlytodealwiththeterms
+**x** TQ _x_ **x** in the adjustable robust reformulation ( 23 ), it also allows us for the adjustable
+variable **z** ( **x** )to employ a quadratic decision rule, i.e.( **z** ( **x** )) _j_ = **x** TZ _j_ **x** + **x** T **z** _j_ + _zj_ , _j_ ∈
+[ 1 : _k_ ], which is a class of decision rules which contains affine decision rules as
+a special case. Thus, it can potentially yield tighter approximations than the ones
+obtainable by employing affine decision rules. On the other hand, **w** ( **x** )is subject to
+a (convex) quadratic constraint. Consequently, an affine policy has to be employed so
+that **w** ( **x** )=W **x** + **w** , lest terms of order larger than 2 emerge. Since employing such
+decision rules is a restriction of the maximization problem, we will get a lower bound
+on the original minimization problem.
+ 
+ 
+144 I. Bomze, M. Gabl
+ 
+**Theorem 19** _Let the problem data be given as in Theorem 18. Assume that for any_
+Q∈S _n_^1 _,_ **q** ∈R _n_^1 _and_ ω∈R _nit holds that_
+ 
+```
+inf
+x ∈X
+```
+```
+x TQ x + q T x +ω=inf
+X∈C
+```
+##### {
+ 
+```
+M(Q, q ,ω)•X:A j • X≤ bj , j ∈[ 1 : m ]
+```
+##### }
+ 
+_for some appropriate matrix cone_ C⊆S _n_^1 +^1 _, matrices_ A _j_ ∈S _n_^1 +^1 , _j_ ∈[ 1 : _m_ ]
+_such that there is no duality gap for the conic reformulation and its dual. Then, the
+following optimization problem gives a nontrivial lower bound for ( 23 ):_
+ 
+```
+sup
+τ,Z i , z i , zi ,λ l ,W,H
+```
+```
+τ
+```
+```
+s.t.:M(Q x , o ,−τ)+
+```
+```
+∑ k
+i = 1
+```
+```
+di M(Z i , z i , zi )−^14 H+
+```
+```
+∑ m
+j = 1
+```
+```
+(λ 0 ) j A j ∈C∗,
+```
+```
+M(O,(Q xy ) l , 0 )−
+```
+```
+∑ k
+i = 1
+```
+```
+fil M(Z i , z i , zi )−
+```
+```
+∑ r
+i = 1
+```
+```
+gil M(O, w i ,w i )+
+```
+```
+∑ m
+j = 1
+```
+```
+(λ l ) j A i ∈C∗, l ∈[ 1 : n 2 ];
+```
+```
+M(E r , 2 (W, w ),H)∈S+ n^1 + r +^1 ,
+b Tλ l ≤ 0 , l ∈[ 0 : n 2 ];
+W∈R r × n^1 ,
+w ∈R r
+M(Z i , z i , zi )∈S n^1 +^1 , i ∈[ 1 : k ];
+λ l ∈R m +, l ∈[ 0 : n 2 ];
+```
+_where_ (Q _xy_ ) _l_ =Column _l_ (Q _xy_ ) _,_ **w** _i_ =Row _i_ (W) _,fil_ =(F) _li,gil_ =(G) _li,_ w _i_ =( **w** ) _i
+and di_ =( **d** ) _i._
+ 
+**Proof** Under the assumptions of the theorem we have that, given anyQ∈S _n_^1 , **q** ∈R _n_^1
+andω∈Rwe can enforce the semi-infinite constraint
+ 
+```
+x TQ x + q T x +ω≥ 0 ∀ x ∈X (26)
+```
+by demanding that
+ 
+```
+b Tλ≤ 0 ,M(Q, q ,ω)+
+```
+```
+∑ m
+```
+```
+j = 1
+```
+```
+λ j A j ∈C∗,λ∈R m +, (27)
+```
+as long as full strong duality holds (the consequences of a failure of full strong duality
+will bediscussedat theendof theproof). Setting( **z** ( **x** )) _i_ = **x** TZ _i_ **x** + **x** T **z** _i_ + _zi_ , _i_ ∈[ 1 : _k_ ]
+and **w** ( **x** )=W **x** + **w** we see that the constraint **x** TQ _x_ **x** + **d** T **z** ( **x** )−^14 ‖W **x** + **w** ‖^2 −τ≥
+ 
+0 ∀ **x** ∈Xis equivalent to **x** TQ _x_ **x** + **d** T **z** ( **x** )−^14
+ 
+##### (
+ 
+```
+x T, 1
+```
+##### )
+ 
+##### H
+ 
+##### (
+ 
+```
+x T, 1
+```
+##### )T
+ 
+```
+−τ ≥ 0 ∀ x ∈
+```
+X,M(E _r_ , 2 (W, **w** ),H)∈S+ _n_^1 + _r_ +^1 by Lemma 20 below. The semi-infinite constraint
+ 
+is of the form ( 26 ) withQ=Q _x_ −^14 (H) 1 : _n_ 1 , 1 : _n_ 1 +
+ 
+```
+∑ k
+i = 1 di Z i , q =
+```
+```
+∑ k
+i = 1 di z i −
+1
+2 (H)^1 : n^1 , n^1 +^1 andω=
+```
+```
+∑ k
+i = 1 dizi −τ−
+```
+1
+4 (H) _n_^1 +^1 , _n_^1 +^1. Similarly, the constraints
+(QT _xy_ **x** −FT **z** ( **x** )−GT **w** ( **x** )) _l_ ≥ 0 ∀ **x** ∈X, _l_ ∈[ 1 : _n_ 2 ]are of the form ( 26 ) with
+ 
+ 
+Interplay of non-convex quadratically constrained... 145
+ 
+##### Q=
+ 
+```
+∑ k
+i = 1 fil Z i , q =(Q xy )
+```
+```
+T
+l −
+```
+```
+∑ k
+i = 1 fil z i −
+```
+```
+∑ r
+i = 1 gil w
+```
+```
+T
+i andω=
+```
+∑ _k
+i_ = 1 _filzi_ .Now,
+since we do not assume full strong duality, but merely zero duality gap for the conic
+reformulation of ( 26 ), we need to argue that the conclusion of the theorem still holds
+in absence of dual attainability. In fact, for any(Q, **q** ,ω)for which dual attainability
+fails, constraints ( 27 ) may become infeasible. This can only be the case if there is an
+**x** ∈Xsuch that the inequality ( 26 ) is actually tight. To see this, consider the case when
+_p_ ∗=inf **x** ∈X
+ 
+##### {
+ 
+```
+x TQ x + q T x +ω
+```
+##### }
+ 
+```
+>0. Since we assume zero duality gap, there is a
+```
+dually feasible sequenceλ _i_ such that lim _i_ →∞− **b** Tλ _i_ = _p_ ∗and since the latter quantity
+strictly exceeds zero, there has to be an _i_ ∗such hat− **b** Tλ _i_ ∗≥0 so that(Q, **q** ,ω)is
+feasible for ( 26 ) and ( 27 ) simultaneously. However, if _p_ ∗=0 there may be no member
+of the sequence that takes the dual objective to zero, so that any choice on the decision
+variables that yields such instances of(Q, **q** ,ω)may be infeasible. Such a contraction
+of the feasible set can only lower the optimal value of the optimization problem, so that
+the conclusion of the theorem remains valid, if we can show that the feasible set never
+shrinks to the empty set. Let us again consider ( 23 ) under a quadratic policy. We need
+to show that there is a choice on the coefficients of the quadratic policy andτso that
+none of the inequalities is ever binding, i.e. they are fulfilled with strict inequality for
+all **x** ∈X. It suffices to show that there is a static policy, where **z** ( **x** ), **w** ( **x** )are constant
+for all **x** , which accomplishes this goal. The inequality **x** TQ _x_ **x** + **d** T **z** −^14 ‖ **w** ‖^2 ≥τ
+is safe, since we can makeτarbitrarily small and the left-hand side is bounded over
+Xas it is a compact set. SinceY:= { **y** ∈R _n_ +^2 :F **y** = **d** }⊆R _n_^2 is a bounded conic
+intersection we invoke Lemma 12 to show that there is a **z** ̄∈R _k_ so thatFT **z** ̄∈intR _n_ +^2.
+Now set **z** =−μ **z** ̄to see thatFT **z** +GT **w** ≤QT _xy_ **x** can be fulfilled for all **x** ∈Xwith
+strict inequality by choosingμ>0 large enough. This concludes the proof. 
+ 
+The argument for the linearization of the constraintH =(W, **w** )T(W, **w** )in the
+formM(E _r_ , 2 (W, **w** ),H)∈ S+ _n_^1 + _r_ +^1 is given in the following lemma, which is a
+straightforward generalization of (Mittal et al. 2019 , Lemma 4). It is slightly more
+general than needed for Theorem 19 as it might be useful in other contexts such as the
+ones discussed in Mittal et al. ( 2019 ).
+ 
+**Lemma 20** _Let_ Q( **y** ):R _k_ →R _m_ × _n. A vector_ **y** ∈R _kfulfils_
+ 
+```
+x T(D−QT( y )Q( y )) x + q T x +ω≥ 0 ∀ x ∈X⊆R n (28)
+```
+_if and only if there exists a matrix_ H∈S _nsuch that_
+ 
+```
+x T(D−H) x + q T x +ω≥ 0 ∀ x ∈X and (29)
+M(E m , 2 Q( y ),H)∈S+ n + m. (30)
+```
+**Proof** Assume that **y** fulfils ( 28 ). Then, it fulfils ( 29 ) and ( 30 ) by settingH =
+QT( **y** )Q( **y** ), which impliesH−QT( **y** )Q( **y** )∈S+ _n_ , which by Schur complementation
+implies ( 30 ). So assume **y** andHfulfil ( 29 ) and ( 30 ), then
+ 
+```
+(
+x
+1
+```
+##### )T[(
+ 
+```
+D−Q( y )TQ( y )^12 q
+1
+2 q
+```
+```
+T ω
+```
+##### )
+ 
+##### −
+ 
+##### (
+ 
+```
+D−H^12 q
+1
+2 q
+```
+```
+T ω
+```
+##### )](
+ 
+```
+x
+1
+```
+##### )
+ 
+ 
+146 I. Bomze, M. Gabl
+ 
+```
+= x T
+```
+##### [
+ 
+```
+H−Q( y )TQ( y )
+```
+##### ]
+ 
+```
+x ≥0 for all x ∈X,
+```
+where the inequality holds due to ( 30 ). But since for any pair of matricesA,B∈S _n_
+we have that **x** TB **x** ≥ 0 ∀ **x** ∈XandA−B∈S+ _n_ imply **x** TA **x** ≥ 0 ∀ **x** ∈Xfor any set
+X, we have shown that ( 28 ) holds as well. 
+ 
+#### 7 Experimental evidence
+ 
+In the following we provide results from extensive numerical experiments, where we
+tried to assess the quality of the lower bound from Theorem 19 for the QCQP ( 22 ).
+We will pursue two main types of experiments. First, we will compare the quality of
+our proposed lower bound with lower bounds obtained from typical relaxations of the
+(set-)copositive reformulations established in Burer ( 2009 ), Burer ( 2012 ), Eichfelder
+and Povh ( 2013 ). Second, for the case where only the bilinear term is present in the
+objective function we will compare our lower bound to the one derived in Zhen et al.
+( 2019 ). The main difference between the two approaches is that we, by means of the
+strategy outlined in Sect. 3 , are able to employ quadratic decision rules while (Zhen
+et al. 2019 ) employ affine policies. It should be noted that (Xu and Hanasusanto 2019 )
+provided empirical evidence for the advantage of quadratic over affine decision rules.
+However, we believe that the disjoint bilinear optimization problem is an interesting
+specialcaseduetoitsapplicationsingametheory,thatissignificantlydifferentfromthe
+problems considered in Xu and Hanasusanto ( 2019 ), so that particular consideration
+is warranted. All experiments were implemented using theYALMIPinterface. The
+semidefinite optimization problems were solved usingSDPT3, while linear problems
+were solved usingGurobi. For the purpose of generating feasible solutions, and thus,
+upper bounds, we employedfminconas a global solver. The experiments were run
+on a system with Intel Core i7-4510U CPU and 8GB RAM.
+ 
+**7.1 Comparison with lower bounds from copositive programming**
+ 
+For the problem
+ 
+```
+inf
+( x , y )∈X×Y
+```
+##### {
+ 
+```
+x TQ x x + x TQ xy y +‖G y ‖^2
+```
+##### }
+ 
+##### , (31)
+ 
+when specifyingX:={ **x** ∈K:B **x** = **c** }⊆R _n_^1 for some convex coneK⊆R _n_^1 ,B∈
+R _k_^1 × _n_^1 , **c** ∈R _k_^1 andY:=
+ 
+##### {
+ 
+```
+y ∈R n +^2 :F y = d
+```
+##### }
+ 
+as in Theorem 18 , we obtain a QCQP
+that is amenable to copositive reformulations as demonstrated in Burer ( 2009 ). We
+will only consider the case whereXandYare bounded so that by Lemma 12 we
+can always ad a redundant linear constraintαT( **x** T, **y** T)T=1 withα=(αT 1 ,αT 2 )T∈
+int
+ 
+##### (
+ 
+```
+K∗×R n +^2
+```
+##### )
+ 
+which enables us to apply the simplification step outlined in (Burer
+2012 , Sect. 2.3). The resulting completely positive reformulation involves a conic
+constraint that restricts the decision matrix toCPP(K×R _n_ +^2 ). This constraint is
+generally difficult (unless for example _n_ 2 =0 andKis the second order cone). For
+ 
+ 
+Interplay of non-convex quadratically constrained... 147
+ 
+the purpose of our experiments we will resort to approximations which are standard in
+literature. In caseK=R _n_ +^1 we will replaceCPP
+ 
+##### (
+ 
+```
+R n^1 + n^2
+```
+##### )
+ 
+byDNN _n_ 1 + _n_ 2 :=S _n_ +^1 + _n_^2 ∩
+N _n_ 1 + _n_ 2. In caseKis the second order cone we will resort to
+ 
+```
+O uter :=
+```
+##### {
+ 
+```
+M(C 1 , 2 C 2 ,C 3 ):C 1 ∈CPP(K),Columns(C 2 )∈K,C 3 ∈DNN n 2
+```
+##### }
+ 
+##### ,
+ 
+which is an approximation described in Xu and Burer ( 2018 ), where the dual ofO _uter_
+was used to approximateCOP
+ 
+##### (
+ 
+```
+K×R n +
+```
+##### )
+ 
+{. Note that by the S-Lemma,CPP(K)=
+C∈S _n_ +:C•J≤ 0
+ 
+##### }
+ 
+whereJ=Diag(− 1 , 1 ,..., 1 )∈ S _n_ and thus is a tractable
+matrix cone.
+As for the lower bound in Theorem 19 the main assumption is fulfilled as for the
+implicit minimization problem inf **x** ∈X **x** TQ **x** + **q** T **x** +ωwe can again invoke (Burer
+( 2012 )). In consequence the matrix coneC∗is given byCOP(K)which is exactly
+characterized byCOP(K)=
+ 
+##### {
+ 
+```
+C:C+τJ∈S+ n ,τ≥ 0
+```
+##### }
+ 
+in caseKis the second order
+cone. For each instance type, characterized by the size of _n_ 1 , _n_ 2 , _m_ 1 , _m_ 2 and the
+choice forK∈{R _n_ +^1 ,SOC}, which are indicated by the tuples(K, _n_ 1 , _n_ 2 , _m_ 1 , _m_ 2 )in
+the first column, we randomly generated 100 instances. In Table 1 we give average
+values for the relative optimality gap (avg. gap), the maximum relative optimality
+gap (max. gap), the number of times a model gave the a better solution (# best) and
+their respective average computation time (avg. time). We see that our model can
+outperform the copositive bound in cases where the dimension ofYis significantly
+larger than that ofXand the number of constraints in the former is not too small. In
+these cases computation time seems to be lower for our model. In some of those cases
+also the solution quality is slightly better. For both models the average optimality gap
+was almost vanishing, indicating that random generation is not a good way to create
+challenging instances. However, finding special structure that guarantees hardness is
+a major task in and of it self, and we do not pursue it in this paper.
+ 
+**Remark** It should be noted that forCPP
+ 
+##### (
+ 
+```
+K×R n 2
+```
+##### )
+ 
+##### , K∈
+ 
+##### {
+ 
+```
+R n +^1 ,SOC
+```
+##### }
+ 
+we could
+have also employed approximation hierarchies such as the ones described in Zuluaga
+et al. ( 2006 ), where a sequence of cones is provided that approximateCPP
+ 
+##### (
+ 
+```
+K×R n 2
+```
+##### )
+ 
+with increasing precision and where the computational cost of the respective bounds
+increases accordingly. One could argue that a more fair comparison between the
+two lower bounds would have been the one where we use those approximations for
+CPP
+ 
+##### (
+ 
+```
+K×R n 2
+```
+##### )
+ 
+wherecomputationaleffortissimilartoourproposedbound.However,
+these hierarchies are notoriously hard to work with and their computational complexity
+quickly explodes with precision. It is questionable whether we would have succeeded
+in fairly balancing computational effort.
+ 
+**7.2 Comparison with linear policy for the bilinear case**
+ 
+As shown in Zhen et al. ( 2019 )wehave
+ 
+```
+inf
+( x , y )∈X×Y
+```
+##### {
+ 
+```
+x TQ xy y
+```
+##### }
+ 
+```
+=sup
+τ, z ( x )
+```
+##### {
+ 
+```
+τ:τ≤ d T z ( x ),FT z ( x )≤QT xy x ∀ x ∈X
+```
+##### }
+ 
+##### (32)
+ 
+ 
+148 I. Bomze, M. Gabl
+ 
+**Table 1** Comparison between the copositive and the adjustable robust lower bound
+ 
+Instance Avg. gap Max. gap # Best Avg. time
+Cop Adj _Cop_ Adj _Cop_ Adj Cop Adj
+ 
+(SOC,5,5,1,1) 0 0 0. 00 0.00 0 0 0.1345 0.1064
+(SOC,5,5,3,3) 0 0 0. 00 0.00 0 0 0.1608 0.1250
+(SOC,10,10,2,2) ∼ 0 ∼ 013. 05 15.69 14 0 0.2621 0.5178
+(SOC,10,10,5,5) 0 ∼ 00. 00 3.29 3 0 0.4145 0.8909
+(SOC,10,10,9,9) 0 0 0. 00 0.00 0 0 0.6023 1.2655
+(SOC,5,30,2,15) ∼ 0 ∼ 00. 15 2.00 4 0 1.4370 2.7077
+(SOC,5,30,5,25) 0 0 0. 00 0.00 0 0 1.8083 3.7375
+(SOC,20,10,10,5) ∼ 0 ∼ 04. 33 7.10 7 0 1.4438 5.2094
+(SOC,5,60,4,55) ∼ 0 ∼ 025. 26 15.88 1 2 6.4050 4.7414
+(SOC,5,60,2,20) ∼ 0 ∼ 01. 84 98.40 14 0 6.3771 6.3557
+(R _n_ +,5,5,1,1) 0 ∼ 00. 00 2.90 1 0 1.0736 1.8231
+(R _n_ +,5,5,3,3) 0 0 0. 00 0.00 0 0 1.1228 1.8930
+(R _n_ +,10,10,2,2) ∼ 0 ∼ 00. 00 51.06 2 0 1.1978 2.9358
+(R _n_ +,10,10,5,5) ∼ 0 ∼ 029. 18 21.47 1 1 1.3812 3.4920
+(R _n_ +,10,10,9,9) ∼ 0 ∼ 00. 04 0.04 0 0 1.4416 3.7445
+(R _n_ +,5,30,2,15) ∼ 0 ∼ 01. 68 14.27 4 1 1.8561 8.2976
+(R _n_ +,5,30,5,25) 0 0 0. 00 0.00 0 0 0.4588 0.6411
+(R _n_ +,20,10,10,5) ∼ 0 ∼ 073. 17 65.21 0 5 0.3362 4.3208
+(R _n_ +,5,60,4,55) ∼ 0 ∼ 03. 15 2.38 0 4 6.3774 4.1911
+(R _n_ +,5,60,2,20) 0 ∼ 00. 00 67.42 8 0 6.0446 5.7693
+ 
+where **z** ( **x** )is a function-valued decision variable andYis defined as above. If further
+Xis defined as in Sect.7.1and we employ an affine decision rule, i.e. **z** ( **x** )=Z **x** + **z** we
+can reformulate the latter maximization problem via linear conic duality in a standard
+manner (see e.g. Ben-Tal et al. 2004 ) as to obtain a lower bound. In contrast, we, in
+Theorem 19 employ a quadratic decision rule for **z** ( **x** )( **w** ( **x** )does not appear if the
+convex quadratic term is dropped), which potentially tightens the bound. However,
+moving from a linear programming formulation or second order cone formulation to an
+SDP comes at a significant computational cost. In our experiment we aimed to quantify
+the benefit in order to see whether the trade off is justified. Table 2 summarizes the
+results of our experiments. We again present the average relative optimality gap (avg.
+gap) to an upper bound computed usingfmincon, the maximum relative optimality
+gap (max. gap) to that upper bound, the number of times the our model outperformed
+the linear policy (# improved) and the average CPU-time (avg. time). All averages are
+taken across 100 replications per instance.
+We see, that the linear policy is outperformed regularly, where the biggest advan-
+tages are achieved if _m_ 2 is small. This makes sense, since the number of coefficients of
+the linear and the quadratic policy respectively depends on _m_ 2 which in turn impacts
+the flexibility of these decision rules. Since the quadratic decision rule is inherently
+more flexible than the linear one, that impact is more pronounced for the latter. The
+ 
+ 
+Interplay of non-convex quadratically constrained... 149
+ 
+**Table 2** Comparison between linear and quadratic decision rules
+ 
+Instance Avg. gap Max. gap # Improved Avg. time
+Lin Quad _Lin_ Quad Lin Quad
+ 
+(SOC,5,5,1,1) 0.00 0.00 0. 00 0.00 0 0.2165 1.2353
+(SOC,5,5,3,3) 1.52 1.42 148. 03 143.64 7 0.2268 1.2946
+(SOC,10,10,2,2) 8.92 2.37 187. 75 166.79 29 0.2268 1.2946
+(SOC,10,10,5,5) 6.37 1.46 170. 6 79.4 43 0.444 3.6402
+(SOC,10,10,9,9) ∼0.00 ∼0.00 0. 15 0.15 0 0.3038 2.8084
+(SOC,5,30,2,15) 12.41 9.12 792. 11 791.30 66 0.3545 6.5923
+(SOC,5,30,2,25) 14.36 5.59 636. 58 448.94 63 0.3873 7.3362
+(SOC,20,10,10,5) 6.78 1.64 153. 94 146.37 52 0.4258 7.2313
+(SOC,5,60,4,55) 0.02 0.02 2. 21 2.21 0 0.3451 11.5162
+(SOC,5,60,2,20) 6.21 3.29 86. 37 85.51 85 0.4041 12.7623
+(R _n_ +,5,5,1,1) 0.00 0.00 0. 00 0.00 0 0.4608 3.0671
+(R _n_ +,5,5,3,3) 0.00 0.00 0. 00 0.00 0 0.4633 3.1145
+(R _n_ +,10,10,2,2) 0.00 ∼0.00 0. 00 0.00 1 0.4779 4.7075
+(R _n_ +,10,10,5,5) 0.58 0.10 42. 14 9.71 7 0.5141 5.1515
+(R _n_ +,10,10,9,9) 0.00 0.00 0. 00 0.00 0 0.5883 5.7755
+(R _n_ +,5,30,2,15) 0.42 0.32 23. 32 18.16 4 0.557 11.2174
+(R _n_ +,5,30,2,25) 0.33 0.31 14. 21 14.21 2 0.1253 0.4108
+(R _n_ +,20,10,10,5) 4.26 0.86 39. 28 27.33 54 0.1638 4.2258
+(R _n_ +,5,60,4,55) ∼0.00 ∼0.00 0. 27 0.27 0 0.4897 17.7068
+(R _n_ +,5,60,2,20) 5.31 2.77 89. 22 86.80 69 0.5513 18.7613
+ 
+computational cost for the benefit is however substantial, which is not surprising as
+SDPs are known to scale poorly unless special structure is exploited. Such special
+structure is not present in the generic framework under which we operate here. To
+explore cases where that would be the cases is an interesting topic for future research.
+ 
+#### 8 Conclusion
+ 
+In this paper we have outlined a general strategy, by which robust optimization
+problems with quadratic uncertainty can be reformulated using convex reformula-
+tion results from quadratic optimization. These convex reformulations of QCQPs can
+be used as an alternative way to establish duality for quadratic optimization problems
+by providing a convex conic reformulation first and then invoking conic optimiza-
+tion duality. This is an alternative to the classical approach of establishing duality for
+QCQPs via the S-Lemma. We introduced a new result on these QCQP-reformulations
+and explored its connection to existing S-Lemma type results. We also explore a
+copositve perspective on the general strategy, which enables us to also investigate the
+effect of a failure of full strong duality, where we have zero duality gap but dual attain-
+ability is not guaranteed. We then introduce a new application of the general strategy,
+ 
+ 
+150 I. Bomze, M. Gabl
+ 
+where we reformulate a special type of QCQP as an adjustable robust optimization
+problem, which after introduction of a quadratic policy becomes amenable to refor-
+mulations based on the general strategy. In numerical experiments we evaluated the
+merits of our model, finding that it may outperform existing approaches in some cases.
+ 
+**Acknowledgements** Both authors want to thank two referees and the editorial team for their valuable
+suggestions to improve earlier versions of this paper. All remaining errors are the authors’, of course.
+Markus Gabl was supported by the Austrian Science Fund (FWF, Project W 1260-N35) as a member of the
+Vienna Graduate School on Computational Optimization (VGSCO).
+ 
+**Funding** Open access funding provided by Austrian Science Fund (FWF).
+ 
+**OpenAccess** ThisarticleislicensedunderaCreativeCommonsAttribution4.0InternationalLicense,which
+permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give
+appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence,
+and indicate if changes were made. The images or other third party material in this article are included
+in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If
+material is not included in the article’s Creative Commons licence and your intended use is not permitted
+by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the
+copyright holder. To view a copy of this licence, visithttp://creativecommons.org/licenses/by/4.0/.
+ 
+#### References
+ 
+Anstreicher KM, Burer S (2010) Computable representations for convex hulls of low-dimensional quadratic
+forms. Math Prog 124(1–2):33–43
+Ben-Tal A, El Ghaoui L, Nemirovski A (2009) Robust optimization. Princeton University Press, Princeton
+Ben-Tal A, Goryashko A, Guslitzer E, Nemirovski A (2004) Adjustable robust solutions of uncertain linear
+programs. Math Prog 99(2):351–376
+Bomze I, Dür M, De Klerk E, Roos C, Quist A, Terlaky T (2002) On copositive programming and standard
+quadratic optimization problems. J Global Optim 24(2):163–185
+Bomze IM (2012) Copositive optimization-recent developments and applications. Eur J Oper Res
+216(3):509–520
+Bomze IM (2015) Copositive relaxation beats Lagrangian dual bounds in quadratically and linearly con-
+strained quadratic optimization problems. SIAM J Optim 25(3):1249–1275
+Burer S (2009) On the copositive representation of binary and continuous nonconvex quadratic programs.
+Math Prog 120(2):479–495
+Burer S (2012) Copositive programming. In: Handbook on semidefinite, conic and polynomial optimization,
+pp 201–218. Springer
+Burer S (2015) A gentle, geometric introduction to copositive optimization. Math Prog 151(1):89–116
+Burer S, Anstreicher KM (2013) Second-order-cone constraints for extended trust-region subproblems.
+SIAM J Optim 23(1):432–451
+Burer S, Dong H (2012) Representing quadratically constrained quadratic programs as generalized copos-
+itive programs. Oper Res Lett 40(3):203–206
+Burer S, Yang B (2015) The trust region subproblem with non-intersecting linear constraints. Math Prog
+149(1–2):253–264
+Chieu N, Jeyakumar V, Li G (2019) Classes of nonnegative quadratic optimization problems with exact
+copositive relaxation. Available as arXiv preprintarXiv:1707.09486(October/30)
+Dines LL (1941) On the mapping of quadratic forms. Bull Am Math Soc 47(6):494–498
+Dür M (2010) Copositive programming—a survey. In: Jarlebring E, Michiels W, Diehl M, Glineur F (eds)
+Recent advances in optimization and its applications in engineering. Springer, Berlin, pp 3–20
+Eichfelder G, Povh J (2013) On the set-semidefinite representation of nonconvex quadratic programs over
+arbitrary feasible sets. Optim Lett 7(6):1373–1386
+Faye A, Roupin F (2007) Partial lagrangian relaxation for general quadratic programming. 4OR 5(1):75–88
+Gorissen BL, Yanikoglu I, den Hertog D (2015) A practical guide to robust optimization. Omega 53:124–137
+ 
+ 
+Interplay of non-convex quadratically constrained... 151
+ 
+Hiriart-Urruty J-B, Seeger A (2010) A variational approach to copositive matrices. SIAM Rev 52(4):593–
+629
+Jeyakumar V, Li G (2014) Trust-region problems with linear inequality constraints: exact sdp relaxation,
+global optimality and robust optimization. Math Prog 147(1–2):171–206
+Mittal A, Gokalp C, Hanasusanto GA (2019) Robust quadratic programming with mixed-integer uncertainty.
+INFORMS J Comput 32(2):201–218
+Motzkin T (1952) Copositive quadratic forms. Natl Bureau Standards Rep 11–22:1818
+Pataki G (1998) On the rank of extreme matrices in semidefinite programs and the multiplicity of optimal
+eigenvalues. Math Oper Res 23(2):177–203
+Pataki G (2018) On positive duality gaps in semidefinite programming. Available asarXiv:1812.11796
+(2019/October/30)
+Pólik I, Terlaky T (2007) A survey of the S-Lemma. SIAM Rev 49(3):371–418
+Polyak B (1998) Convexity of quadratic transformations and its use in control and optimization. J Optim
+Theory Appl 99(3):553–583
+Rockafellar RT (2015) Convex analysis. Princeton University Press, Princeton
+Shor NZ (1987) Quadratic optimization problems. Soviet J Comput Syst Sci 25(6):1–11
+Sturm JF, Zhang S (2003) On cones of nonnegative quadratic functions. Math Oper Res 28(2):246–267
+Tunçel L (2001) On the slater condition for the sdp relaxations of nonconvex sets. Oper Res Lett 29(4):181–
+186
+Xu G, Burer S (2018) A copositive approach for two-stage adjustable robust optimization with uncertain
+right-hand sides. Comput Optim Appl 70(1):33–59
+Xu G, Hanasusanto GA (2019) Improved decision rule approximations for multi-stage robust optimiza-
+tion via copositive programming. Available athttp://www.optimization-online.org/DB_FILE/2018/
+08/6776.pdf(October/30)
+Yakubovich VA (1971) S-procedure in nonlinear control theory. Vestnik Leningrad Univ 1:62–77
+Yang B, Anstreicher K, Burer S (2016) Quadratic programs with hollows. Math Prog 170(2):541–553
+Yanikoglu I, Gorissen B, den Hertog D (2019) A survey of adjustable robust optimization. Eur J Oper Res
+277(3):799–813
+Zhen J, Marandi A, den Hertog D, Vandenberghe L (2019) Disjoint bilinear programming: An adjustable
+robust optimization perspective. Available athttp://www.optimization-online.org/DB_HTML/2018/
+06/6685.html(October/30)
+Zuluaga LF, Vera J, Peña J (2006) LMI approximations for cones of positive semidefinite forms. SIAM J
+Optim 16(4):1076–1091
+ 
+**Publisher’s Note** Springer Nature remains neutral with regard to jurisdictional claims in published maps
+and institutional affiliations.
+ 

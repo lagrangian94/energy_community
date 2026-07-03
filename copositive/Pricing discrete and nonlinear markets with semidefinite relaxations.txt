@@ -1,0 +1,2273 @@
+# Pricing Discrete and Nonlinear Markets With
+
+# Semidefinite Relaxations
+
+```
+Cheng Guo, Lauren Henderson
+School of Mathematical and Statistical Sciences, Clemson University, Clemson, South Carolinacguo2@clemson.edu, lahende@clemson.edu
+Ryan Cory-Wright
+Department of Analytics, Marketing and Operations, Imperial Business School, London, UKr.cory-wright@imperial.ac.uk
+Boshi Yang
+School of Mathematical and Statistical Sciences, Clemson University, Clemson, South Carolinaboshiy@clemson.edu
+```
+```
+Nonconvexities in markets with discrete decisions and nonlinear constraints make efficient pricing chal-
+lenging, often necessitating subsidies. A prime example is the unit commitment (UC) problem in electricity
+markets, where costly subsidies are commonly required. We propose a new pricing scheme for nonconvex
+markets with both discreteness and nonlinearity, by convexifying nonconvex structures through a semidefinite
+programming (SDP) relaxation and deriving prices from the relaxation’s dual variables. When the choice set
+is bounded, we establish strong duality for the SDP, which allows us to extend the envelope theorem to the
+value function of the relaxation. This extension yields a marginal price signal for demand, which we use as
+our pricing mechanism. We demonstrate that under certain conditions—for instance, when the relaxation’s
+right hand sides are linear in demand—the resulting lost opportunity cost is bounded by the relaxation’s
+optimality gap. This result highlights the importance of achieving tight relaxations. The proposed framework
+applies to nonconvex electricity market problems, including for both direct current and alternating current
+UC. Our numerical experiments indicate that the SDP relaxations are often tight, reinforcing the effective-
+ness of the proposed pricing scheme. Across a suite of IEEE benchmark instances, the lost opportunity cost
+under our pricing scheme is, on average, 46% lower than that of the commonly used fixed-binary pricing
+scheme.
+```
+## 1. Introduction
+
+```
+In many real-world markets, market participants select their purchase or selling quantities
+from a well-behaved convex choice set. In such markets, resource-allocation problems can
+be formulated as tractable optimization problems for which strong duality holds. As a
+result, market design principles such as social-welfare maximization and incentive compat-
+ibility are well justified by the First and Second Welfare Theorems (Feldman and Serrano
+2006). Specifically, the welfare theorems guarantee that if strong duality is attained, then
+simultaneously solving a resource allocation problem and its dual yields efficient dispatch-
+1
+```
+# arXiv:2602.15722v1 [math.OC] 17 Feb 2026
+
+
+ing of participants. See Ferris and Philpott (2022) for a contemporary discussion. However,
+there exist markets whose choice set is nonconvex due to, e.g., discrete decisions and non-
+linear feasible constraints, breaking strong duality. Consequently, dual solutions to the
+resource-allocation optimization problem may be unattainable or fail to support efficient
+allocation, thereby complicating price formation.
+A classic example is the electricity market, where system operators solve a unit com-
+mitment (UC) problem for efficient dispatch (Liberopoulos and Andrianesis 2016). UC
+introduces discrete generator commitment (i.e., on/off) decisions and is thus nonconvex.
+Such nonconvexity makes it difficult to obtain prices that support efficient dispatch, neces-
+sitating uplift payments that subsidize generators so they are willing to follow an efficient
+dispatch. Uplift payments are criticized for being discriminatory and thus potentially mis-
+align incentives (Schiro et al. 2015, Mays 2021). Recently, challenges posed by nonconvexity
+have become even more prominent in electricity market design, as there is a growing in-
+terest in incorporating alternating current (AC) into market models. Today’s electricity
+market relies on direct current UC (DCUC) in market operations, with linear power-flow
+constraints. On the other hand, nonlinear AC power flows better capture network physics,
+and recent advances in the solvability of realistic-scale AC optimal power flow (ACOPF)
+problems make their practical implementation more promising. Yet, there is relatively lit-
+tle work on market design for ACUC problems, which are nonconvex due to both discrete
+decisions and nonlinear physical constraints. Beyond UC, nonconvexity structures appear
+in markets where allocation combines fixed costs, indivisibilities, or nonlinear physical
+constraints, such as in airport time slot allocation (Rassenti et al. 1982) and in fisheries
+markets (Milgrom and Watt 2025).
+Our main contributions are as follows: Our work proposes a computationally tractable
+pricing scheme for nonconvex markets with both discreteness and nonlinearity. We convex-
+ify the nonconvex market-clearing problem via a tight semidefinite programming (SDP)
+relaxation, and we define prices from this relaxation’s dual variables based on the envelope
+theorem. The incentives under this pricing scheme are measured by the lost opportunity
+cost (LOC), the profit shortfall relative to the best response at posted prices. We show
+that tighter relaxations yield lower LOC under certain conditions. Numerical experiments
+on the electricity market show that our SDP relaxation is tight, and that the LOC under
+our pricing scheme is on average 46% lower than under the fixed-binary pricing used in
+
+
+practice. Our framework is sufficiently general to encompass both use cases in the elec-
+tricity market, namely the currently implemented DCUC model and the emerging ACUC
+setting.
+Our pricing step is solvable in polynomial time in theory, as it solves an SDP (Vanden-
+berghe and Boyd 1996). Moreover, in practice SDPs can be solved efficiently using solvers
+such as MOSEK (Mosek ApS 2020). In contrast, existing pricing schemes, such as fixed-
+binary, convex-hull, and copositive duality pricing as reviewed below, require solving either
+mixed-integer linear programs (MILPs) or copositive programs in pricing steps, and are
+thus NP-hard.
+The rest of this paper is organized as follows: Section 2 introduces the SDP relaxations for
+mixed-integer quadratic programs and for DCUC. Section 3 develops the envelope theorem
+for SDP relaxations and, based on this result, proposes a pricing scheme for DCUC. Section
+4 extends the proposed pricing scheme for ACUC. Section 5 derives a tight upper bound on
+LOC. Section 6 presents numerical comparisons on optimality gap and LOC levels. Proofs
+not included in the paper are in Sections A-C of the Appendix.
+
+1.1. Literature Review
+Our work relates to the following streams of research in the economics and operations
+literature: (i) pricing in markets with discrete decisions and nonconvex costs, specifically
+(ii) pricing schemes in electricity markets modeled by UC, (iii) pricing under nonlinear AC
+network constraints, and (iv) pricing schemes with performance guarantees in nonconvex
+electricity markets. In what follows, we provide a detailed review of these works.
+First, a substantial body of work explores pricing in markets with discrete decisions,
+where standard welfare-theoretic logic underlying marginal-cost pricing fails. In discrete
+exchange economies, agents’ demand sets are typically nonconvex, which can lead to the
+non-existence of competitive equilibria under standard linear pricing Gale (1984). Related
+work characterizes how indivisibilities generate complementarities across items (Bevia et al.
+1999). A key finding is that efficient allocations can often be recovered when agents’ prefer-
+ences satisfy discrete convexity conditions: under such structures, linear prices may support
+efficient allocations (Danilov et al. 2001, Baldwin and Klemperer 2019). However, without
+these conditions, marginal pricing generally cannot clear the market while covering par-
+ticipants’ nonconvex costs Liberopoulos and Andrianesis (2016), necessitating alternative
+
+
+schemes. These issues are particularly evident in electricity markets with unit commitment
+constraints, leading to the specialized pricing schemes for DCUC reviewed below.
+Second, various pricing schemes are employed to price DCUC in real-world electricity
+markets (see Liberopoulos and Andrianesis 2016, Azizan et al. 2020, Eldridge et al. 2021,
+for reviews). The fixed-binary pricing scheme (O’Neill et al. 2005) is widely used by U.S.
+system operators, obtaining dual prices from a modified DCUC optimization problem,
+which is a linear optimization problem. Unfortunately, while easy to implement, this ap-
+proach can violate individual rationality under linear prices, requiring potentially large
+uplift payments to make participants whole. Conversely, convex-hull pricing (Hogan and
+Ring 2003, Gribik et al. 2007) generally yields lower uplift payments but may not support
+an equilibrium without out-of-market payments or adjustments. Recently, leveraging an
+exact copositive programming reformulation of the DCUC optimization and its strong du-
+ality, Guo et al. (2025) propose a copositive duality pricing scheme that exhibits desirable
+properties, such as revenue adequacy, and supports market equilibrium when additional
+constraints are imposed on the formulation. However, copositive programs are compu-
+tationally challenging; thus, this method is limited to very small DCUC instances. This
+observation directly motivates the SDP-based pricing scheme proposed in this work.
+Third, our work also studies markets with nonlinearity, particularly driven by the non-
+convex physical constraints that model AC power flows in ACUC. As interest in this area
+has grown in recent years, there is an emerging literature on pricing schemes in electric-
+ity markets that utilize AC power flows. Some studies focus on ACOPF models of power
+markets, which are nonlinear and do not include discrete unit commitment decisions. For
+instance, Garcia et al. (2020) propose a generalized convex hull pricing scheme for such
+markets, while Ndrio et al. (2022) introduce two pricing schemes for ACOPF-based mar-
+kets, respectively, via Karush-Kuhn-Tucker conditions of the nonconvex ACOPF model
+and SDP relaxations of ACOPF. Bichler and Kn ̈orr (2023) demonstrate that incorporating
+AC power flow in pricing enhances price signals, reducing side payments and redispatch
+costs. Romero et al. (2025) propose a pricing method that is based on a tractable cutting-
+plane algorithm for ACOPF, providing price signals close to those from the Jabr second-
+order cone relaxation. Notably, literature on pricing schemes for ACUC is more recent. To
+the best of our knowledge, Garcia and O’Neill (2024) propose the only existing scheme,
+namely the average incremental cost pricing. Extending DCUC pricing schemes to ACUC
+
+
+could be nontrivial, e.g., extending the convex hull pricing would require solving partial
+Lagrangians of mixed-integer nonlinear programs (MINLP). In contrast, we propose an
+
+SDP-based pricing framework that is straightforward to implement and applies to both
+DCUC and ACUC.
+
+```
+Finally, the literature on performance guarantees for pricing schemes in nonconvex elec-
+```
+tricity markets is relatively sparse. Gribik et al. (2007) establishes that the LOC under
+convex hull pricing equals the optimality gap of the partial Lagrangian relaxation. Ad-
+
+ditionally, Guo et al. (2025) derives a bound for the subsidy needed to cover the cost of
+non-individually rational generators under copositive duality pricing. In this work, we pro-
+
+vide an upper bound on LOC, which applies to prices defined as subgradients of the value
+function of any relaxed UC formulation.
+
+1.2. Notation
+
+We use non-boldface characters, such as b, to denote scalars, lowercase boldface characters,
+such as x, to denote vectors, uppercase boldface characters, such as X, to denote matrices,
+
+and calligraphic uppercase characters, such as Z, to denote sets. We let [n] denote the set
+of running indices{ 1 ,...,n}. We let e denote a vector of all 1’s, 0 denote a vector of all 0’s,
+
+(·)cdenote the complex conjugate (e.g., (4 + 6j)c= 4− 6 j), and I denote the identity matrix.
+We denote an optimal solution of a variable with ∗. For example, an optimal solution of
+
+variable pgt is denoted as p∗gt. We also employ a variety of matrix operators. We let Sn
+denote the n× n cone of symmetric matrices, S+n denote the n× n positive semidefinite
+
+cone, Cn+={C ∈Sn: C =Pk∈Kzk(zk)⊤for some finite{zk}k∈K⊂ Rn+\{ 0 }}∪{ 0 } denote
+
+the n×n completely positive cone,Cn={C∈Sn:x⊤Cx≥ 0 ∀x≥ 0 } denote the copositive
+cone and DNNn=Sn+∩ Rn+×n⊇Cn+denote the doubly non-negative cone.
+
+## 2. Background
+
+In this section, we provide background on semidefinite relaxations of mixed-binary
+quadratic problems (MBQPs) in Section 2.1, and a semidefinite relaxation of DCUC in
+
+Section 2.2. This background facilitates the design of our UC pricing scheme in Section 3
+
+and Section 4.
+
+
+2.1. Semidefinite Relaxations of Mixed Binary Quadratic Problems
+In this section, we review semidefinite relaxations for MBQPs of the form:
+
+```
+PMBQP: min x⊤Qx + c⊤x
+s.t. a⊤jx =bj ∀j = 1,...,m
+x∈ Rn+
+xi∈{ 0 , 1 } ∀i∈B,
+```
+### (1)
+
+where x is a vector of nonnegative decision variables, Q⪰ 0 is a positive semidefinite (PSD)
+objective matrix, and B⊆ [n] denotes the indices of the binary variables xi∈{ 0 , 1 }. Note
+that signed variables x can be modeled by Problem (1) via the standard decomposition
+x =x+−x−:x+,x−≥ 0.
+As shown by Burer (2009), MBQPs of the form PMBQPadmit completely positive refor-
+mulations of the form:
+
+```
+PCPP: min Tr(Q⊤X) + c⊤x
+s.t. a⊤jx =bj ∀j = 1,...,m
+Tr(aja⊤jX) =b^2 j ∀j = 1,...,m
+xi=Xii ∀i∈B
+Y ∈C+n+1,
+```
+### (2)
+
+where, to simplify notation, we write
+
+```
+Y :=
+```
+### 
+
+```
+^1 x
+```
+```
+⊤
+x X
+```
+### 
+
+###  (3)
+
+throughout the rest of the paper.
+In PCPP, Y is a completely positive matrix where X models the non-convex outer
+product xx⊤. As proven by Burer (2009, Theorem 2.6), a rank-one constraint can be
+imposed in (2) without loss of optimality, and in some rank-one solutions, X = xx⊤and
+x has binary components. Thus, Problems (1)–(2) satisfy objective value equivalence in
+the sense that their optimal values coincide, and all optimal solutions to (1) solve (2).
+Moreover, (2) and its dual satisfy strong duality under mild conditions such as bounded
+feasible region or a linear objective function in (1) (Brown et al. 2024, Cifuentes et al.
+
+
+2024), which makes (2) a theoretically appealing device for designing pricing mechanisms
+for problems with discrete decisions (Guo et al. 2025).
+Note that the second set of constraints, Tr(aja⊤jX) =b^2 j, are known as reformulation lin-
+earization technique (RLT) constraints (Sherali et al. 1998). They are obtained by squaring
+the left-hand and right-hand sides of a⊤jx =bj, and then replacing the xx⊤term with X.
+Unfortunately, no solvers currently solve CPPs to optimality for non-trivial instances.
+In the literature, CPPs are usually solved approximately via their SDP relaxations, such
+as the doubly non-negative relaxation:
+
+```
+PSDP: min Tr(Q⊤X) + c⊤x (4a)
+s.t. a⊤jx =bj ∀j = 1,...,m (γj) (4b)
+Tr(aja⊤jX) =b^2 j ∀j = 1,...,m (ωj) (4c)
+xi=Xii ∀i∈B (κi) (4d)
+Y ∈Sn++1 (Ω) (4e)
+Y ≥ 0 (Θ), (4f)
+```
+where Y =
+
+### 
+
+```
+^1 x
+```
+```
+⊤
+x X
+```
+### 
+
+```
+. The last two constraints ensure that Y is doubly nonnegative (DNN),
+```
+i.e., positive semidefinite and elementwise nonnegative. This is a well-known relaxation
+of the constraint Y ∈Cn++1(Diananda 1962, Parrilo 2000). The Greek letters in brackets
+denote the dual variables for each constraint.
+
+2.2. Semidefinite Relaxation of DCUC Problems
+In this section, we describe an MILP model and its SDP relaxation for DCUC problems.
+We present a shift factor formulation (5) for DCUC problems (Fattahi et al. 2017), which
+we denote by UC. This formulation is equivalent to the commonly-used network flow UC
+formulation (Bienstock et al. 2024) by eliminating the voltage angle variables. In numerical
+experiments, we observe that the SDP relaxation for (5) is more efficient than the relaxation
+for the network flow formulation. We note, however, that our pricing framework can be
+easily extended to other UC formulations.
+
+```
+min
+```
+### X
+
+```
+g∈G
+```
+### X
+
+```
+t∈T
+```
+```
+Cp
+gpgt+Cguugt+Cvgvgt+Cgzzgt
+```
+```
+ (5a)
+```
+
+```
+s.t.
+```
+### X
+
+```
+g∈G
+```
+```
+pgt=
+```
+### X
+
+```
+k∈N
+```
+```
+Dkt ∀t∈T (λt) (5b)
+```
+```
+Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk) (
+```
+### X
+
+```
+g∈Gk
+```
+```
+pgt−Dkt)
+```
+### !
+
+```
+≥PijTrans,min ∀(i,j)∈L,t∈T (ξminijt) (5c)
+```
+```
+Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk) (
+```
+### X
+
+```
+g∈Gk
+```
+```
+pgt−Dkt)
+```
+### !
+
+```
+≤PijTrans,max ∀(i,j)∈L,t∈T (ξmaxijt ) (5d)
+```
+```
+pgt≥Pgminzgt ∀g∈G,t∈T (5e)
+pgt≤Pgmaxzgt ∀g∈G,t∈T (5f)
+ugt−vgt=zgt−zg,t− 1 ∀g∈G,t∈T \{ 1 } (5g)
+pgt−pg,t− 1 ≤RUgzg,t− 1 +Pgminugt ∀g∈G,t∈T \{ 1 } (5h)
+pg,t− 1 −pgt≤RDgzgt+Pgminvgt ∀g∈G,t∈T \{ 1 } (5i)
+Xt
+τ =max(1,t−∆Upg )
+```
+```
+ugτ≤zgt ∀g∈G,t∈T \{ 1 } (5j)
+```
+```
+Xt
+τ =max(1,t−∆Downg )
+```
+```
+vgτ≤ 1 −zgt ∀g∈G,t∈T \{ 1 } (5k)
+```
+```
+ugt,vgt,zgt∈{ 0 , 1 } ∀g∈G,t∈T (5l)
+pgt,ugt,vgt,zgt≥ 0 ∀g∈G,t∈T , (5m)
+```
+whereN denotes the set of buses (nodes),L denotes the set of transmission lines,T denotes
+the set of time periods,G denotes the set of generators, andGkdenotes the set of generators
+at bus k∈N. For the variables, pgtdenotes the electricity production of generator g during
+time period t. The binary variable zgtdenotes the on or off status, which equals 1 if g is on
+during time period t and 0 otherwise. The binary variable ugtdenotes the startup decision,
+which equals 1 if generator g is started up during time period t and equals 0 otherwise.
+The shutdown decision variable vgtis similarly defined. The Greek letters in the rightmost
+column denote the corresponding dual variables for the linear or semidefinite relaxation of
+(5).
+The objective (5a) minimizes the total cost, which includes the production cost Cgppgt,
+the startup cost Cguugt, the shutdown cost Cgvvgt, and the fixed cost of keeping a generator
+on (Cgzzgt). Constraints (5b) are the market-clearing constraints, which ensure that the
+total demand equals the total production at each time period. Constraints (5c) and (5d)
+
+
+are respectively the lower and upper bounds for the flow in line (i,j). The left-hand sides
+of both constraints represent the flow in (i,j), where Bijis the susceptance of line (i,j).
+Constraints (5e) and (5f) bound production levels, where Pgminand Pgmaxare respectively
+the minimum and maximum production levels of g. Constraints (5g) connects ugt,vgt, and
+zgt. Constraints (5h) and (5i) respectively bound the rate of ramping up and down, where
+RUg and RDg respectively denote the ramping up and down limits. Constraints (5j) and (5k)
+respectively enforce the minimum up and down time constraints, where ∆Upg and ∆Downg
+respectively denote the minimum up and down time.
+UC is an MILP, which is a special type of MIQP. We obtain the SDP relaxation ofUC in
+the form of PSDPand denote this relaxation problem (6) as UCSDP. To formulate UCSDP,
+we add slack variables to inequality constraints ofUC to make them equalities. TheUCSDP
+formulation is as follows:
+
+```
+min
+```
+### X
+
+```
+g∈G
+```
+### X
+
+```
+t∈T
+```
+```
+Cp
+gpgt+Cguugt+Cgvvgt+Cgzzgt
+```
+```
+ (6a)
+```
+```
+s.t.
+```
+### X
+
+```
+g∈G
+```
+```
+pgt=
+```
+### X
+
+```
+k∈N
+```
+```
+Dkt ∀t∈T (6b)
+```
+```
+a⊤ 1 ijtx =Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk)Dkt+PijTrans,min ∀(i,j)∈L,t∈T (6c)
+```
+```
+a⊤ 2 ijtx =Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk)Dkt+PijTrans,max ∀(i,j)∈L,t∈T (6d)
+```
+```
+a⊤egtx =begt ∀e = 1,...,m;g∈G,t∈T (6e)
+```
+```
+Tr(hth⊤tX) =
+```
+(^) X
+k∈N
+Dkt
+
+### ! 2
+
+```
+∀t∈T (6f)
+```
+```
+Tr(a 1 ijta⊤ 1 ijtX) = (Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk)Dkt (6g)
+```
+```
++PijTrans,min)^2 ∀(i,j)∈L,t∈T (6h)
+```
+```
+Tr(a 2 ijta⊤ 2 ijtX) = (Bij
+```
+### X|N|
+
+```
+k=
+```
+```
+(Sik−Sjk)Dkt (6i)
+```
+```
++PijTrans,max)^2 ∀(i,j)∈L,t∈T (6j)
+Tr(aegta⊤egtX) =b^2 egt ∀e = 1,...,m;g∈G,t∈T (6k)
+xi=Xii ∀i∈B (6l)
+```
+
+```
+Y ∈Sdim(+ x)+1,Y ≥ 0 , (6m)
+```
+where x∈ Rdim xdenotes the vector of all variables, including slack variables, of UC. Note
+
+that Y :=
+
+### 
+
+```
+^1 x
+```
+```
+⊤
+x X
+```
+### 
+
+```
+. (6c) and (6d) are equality versions of constraints (5c) and (5d), with
+```
+vectors a 1 ijtand a 2 ijtdenoting their constraint coefficients. (6e) represents generator oper-
+ational constraints (5e) - (5k) plus the upper bound on binary variables, where aegtand begt
+respectively denote the constraint coefficient vectors and right-hand sides of those opera-
+tional constraints. (6f)-(6k) are RLT constraints obtained by squaring (6c)-(6e), where ht
+is the vector of coefficients for (6b), i.e., entries of htequal 1 for pgt,g∈G and 0 otherwise.
+(6l) corresponds to (4d) in PSDP. (6m) includes DNN constraints.
+
+## 3. UC Pricing with Semidefinite Relaxation
+
+In this section, we propose a pricing scheme for UC that leverages the envelope theorem
+from economics. We first develop an envelope theorem for a semidefinite relaxation of
+PMBQPin Section 3.1. Then, we leverage this envelope theorem to define a pricing scheme
+for DCUC’s semidefinite relaxation in Section 3.2.
+
+3.1. Envelope Theorem for Semidefinite Relaxation
+The envelope theorem (see Milgrom and Segal 2002, for an overview) quantifies how the
+optimal value of an optimization problem changes when its parameters are perturbed, by
+characterizing the directional derivative of the optimization problem’s value function. In
+this section, we use the envelope theorem to obtain derivatives of value functions for a
+strengthened SDP relaxationPSDP−bd, which is parameterized in the right-hand side. This
+allows us to analyze the sensitivity of PMBQP and, thus, to design pricing schemes for
+DCUC in Section 3.2.
+We use the following assumption throughout this paper:
+Assumption 1 (Bounded continuous variables in MBQP). The non-negative
+continuous variables in MBQPPMBQP(Section 2.1) are bounded from above. In particular,
+for each continuous variable xi:i∈ [n]\B, we have the finite bound xi≤Uifor some Ui.
+
+Assumption 1 is standard for real-world UC problems: continuous decision variables
+represent physical quantities with explicit engineering limits. For instance, the continu-
+ous variable for power output pgt is bounded by the generator’s bid-based capacity limit
+
+
+Pgmax, as indicated by the constraint (5f), often coupled with ramping and reserve limits.
+Similarly, AC power-flow equations (see Section 4) incorporate engineering constraints,
+such as bounds on active/reactive injections and voltage magnitudes. Boundedness is also
+a common assumption in copositive optimization to ensure strong duality (e.g., Brown
+et al. 2024, Cifuentes et al. 2024). This assumption is necessary for some of our theoretical
+results, which require strong duality of SDP.
+Under Assumption 1, we strengthen our SDP relaxation by imposing the valid inequal-
+ities Xii≤ Ui^2 for each continuous variable index i∈ [n]\B (note that this corresponds to
+x^2 i≤ Ui^2 in an exact rank-one lifting where X =xx⊤). This yields the following strength-
+ened SDP relaxation, in which we introduce a scalar parameter θ that appears in the
+
+right-hand sides of the constraints, and introduce the dummy matrix Y =
+
+### 
+
+```
+^1 x
+```
+```
+⊤
+x X
+```
+### 
+
+```
+ for
+```
+conciseness:
+
+```
+PSDP−bd(θ) : min Tr(Q⊤X) + c⊤x (7a)
+s.t. a⊤jx =bj(θ) ∀j = 1,...,m (γj) (7b)
+Tr(aja⊤jX) =bj(θ)^2 ∀j = 1,...,m (ωj) (7c)
+Xii≤Ui^2 ∀i∈ [n]\B (φi) (7d)
+(4d)− (4f), (7e)
+```
+where bj(θ),j = 1,...,m are differentiable functions of θ. Similarly, we write the parameter-
+ized PMBQPwith bj(θ) in the right-hand side as PMBQP(θ).
+We now define the value function of Problem (7):
+Definition 1 (Primal value function of PSDP−bd(θ)). Let Feas(·) denote the fea-
+sible region. Define the value function
+
+```
+VSDP(θ) :=Y∈Feas(minPSDP−bd(θ))Tr(Q⊤X) + c⊤x, (8)
+```
+To derive an envelope theorem for the strengthened SDP relaxation (7), we first prove
+that its feasible region is nonempty, bounded, and consists of two cones and a hyperplane.
+Such conditions are standard for ensuring strong duality in conic optimization (Kim and
+Kojima 2025, Brown et al. 2024):
+
+
+Proposition 1 (Strong duality for PSDP−bd(θ)). If PMBQP(θ) is feasible and satis-
+fies Assumption 1, then strong duality holds between the SDP relaxation PSDP−bd(θ) and
+its dual PSDP−dual(θ).
+
+Proposition 1 is arguably non-trivial, because there exist families of SDPs with bounded
+feasible regions and strictly positive duality gaps (Pataki 2018, Example 1). Our result
+essentially follows by showing thatPSDP−bd(θ) is feasible and has a compact feasible region,
+then leveraging a result due to Kim and Kojima (2025) which guarantees that for problems
+of the form PSDP−bd(θ), feasibility and primal compactness give strong duality.
+With strong duality, the primal and dual value functions are equivalent. We write the
+dual value function of PSDP−bd(θ) explicitly because it is used in the envelope theorem.
+Definition 2 (Dual value function of PSDP−bd(θ)). Let Ψ := (γγγ,ωωω,φφφ,κκκ, Ω, Θ)
+denote the tuple of variables in PSDP−dual. Define
+
+```
+VSDP−dual(θ) :=Ψ∈Feas(PmaxSDP−dual(θ))fd(Ψ,θ), (9)
+```
+where fd(Ψ,θ) :=Pmj=1γjbj(θ) +ωjbj(θ)^2 +Pi∈[n]\BUi^2 φi. Further, let Feas∗(PSDP−dual(θ))
+denote the set of optimal dual solutions at θ.
+We now present an envelope theorem for the tightened SDP relaxation. The result essen-
+tially follows by combining (Milgrom and Segal 2002, Theorem 1) with the strong duality
+of the SDP relaxation (Proposition 1):
+
+Theorem 1 (Envelope theorem for PSDP−bd). Let [θ,θ ̄] be an interval where
+PSDP−bd(θ) is feasible for every θ∈ [θ,θ ̄] and Ψ∗∈ Feas∗(PSDP−dual(θ)).
+If θ > θ and VSDP(θ) is left differentiable, then VSDP′(θ−)≤ fθd(Ψ∗,θ). If θ <θ ̄ and
+VSDP(θ) is right differentiable, then VSDP′(θ+)≥ fθd(Ψ∗,θ). If θ ∈ [θ,θ ̄] and VSDP(θ) is
+differentiable, then VSDP′(θ) =fθd(Ψ∗,θ).
+
+Therefore, for any right-hand side parameter, its marginal effect on the optimal objective
+value at differentiable points is determined by the optimal dual solution of the strengthened
+SDP relaxation.
+Theorem 1 can immediately be extended to provide an envelope theorem as multiple
+parameters vary simultaneously, a result that will be useful when deriving prices for UC:
+
+Corollary 1 (Vector envelope theorem for PSDP−bd). Let PSDP−bd(u) be a ver-
+sion of PSDP−bd whose right-hand sides bj(u),j = 1,...,m are differentiable functions
+
+
+of vectoru ∈ Rd. Let U ⊆ Rd be a set where PSDP−bd(u) is feasible for everyu ∈
+U and Ψ∗ ∈ Feas∗(PSDP-dual(u)). Let V (u) denote its value function. Then V (u) =
+maxΨ∈Feas(PSDP-dual(u))fd(Ψ,u).
+If V (u) is differentiable atu, then ∇V (u) =∇ufd(Ψ∗,u).
+
+3.2. Envelope Theorem for DCUC Pricing
+We consider the pricing problem in the day-ahead wholesale electricity market. In this
+market, the system operator clears the market by solving a DCUC problem that minimizes
+total operational cost. Since the demand is inelastic, this is equivalent to maximizing social
+welfare. We use the envelope theorem to identify how variations in demand change social
+welfare at the margin, and to treat those marginal effects as prices.
+Because DCUC is an MILP, it generally does not have a dual problem for obtaining
+shadow prices. Our approach is to apply the envelope theorem on the value function of the
+DCUC SDP relaxation, and interpret the resulting derivatives as prices.
+Definition 3 (Strengthened DCUC SDP relaxation and its dual). We con-
+sider the strengthened DCUC SDP relaxation UCSDP−bd, which relaxes the DCUC model
+UC following PSDP−bd. That is to say, UCSDP−bdstrengthens UCSDP (Section 2.2) by im-
+posing bounds Xii≤Ui^2 for all continuous variables. Define the value function ofUCSDP−bd
+parameterized by demand Dktas VUC−SDP(Dkt).
+We denote the dual problem of UCSDP−bdas UCSDP−dual. Let fuc−d(Ψ,Dkt) denote the
+objective of UCSDP−dualparameterized by Dkt. Note that with a slight abuse of notation,
+we use Ψ to denote the tuple of variables for both the general SDP dual and its UC
+counterpart. The intended meaning is clear from the context.
+To apply the envelope theorem, consider a feasible strengthened DCUC SDP relaxation
+parameterized by demand Dkt. We obtain a partial derivative of its dual problem’s objective
+function at an optimal solution with respect to Dkt, denoted as rdkt:= fDuckt−d(Ψ∗,Dkt). We
+use rdktas the electricity price at bus k and time t, and it represents the marginal value of
+supplying demand. The following proposition provides an expression for rdkt.
+
+Proposition 2 (Expression for DCUC pricing). Letλˆtbe the dual variable associ-
+ated with (6f). Similarly,ξˆijtminandξˆijtmaxare the dual variables of (6h) and (6j), respectively.
+The price rktd is then given by the expression:
+
+```
+rdkt=λ∗t+ 2ˆλ∗t
+```
+### X
+
+```
+k′∈N
+```
+```
+Dk′t+
+```
+### X
+
+```
+(i,j)∈L
+```
+```
+Bij(Sik−Sjk)(ξijtmin∗+ξijtmax∗)
+```
+
+### + 2
+
+### X
+
+```
+(i,j)∈L
+```
+```
+B^2 ij(Sik−Sjk)
+```
+### X
+
+```
+k′∈N
+```
+```
+(Sik′−Sjk′)Dk′t
+```
+### 
+
+```
+(ξˆijtmin∗+ξˆmaxijt ∗)
+```
+```
++ 2
+```
+### X
+
+```
+(i,j)∈L
+```
+```
+Bij(Sik−Sjk)(PijTrans,minξˆminijt∗+PijTrans,maxξˆijtmax∗). (10)
+```
+Note that for ease of exposition, we treat the value function of the strengthened DCUC
+SDP relaxation as a function of a single parameter Dktwhen deriving prices in Sections
+3 and 4. The same derivation extends to vector-valued demand parameters, as indicated
+by Corollary 1. This vector perspective is used in Section 5, where the value function is
+written in terms of a demand vector.
+In addition to the price rdkt, each generator also receives an uplift payment for its LOC
+Azizan et al. (2020), which equals the extra profit it earns if it maximizes its own profit
+instead of following the optimal dispatch decisions of UC, given the price vector rd=
+[rdkt]k∈N,t∈T. We denote the LOC of g as Ug(rd). LOC essentially measures the incentive
+deviation under posted prices. A detailed discussion of LOC is included in Section 5, where
+a bound is provided for the total LOC that the system operator pays.
+Formally, we define the SDP-based mechanism for DCUC as follows:
+Definition 4 (SDP-based mechanism for DCUC). Under the SDP-based mecha-
+nism DCUC, the system operator follows optimal dispatch decisions of UC. Prices are
+obtained via solving the SDP relaxation UCSDP−bd. The system operator:
+
+- pays πgtG= rdk(g),tp∗gt to generator g at each time t∈T , where k(g) denotes the node
+    at which g is located, and p∗gt is the optimal production level from the MILP UC. In
+    addition, the system operator pays an LOC uplift payment Ug(rd) to generator g; and
+- collects πtL=Pk∈NrktdDktfrom the load at each time t∈T. In addition, the system
+    operator collects a price adder of
+
+```
+Pg∈GUg(rd)
+Pk∈N ,t∈TDkt per unit of demand.
+```
+Observe that Definition 4’s pricing mechanism is cost recovering (i.e., ensures that all
+generators recover their variable and fixed costs) by construction. Moreover, since the
+demand is inelastic, the price adder does not affect consumption levels.
+Remark 1. In instances where there are multiple dual-optimal solutions to UCSDP−bd,
+one can use any dual-optimal solution for pricing. Thus, in our numerical experiments,
+we use the dual solutions provided by the SDP solver without checking for uniqueness.
+One could also use the lexicographically smallest prices by solving a second optimization
+problem, analogous to the Pareto-optimal Benders cuts of Magnanti and Wong (1981).
+
+
+Since the SDP-based price measures marginal effects of local demand at differentiable
+points of the value function VUC−SDP(Dkt), it is natural to ask when the value function is
+differentiable. Proposition 3 shows that VUC−SDP(Dkt) is differentiable everywhere except
+possibly at finitely many points. It is proved by showing that VUC−SDP(Dkt) is a semialge-
+braic function, and thus is nondifferentiable at finitely many points due to the monotonicity
+lemma (Lee and Pham 2017, Lemma 2.3).
+
+Proposition 3 (Finite nondifferentiability of VUC−SDP(Dkt)). Fix all demand en-
+tries except Dkt, and let [Dkt,Dkt] be any compact interval such that the strengthened SDP
+relaxation UCSDP−bd(Dkt) is feasible for every Dkt∈ [Dkt,Dkt]. Then, the value function
+VUC−SDP(Dkt) is differentiable everywhere on [Dkt,Dkt] except possibly at finitely many
+points.
+
+Proof of Proposition 3 Let w denote the full vector of primal decision variables in
+UCSDP−bd(Dkt), including all lifted matrix entries (e.g., taking Vec(X) where appropriate),
+and rewrite the objective function as c⊤w. Then, by Assumption 1, all continuous vari-
+ables in w are contained in a compact set, as shown in detail in the proof of Proposition
+
+1. Hence, since VUC-SDP(Dkt) is feasible for all Dkt∈ [Dkt,Dkt] and has a compact feasible
+region, it attains a finite value for all Dktin the interval.
+Step 1: We show that VUC-SDP(Dkt) is a semialgebraic function on [Dkt,Dkt]. We claim
+that the set
+
+```
+S := {(Dkt,w,z)∈ R× Rp× R : Dkt∈ [Dkt,Dkt],w∈F (Dkt), z = c⊤w}
+```
+is semialgebraic. Indeed, for any fixed Dkt, the feasible region F (Dkt) of UCSDP-bd(Dkt) is
+the intersection of a spectrahedron and a polyhedron, with both being semialgebraic. Since
+semialgebraic sets are closed under finite intersections (Blekherman et al. 2012, Section
+A.4.4), F (Dkt) is also semialgebraic. In addition, Dkt≤ Dkt≤Dktand z = c⊤w are linear
+inequalities/equalities. It follows that S is a semialgebraic subset of Rp+2.
+LetA⊆ R^2 be the projection ofS onto the (Dkt,z) coordinates. This set is also semialge-
+braic, as by the Tarski-Seidenberg theorem, semialgebraic sets are closed under projections
+(Blekherman et al. 2012, Theorem A.49). Similarly, define
+
+B := {(Dkt,z)∈ R^2 : Dkt∈ [Dkt,Dkt],z = c⊤w, s.t. w∈F (Dkt) and ∃wˆ∈F (Dkt) with c⊤wˆ <z},
+
+
+which is the set of (Dkt,z) pairs where z is not the optimal value at Dkt. The set B is
+also semialgebraic, since it equals a projection ofB ̃, whereB ̃ :={(Dkt,w,z)∈ R× Rp× R :
+Dkt∈ [Dkt,Dkt],w∈ F (Dkt), z = c⊤w, s.t. ∃wˆ∈ F (Dkt) with c⊤wˆ < z} is a semialgebraic
+set.
+Then, because the optimum of UCSDPis attainable in [Dkt,Dkt], we have
+
+```
+graph(VUC-SDP(Dkt)) = A\B.
+```
+Since semialgebraic sets are closed under set difference (as a result of being closed under
+finite intersection and complementation), graph(VUC-SDP(Dkt)) is semialgebraic. Therefore,
+VUC-SDP(Dkt) is a semialgebraic function of one real variable on [Dkt,Dkt].
+Step 2: To prove VUC-SDP(Dkt) is differentiable except possibly at the finitely many break-
+points, we use the monotonicity lemma (Lee and Pham 2017, Lemma 2.3), which implies
+that for the semialgebraic function VUC-SDP(Dkt), there exists a finite partition Dkt=d 0 <
+d 1 <···<dN=Dktsuch that VUC-SDP(Dkt) is continuously differentiable on each open in-
+terval (di− 1 ,di). In particular, VUC-SDP(Dkt) is differentiable except possibly at the finitely
+many breakpoints {d 1 ,...,dN− 1 }, which proves the second claim. Q.E.D.
+Importantly, the envelope theorem sensitivity bounds and finite nondifferentiability un-
+derlying our pricing scheme do not rely on the SDP relaxation: they also hold for the
+original MBQP model via its exact CPP reformulation, since value functions of MBQP
+and CPP are equivalent and CPP has strong duality under Assumption 1 (Brown et al.
+2024).
+As a side note, value functions of MBQP and its SDP relaxation can also be continuous
+under additional structural conditions, such as sufficiently large value-of-lost-load penalties
+in UC’s objective, which is common in unit commitment and ensures absolute continuity
+of value functions via Theorem 2 of Milgrom and Segal (2002).
+Proposition 3 shows differentiability generally holds when a single demand parameter
+varies. In Corollary 2, we extend this result to demand paths, ensuring that derivatives
+generally exist under vector-valued demand perturbations.
+
+Corollary 2 (Finite nondifferentiability along demand paths). Let D ∈
+R|N||T|be a baseline demand vector and let ∆D∈ R|N||T|be any perturbation direction. For
+θ∈ R, define the affine demand path D(θ) := D +θ ∆D. Further, let [θ,θ] be any compact
+
+
+interval such that the strengthened SDP relaxation UCSDP−bd(D(θ)) is feasible for every
+θ ∈ [θ,θ]. Then the scalar value function VUC-SDP(D(θ)) is differentiable everywhere on
+[θ,θ] except possibly at finitely many points.
+
+## 4. Pricing for ACUC
+
+We now extend SDP-based pricing to the ACUC problem, an area of growing interest
+among researchers and practitioners. In the ACUC problem, DC flow balance and limit
+constraints in UC (5b)-(5d) are replaced with their AC counterpart (Zohrizadeh et al.
+2018):
+X
+g∈Gk
+
+```
+sgt−
+```
+### X
+
+```
+(k,j)∈L∪LR
+```
+```
+skjt=Dkt ∀k∈N,t∈T (λkt) (11a)
+```
+```
+sijt=vit(vcit−vjtc)Yijc ∀(i,j)∈L,t∈T (11b)
+sjit=vjt(vcjt−vitc)Yijc ∀(i,j)∈L,t∈T (11c)
+Vkmin≤|vkt|≤Vkmax ∀k∈N,t∈T (11d)
+|sijt|^2 ≤ (Sijmax)^2 ∀(i,j)∈L∪LR,t∈T , (11e)
+```
+where LRdenotes the set of transmission lines L in reversed direction. For the variables,
+sgt= pgt+ jqgtis the complex AC power generation, where pgtand qgtrespectively denote
+the real and reactive electricity production of generator g during time period t. Similarly,
+sijt= pijt+ jqijtis the complex AC power flow from bus i to bus j at t, and vit= vRit+ jvIit
+is the complex AC voltage at bus i and time t. The complex dual variable λkt:=λRkt+ jλIkt.
+Constraints (11a) are the network flow constraints, which ensure that the total demand
+equals the total production minus total outflow at each bus and time period. The coefficient
+Dkt= DktR+ jDIktis the complex AC power demand. Constraints (11b) and (11c) model
+the power flow on each line, where Yij=Gij+ jBijis the complex admittance. Constraints
+(11d) and (11e) respectively model voltage limit on each bus and thermal limit on each
+line.
+In addition, constraint (12) is needed to bound reactive power output:
+Qming zgt≤qgt≤Qmaxg zgt ∀g∈G,t∈T. (12)
+The ACUC model is defined as follows:
+AC := min
+
+### (X
+
+```
+g∈G
+```
+### X
+
+```
+t∈T
+```
+```
+Cp
+gpgt+Cguugt+Cgvvgt+Cgzzgt
+```
+```
+|(11), (12), (5e)− (5m)
+```
+### )
+
+### .
+
+
+4.1. SDP Relaxation for ACUC
+Problem AC contains both AC- and UC-related nonconvex constraints, resulting in a
+nonconvex feasible region. Our goal in this section is to obtain an SDP relaxation of AC,
+which we later use to derive SDP-based pricing for ACUC.
+To convexify AC-related nonconvex nonlinear constraints (11b) - (11d), we use the well-
+known SDP-based rectangular formulation in the literature (Taylor 2015). Specifically,
+an SDP relaxation that lifts the bilinear terms in vitis used (Taylor 2015). In this SDP
+
+relaxation, introduce Wt=
+
+### 
+
+### W
+
+```
+tR WtC
+WtC⊤WtI
+```
+### 
+
+```
+, where WtR= vtRvRt⊤, WtI= vItvIt⊤, and WtC=
+```
+vRtvIt⊤. In other words, Wt= vv⊤where v =
+
+### 
+
+```
+v
+```
+```
+R
+vI
+```
+### 
+
+```
+and is thus rank 1. Constraints (11b)-
+```
+(11d) are relaxed as follows:
+
+```
+pijt=Gij(WiitR+WiitI)−Gij(WijtR+WijtI)−Bij(WjitC−WijtC) ∀(i,j)∈L,t∈T (13a)
+qijt=−Bij(WiitR+WiitI) +Bij(WijtR+WijtI)−Gij(WjitC−WijtC) ∀(i,j)∈L,t∈T (13b)
+pjit=Gij(WjjtR+WjjtI )−Gij(WijtR+WijtI)−Bij(WijtC−WjitC) ∀(i,j)∈L,t∈T (13c)
+qjit=−Bij(WjjtR+WjjtI) +Bij(WijtR+WijtI)−Gij(WijtC−WjitC) ∀(i,j)∈L,t∈T (13d)
+(Vkmin)^2 ≤WkktR +WkktI ≤ (Vkmax)^2 ∀k∈N,t∈T (13e)
+Wt∈S 2 +|N| ∀t∈T , (13f)
+```
+where constraints (13a) and (13b) are relaxations of (11b). Constraints (13c) and (13d)
+are relaxations of (11c). Constraints (13e) are relaxations of (11d). Finally, the conic
+constraints (13f) relaxes the constraints Wt= vv⊤,t∈T.
+With the relaxation of (11b) - (11d), the only nonconvexity remaining in AC is driven
+by binary variables. We employ the same SDP relaxation technique as for DCUC on the
+UC-related mixed-integer linear constraints inAC, including (11a), (5e)-(5m), and (12). To
+reduce the dimensionality of the lifted matrix, we aim to avoid introducing AC power-flow
+variables, such as skjt, in the lifting. Thus, we replace (11a) with the following aggregated
+demand constraints for real power when deriving the corresponding RLT constraints:
+
+```
+X
+g∈G
+```
+```
+pgt−pLosst =
+```
+### X
+
+```
+k∈N
+```
+```
+DktR ∀t∈T , (14)
+```
+
+where pLosst is the real total line loss at t, satisfying:
+
+```
+pLosst =
+```
+### X
+
+```
+k∈N
+```
+### X
+
+```
+(k,j)∈L∪LR
+```
+```
+pkjt ∀t∈T. (15)
+```
+For reactive power, the corresponding RLT constraints of aggregated demand constraints
+can be similarly derived. In our experiments, we observe that without such constraints,
+the SDP relaxation for AC is already strong compared with the alternative, and thus we
+do not include them.
+To obtain an SDP relaxation for the UC-related constraints (15), (12), and (5e)-(5m),
+we first convert inequality constraints to equality constraints, and then reformulate them
+with the lifting (4b)-(4f). Then, our SDP relaxation for ACUC, denoted as ACSDP, is as
+follows:
+
+```
+ACSDP:= min
+```
+### X
+
+```
+g∈G
+```
+### X
+
+```
+t∈T
+```
+```
+Cp
+gpgt+Cguugt+Cgvvgt+Cgzzgt
+```
+```
+ (16a)
+```
+```
+s.t. (11e), (13), (15) (16b)
+X
+g∈Gk
+```
+```
+sgt−
+```
+### X
+
+```
+(k,j)∈L∪LR
+```
+```
+skjt=Dkt ∀k∈N,t∈T (16c)
+```
+```
+a⊤egtx =begt ∀e = 1,...,m;g∈G,t∈T (16d)
+```
+```
+Tr(hRthRt⊤X) =
+```
+(^) X
+k∈N
+DRkt
+
+### ! 2
+
+```
+∀t∈T (16e)
+```
+```
+Tr(aegta⊤egtX) =b^2 egt ∀e = 1,...,m;g∈G,t∈T (16f)
+xi=Xii i∈B (16g)
+Xii≤Ui^2 i∈ [n]\B (16h)
+Y ∈Sn++1,Y ≥ 0 , (16i)
+```
+where x denotes the vector of all variables in UC-related constraints, including slack vari-
+
+ables and pLoss. Y :=
+
+### 
+
+```
+^1 x
+```
+```
+⊤
+x X
+```
+### 
+
+```
+. Constraints (16b) are convexified AC-related constraints
+```
+and definition for pLoss. Constraints (16c) are flow balance constraints. Constraints (16e)
+are RLT constraints obtained by squaring (14), where hRt is the vector of coefficients for
+real power variables in (14), i.e., entries of hRt equal 1 for pgt,g∈G, equal −1 for pLosst , and
+
+
+0 otherwise. Constraints (16h) impose upper bounds on diagonal terms of Xiithat corre-
+spond to continuous variables in x. The remaining constraints have the same definitions as
+their counterparts in UCSDP, with one caveat that the operational constraints now include
+an equality version of (12).
+
+4.2. Envelope Theorem for ACUC Pricing
+We now extend the results for DCUC pricing in Section 3 to ACUC. First, we show that
+strong duality holds for ACSDP, as its feasible region is bounded and consists of two cones
+and one hyperplane:
+
+Proposition 4 (Strong duality for ACSDP). Suppose that AC is feasible. Then,
+strong duality holds between ACSDPand its dual.
+
+With strong duality, we can immediately extend the envelope theorem for PSDP−bdto
+ACSDP, as the proof of Theorem 1 and Corollary 1 are generally applicable for SDPs with
+strong duality and parameters appear only in the right-hand sides.
+Consider a feasible ACUC SDP relaxation parameterized by demand Dkt. We obtain
+the partial derivative of its dual problem’s objective function at an optimal solution with
+respect to DktR and DktI, denoted as rdkt−R:= fDacRkt−d(Ψ∗,Dkt) and rktd−I:= fDacIkt−d(Ψ∗,Dkt) re-
+spectively, where fac−d(Ψ,Dkt) is the dual objective function and Ψ∗is an optimal solution
+of the dual of ACSDP. We use rdkt:=rdkt−R+ jrdkt−Ias the electricity price for ACUC at node
+k and time t, where rdkt−Rand rdkt−Iare respectively the price for real and reactive power.
+Proposition 5 provides the expression for rktd.
+
+Proposition 5 (Expression for ACUC pricing). Let λkt= λRkt+ jλIkt be the com-
+plex dual variable associated with (16c), and letˆλRt be the dual variable associated with
+(16e). The price
+rdkt-R=λRkt∗+ 2λˆRt∗
+
+### X
+
+```
+k′∈N
+```
+DRk′t, rdkt-I=λIkt∗.
+In the SDP-based mechanism for ACUC, we use the prices obtained from Proposition 5,
+which are imposed on both real and reactive power. Computing the dispatch decisions is
+challenging, because AC is an MINLP and can become intractable quickly as the instance
+scales up. In our experiments, even small instances with 14 buses are difficult to solve.
+We therefore use high-quality feasible dispatch solutions in the mechanism, which can be
+obtained via local MINLP solvers such as KNITRO (Byrd et al. 2006). The SDP-based
+mechanism for ACUC is defined as follows:
+
+
+Definition 5 (SDP-based mechanism for ACUC). Under the SDP-based mecha-
+nism for ACUC, the system operator follows a feasible dispatch decision of AC. Prices are
+obtained via solving the SDP relaxation ACSDP. At time t, the system operator
+
+- pays πGgt=rdk(−gR),tpFeasgt +rdk(−gI),tqFeasgt to generator g at each time t∈T , where k(g) denotes
+    the node at which g is located, and pFeasgt and qFeasgt are respectively feasible real and
+    reactive production levels from the MINLPAC. In addition, the system operator pays
+    an LOC uplift payment Ug(rd) to generator g; and
+- collects πtL=Pk∈Nrdkt−RDktR+rdkt−IDktIfrom the load at each time t∈T. In addition,
+    the system operator collects a price adder of
+
+```
+Pg∈GUg(rd)
+Pk∈N ,t∈T(DktR+DktI)per unit of demand.
+```
+As in our pricing scheme for DCUC, the pricing scheme here is cost-recovering by con-
+struction.
+Finally, we also extend the finite nondifferentiability result to the value function of
+ACSDP, denoted as VAC−SDP(D·kt), where D·kta single demand parameter (either DktR or
+DIkt). The proof follows the argument of Proposition 3 forUCSDP. The only difference is that
+the feasible region ofACSDPincludes additional linear matrix inequality (LMI) constraints,
+such as (13f). Since each spectrahedron defined by an LMI is semialgebraic and semialge-
+braic sets are closed under finite intersections, adding (13f) preserves semialgebraicity of
+the relevant sets. Hence, the same conclusion holds, and we omit the proof.
+
+Proposition 6 (Finite nondifferentiability of VAC−SDP(D·kt)). For any interval
+[D·kt,D·kt] such that ACSDP is feasible for all D·kt∈ [D·kt,D·kt], the value function VAC-SDP
+is differentiable everywhere on [D·kt,D·kt] except possibly at finitely many points.
+
+## 5. Bounding Lost Opportunity Cost
+
+In this section, we derive upper bounds on the total LOC in the SDP-based mechanism.
+The results are applicable to both DCUC and ACUC models. Consider a general UC
+problem parameterized by a demand vector D∈ R|I|, whereI indexes demand at all buses
+in the set N and all time periods in the set T. Denote each generator g∈G’s decision
+vector as xg∈Xg, which includes binary commitment variables and continuous production
+variables, and denote the cost function as Cg(xg). The vector of production level variables
+sg is a subvector of xg. Let vR∈ RIbe a vector of net outflow and R be a set consisting
+
+
+of network feasibility constraints, which include either DC power flow constraints or AC
+power flow constraints. The UC problem is:
+
+```
+V (D) :=xg∈Xming,∀g∈G;
+vR∈R
+```
+### X
+
+```
+g∈G
+```
+```
+Cg(xg) (17a)
+```
+```
+s.t. Ass−vR= D, (17b)
+```
+where the objective minimizes the total costs. Constraint (17b) enforces flow balance,
+where Asis the coefficient matrix associated with production decisions, and s is the vector
+of all production level variables aggregated across generators, i.e., s = (sg)g∈G. Thus, Ass
+represents the total generation at each bus.
+We bound the total LOC with the optimality gap of a relaxation. Define the LOC of
+g∈G as a function of price vector π ∈ R|I|. Given π, LOC is defined as the difference
+between a generator’s maximum possible profit and its realized profit under the feasible
+decision vectors xFeasg and sFeasg. Formally, the LOC Ug(π) is defined as follows:
+
+```
+Ug(π) := maxxg∈Xgπk⊤(g)sg−Cg(xg)−π⊤k(g)sFeasg −Cg(xFeasg ) (18)
+```
+where πk(g)denotes the price vector at bus k(g), the location of generator g. We assume
+that the maximum possible profit is attainable and thus maxxg∈Xg
+
+### 
+
+```
+π⊤k(g)sg−Cg(xg)
+```
+### 
+
+### =
+
+supxg∈Xg
+
+### 
+
+```
+π⊤k(g)sg−Cg(xg)
+```
+### 
+
+. This assumption is without loss of generality, as generators
+have bounded capacities.
+First, we prove Lemma 1 to connect the maximum possible profit with the convex con-
+jugate of the value function V (D), which is needed for proving the theorem on the LOC
+bound. The convex conjugate of V (D) is defined as Vc(π) := supD∈R|I|{π⊤D− V (D)},
+where V (D) = +∞ if (17) is infeasible at D. Note that under this convention, the supre-
+mum can equivalently be taken over domV :={D : V(D) < +∞}, since π⊤D− V (D) =
+−∞ whenever V (D) = +∞.
+
+```
+Lemma 1. The convex conjugate Vc(π) = Pg∈Gmaxxg∈Xg
+```
+### 
+
+```
+π⊤k(g)sg−Cg(xg)
+```
+### 
+
+### +
+
+supvR∈R(−π⊤vR) for π∈ R|I|.
+
+The proof relies on the fact that the feasible regions Xg,∀g∈G and R are separable.
+While this is true for the ACUC modelAC, it does not generally hold for the DCUC model
+
+
+UC in its current form, as the flow limit constraints (5c) and (5d) depend on pgt’s. On the
+other hand, the network-flow formulation of DCUC (Bienstock et al. 2024) matches the
+structure of (17), with a feasible region that can be separated by Xg’s and R. Thus for
+DCUC, the proofs in this section rely on the network-flow formulation. Yet since the two
+DCUC formulations are equivalent, with identical optimal values and optimal dispatch de-
+cisions, the results on LOC bound in Theorem 2 and Corollary 3 apply to DCUC regardless
+of the chosen formulation.
+Let zFeas(D) be the total costs corresponding to a feasible solution (xFeas, rFeas) of (17) at
+D. Denote VRel(D) the value function of a relaxation of (17), with VRel(D)≤ V (D), D∈
+R|I|. In Theorem 2, we show that if the price π is a subgradient of VRel(D), then the
+LOC under π is bounded by the gap between zFeas(D) and VRel(D). The proof relies
+on Lemma 1, as well as convex conjugate properties including order-reversing and the
+Fenchel’s inequality.
+
+Theorem 2. Let π∈∂VRel(D). We havePg∈GUg(π)≤zFeas(D)−VRel(D).
+Proof of Theorem 2 We use the following well-known properties of convex conjugate in
+this proof (e.g. Borwein and Lewis 2006, Section 3.3):
+
+- Order reversing: Denote f ≤ g when f (x)≤ g(x) holds pointwise for all x. If f ≤ g
+    then fc≥gc.
+- Fenchel’s inequality: π⊤x≤f (x) +fc(π). The equality holds only when π∈∂f (x).
+    We have:
+       X
+          g∈G
+             xmaxg∈Xgπ⊤k(g)sg−Cg(xg)=Vc(π)− sup
+                vR∈R
+
+```
+{−π⊤vR}
+```
+```
+≤(VRel)c(π)− sup
+vR∈R
+```
+```
+{−π⊤vR}
+=π⊤D−VRel(D)− sup
+vR∈R
+```
+```
+{−π⊤vR},
+```
+where the first equality follows from Lemma 1. The inequality holds because VRel≤V and
+the convex conjugate is order-reversing. The final equality follows from Fenchel’s inequality,
+using the fact that π∈∂VRel(D).
+Therefore, the LOC
+X
+g∈G
+
+```
+Ug(π) =
+```
+### X
+
+```
+g∈G
+xmaxg∈Xgπ⊤k(g)sg−Cg(xg)−
+```
+### X
+
+```
+g∈G
+```
+```
+π⊤
+k(g)sFeasg −Cg(xFeasg )
+```
+```
+ (19a)
+```
+
+### ≤
+
+### 
+
+```
+π⊤D−VRel(D)− sup
+vR∈R
+```
+```
+{−π⊤vR}
+```
+### 
+
+### −
+
+(^) X
+g∈G
+π⊤k(g)sFeasg −
+
+### X
+
+```
+g∈G
+```
+```
+Cg(xFeasg )
+```
+### !
+
+```
+(19b)
+```
+```
+=
+```
+### 
+
+```
+π⊤D−VRel(D)− sup
+vR∈R
+```
+```
+{−π⊤vR}
+```
+### 
+
+### −
+
+(^) X
+g∈G
+π⊤k(g)sFeasg −zFeas(D)
+
+### !
+
+```
+(19c)
+```
+```
+=
+```
+### 
+
+```
+π⊤D−VRel(D)− sup
+vR∈R
+```
+```
+{−π⊤vR}
+```
+### 
+
+```
+−π⊤(D + rFeas)−zFeas(D) (19d)
+```
+```
+=zFeas(D)−VRel(D)−
+```
+### 
+
+```
+sup
+vR∈R
+```
+```
+{−π⊤vR}− (−π⊤rFeas)
+```
+### 
+
+```
+(19e)
+≤zFeas(D)−VRel(D), (19f)
+```
+where the third equality follows from Pg∈Gπk⊤(g)sFeasg = π⊤AssFeas= π⊤(D + rFeas).
+Q.E.D.
+Note that while our work focuses on SDP-based pricing, Theorem 2 is more general and
+applies to any relaxation of UC that satisfies VRel(D)≤V (D) at any D∈ R|I|.
+For our SDP-based price vector, a sufficient condition for it to be a subgradient of the
+SDP relaxation’s value function is for D to enter linearly in the right-hand sides of the
+SDP. This is because for a parameterized SDP where the parameter appears only linearly
+in the right-hand sides, its value function is convex (Boyd and Vandenberghe 2004, Section
+5.6.1) and thus its gradients are the same as subgradients. Note that the right-hand side
+parameters ofUCSDPorACSDPare not generally linear in D. Yet in numerical experiments
+(Section 6.3), our proposed SDP-based pricing leads to lower LOCs compared with the
+fixed-binary pricing, which are widely-used in practice.
+One method to ensure linearity of SDP relaxations’ right hand sides is to replace RLT
+constraints that introduce quadratic terms in D. For example, in ACSDP, we can re-
+place (16c) with valid inequalities where D enters linearly in the right-hand sides, such as
+Tr(hRthRt⊤X)≤ MPk∈NDRkt, with M >Pk∈NDRktbeing a large constant. Deriving such
+valid inequalities is a topic of future work.
+For the bound in Theorem 2 to be tight, a simple case is when VRel(D) is exact and
+thus VRel(D) =V (D). In this case, the subgradient from VRel(D) yields a price vector that
+entails no loss of opportunity cost.
+A more general case for the bound to be tight with a nonzero lost opportunity cost arises
+when there is no congestion in the network and when the convex conjugates of V (π) and
+VRel(π) coincide, as these conditions eliminate the two inequalities in the proof of Theorem
+3:
+
+
+Corollary 3. Let π∈ ∂VRel(D). If (1) there is no congestion in the network and (2)
+Vc(π) = (VRel)c(π), thenPg∈GUg(π) =zFeas(D)−VRel(D).
+
+An important example in which the conditions of Corollary 3 hold is convex-hull pricing
+for DCUC without network constraints, since zFeas(D) =V (D) corresponds to an optimal
+solution. In this setting, Gribik et al. (2007) show that the convex hull prices, which are
+derived as Lagrange multipliers πLfrom a Lagrangian relaxation, ensure VL(D) =Vcc(D),
+where VL(D) and Vcc(D) are respectively the Lagrangian relaxation and biconjugate of
+V (D). As a result, Vc(πL) = (Vcc)c(πL) = (VL)c(πL), which coincides with the second
+condition in Corollary 3. Thus, under convex-hull pricing and when there is no congestion,
+the bound of Theorem 2 is tight.
+
+## 6. Numerical Experiments
+
+In this section, we present multiple case studies for DCUC and ACUC. Our experiments
+are implemented in Julia 1.12.4 using the optimization modeling package JuMP 1.25.0
+(Legat et al. 2022). Optimization problems are solved on the Palmetto Cluster (Antao
+et al. 2024) with 10 Intel Xeon CPUs and 350GB of memory. We use Gurobi 12.0.1 to solve
+MILP and linear programming (LP) models, while MOSEK 11.0.0 (Mosek ApS 2020) is
+used for SDP models.
+We use the data from the UnitCommitment.jl package (Xavier et al. 2024) for UC
+coefficients. Specifically, we use the MATPOWER/UW-PSTCA instances (Zimmerman
+et al. 2010, Christie 1993) corresponding to January 1st from the package. In addition,
+the data from the PowerModels.jl package (Coffrin et al. 2018) are used for AC power
+flow coefficients in the ACUC model. To generate multiple scenarios for each instance, we
+multiply loads at all buses by a load multiplier chosen from a set of 13 discrete values
+{ 0. 1 ,..., 1. 3 }.
+We impose several algorithmic enhancements (Fattahi et al. 2017) to improve the tight-
+ness or tractability of the SDP relaxation for both DCUC and ACUC. To improve tightness,
+we impose triangle inequalities on some binary variables (see Section D of the Appendix
+for detail). To improve tractability, we relax the PSD conic constraint Y ∈Sn++1with a
+block-diagonal relaxation, decomposing it by time period. Specifically, for each time period
+t∈T we impose a PSD conic constraint on a submatrix of Y , consisting of all entries of
+x and X corresponding to t. This relaxation enables us to solve larger instances while
+maintaining a tight formulation in our experiments.
+
+
+6.1. DCUC Case Study
+In this section, we assess the tightness of UCSDP−bd(with algorithmic enhancements) by
+presenting its optimality gap relative to the optimal value of UC. We also compare this
+gap with that of the linear relaxation UCLP, obtained by relaxing all binary variables to
+continuous variables in [0, 1]. The optimality gap is calculated as follows:
+
+```
+Optimality gap of UCrel=opt(UC)− opt(UC
+```
+```
+rel)
+opt(UC) ,
+```
+where opt(·) denotes the optimal value of a problem. UCrel denotes either UCSDP−bdor
+UCLP.
+Table 1 summarizes the optimality gaps ofUCLPandUCSDP−bdfor the IEEE 14-, 30-, and
+57-bus instances for each load multiplier. The 14-bus and 30-bus instances were solved over
+24 time periods, whereas the 57-bus instance was solved over 6 time periods, representing
+the largest instance size we solve to optimality.
+With the default tolerance setting of MOSEK, some instances have negative optimality
+gaps of− 0 .1%. These are possibly due to numerical issues, as when we use a tighter interior-
+point optimizer tolerance for primal feasibility and relative gap termination (tightened
+from the default e−^8 to e−^10 ), such negative gaps disappear. We thus report results for
+these instances under the tighter tolerance, as noted by ∗ in the table.
+
+```
+Table 1 Optimality gap (%) comparisons for DCUC (*: tighter solver tolerance used.)
+Load 14-bus 30-bus 57-bus
+multiplier UCLP UCSDP−bd UCLP UCSDP−bd UCLP UCSDP−bd
+0.1 33.6 0.0* 28.8 0.0* 10.9 0.0*
+0.2 13.2 0.0* 9.2 0.0* 3.1 1.5
+0.3 3.3 0.0* 10.3 8.4 2.8 1.5
+0.4 7.4 5.5 9.9 8.4 2.1 1.8
+0.5 8.6 7.3 4.6 3.7 2.3 1.4
+0.6 3.9 3.1 3.4 2.8 4.7 0.8
+0.7 3.4 2.7 4.5 4.0 1.0 0.0*
+0.8 4.9 4.2 3.1 2.6 2.5 0.0*
+0.91.0 3.43.1 2.92.7 2.23.1 1.82.7 1.51.0 0.0*0.0*
+1.1 1.3 0.9 2.7 2.3 0.6 0.0*
+1.2 2.7 2.2 1.8 1.1 0.4 0.0*
+1.3 3.0 2.4 3.0 1.8 0.2 0.0*
+```
+For all instances, the SDP relaxation consistently yields smaller optimality gaps than
+the LP relaxation. The average optimality gap across all instances for the LP and SDP
+
+
+relaxations are 5.4% and 2.1%, respectively. Moreover, the optimality gaps show a decreas-
+ing trend as the problem size increases. For example, when the load multiplier equals 0.8,
+the optimality gaps ofUCSDP−bdfor the 14-, 30-, and 57-bus instances are 4.2%, 2.6%, and
+0.0%, respectively.
+
+6.2. ACUC Case Study
+In this section, we assess the tightness of ACSDP(with algorithmic enhancements). It is
+difficult to obtain optimality gaps for ACUC instances, as the exact ACUC MINLP model
+AC is difficult to solve. Therefore, we instead report the objective values of solved in-
+stances. We compare with a relaxed binary relaxation ACRB, obtained by (i) relaxing all
+binary variables in AC to continuous variables in [0, 1] and (ii) replacing AC-related non-
+convex nonlinear constraints (11b) - (11d) with the SDP-based rectangular formulation
+(13). Therefore, ACSDPand ACRBdiffer only in how the UC-related constraints are re-
+laxed, with ACSDPemploying the lifting (4b)-(4f), which is strictly stronger than a direct
+relaxation of the binary variables.
+Table 2 summarizes the objective values ofACSDPandACRBfor the IEEE 14-, 30-, and
+57-bus instances for each load multiplier. Each instance was solved over 24 time periods.
+Instances that terminated with a primal status “UNKNOWNRESULTSTATUS” are in-
+dicated by “*” in the table, while those terminated with a primal status “NOSOLUTION”
+are indicated with “-”.
+
+```
+Table 2 Objective value ($) comparisons for ACUC (*: Instances with “UNKNOWNRESULTSTATUS”,
+-: Instances with “NOSOLUTION”)
+Load 14-bus 30-bus 57-bus
+multiplier ACSDP ACRB ACSDP ACRB ACSDP ACRB
+0.1 246739.6 21129.2 267818.3 24633.0* 210252.7 55828.3*
+0.2 259109.3 42291.3 287728.0 49313.5* 256692.4 112766.1*
+0.3 276211.1 63822.1* 307629.2 74360.0* 306047.4 170734.6*
+0.4 293372.9 85529.5* 327875.2 100259.0* 458938.5 229032.7*
+0.5 310988.6 107317.4* 348964.1 126284.9* 685221.8 289436.6
+0.60.7 329386.2 129058.9*348417.5 150893.9* 371336.5 152268.1*395784.9 178408.0* 1155242.1917233.5 361122.5496195.8
+0.8 369245.2* 172948.4* 463715.1* 204506.6* - 708813.3*
+0.9 416871.9* 195332.1* 758598.3* 233887.2* - 940014.9
+1.0 806954.2* 217885.2* 1406965.0* 261744.7* - 1174381.5
+1.1 843345.6* 241215.1* - 291853.1* - 1423090.0
+1.2 - 264320.8* - 325184.9* - 1641650.0
+1.3 - 289141.2* - 363458.7* - -
+```
+For all instances that terminated with a solution, our SDP relaxation obtains tighter
+relaxation bounds than ACRB, often by a large margin. This highlights the importance
+
+
+of lifting the UC-related constraints in strengthening the convex relaxation of ACUC. In
+addition, our SDP relaxation produces more reliable solutions, as it reports substantially
+fewer instances with an unknown result status. One possible explanation is that the tighter
+relaxation leads to better numerical behavior.
+As the load multiplier increases, instances become increasingly difficult to solve, likely
+due to higher network congestion. A promising future direction is to improve the scalability
+of AC power flow constraints, by breaking large PSD constraints into smaller blocks via
+chordal decomposition. This approach is helpful to reduce solver memory usage and has
+been shown to improve the tractability of ACOPF problems.
+Finally, we briefly comment on the solvability of the MINLPAC. We experimented with
+solving a small AC instance with 14 buses and a single time period, omitting ramping
+and minimum up/down time constraints (5h)-(5k). We used Gurobi 12.0.3, which provides
+a global solver for MINLPs. At a load multiplier 1.0, the solver reached a 0.4% gap in
+433.58 seconds. Compared with the upper bound provided by this run, our SDP relaxation
+counterpart (without algorithmic enhancements) has a 2.4% optimality gap, indicating that
+the SDP relaxation is relatively tight. The AC instance becomes significantly harder at a
+load multiplier of 0.1, with the solver returning a 12.0% gap after 3500 seconds. The worse
+performance at a low load level appears to be instance-dependent, and could be induced
+by e.g., tight lower-bound constraints that complicate the MINLP solution process.
+
+6.3. LOC for DCUC
+In this section, we compare the total LOC of our SDP-based pricing scheme with the
+fixed-binary pricing scheme that is currently used in practice. In the fixed-binary pricing
+for DCUC, denoted as UCFB, the binary variables in UC are fixed to their optimal levels,
+with prices obtained from the dual solution of the resulting linear program.
+We report LOC comparisons only for DCUC, as extending fixed-binary pricing to ACUC
+is challenging: ACUC is an MINLP that is hard to solve, and fixing binary variables does
+not remove nonconvexities arising from AC power flow constraints, complicating price
+construction.
+Table 3 summarizes the total LOC for the same DCUC instances solved in Section 6.1,
+under both the fixed-binary pricing scheme (UCFB) and our proposed SDP-based pricing
+scheme (UCSDP−bd). The instances where SDP-based pricing produces a lower total LOC
+are highlighted with boldface. For most instances, the total LOC under our SDP-based
+pricing scheme is lower, with an average reduction of 46%.
+
+
+```
+Table 3 Total LOC ($) comparisons for DCUC (boldface: lower total LOC with SDP-based pricing)
+Load 14-bus 30-bus 57-bus
+multiplier UCFB UCSDP−bd UCFB UCSDP−bd UCFB UCSDP−bd
+0.1 14919.6 15009.1 14920.0 14642.0 3872.7 3782.5
+0.2 14922.3 14905.7 14923.2 14664.9 4627.5 1277.9
+0.30.4 14925.018711.0 6935.614939.4 18710.6 25243.2 11207.348437.1 7873.98847.8 1339.1 2298.9
+0.5 30886.9 10571.0 30887.0 6837.3 11400.1 1481.0
+0.6 30887.0 5852.8 28530.1 5703.4 16010.8 10585.8
+0.7 28530.1 8253.6 36001.8 9324.9 16009.5 10398.6
+0.8 36001.7 9128.0 45878.8 6386.5 3448.8 3439.0
+0.9 37737.0 8599.3 41677.4 55359.8 3450.1 3442.6
+1.0 41677.1 8218.1 49149.1 8481.3 3451.4 3475.0
+1.1 41677.8 3569.8 53397.2 8553.6 3452.6 3478.2
+1.2 49727.6 8742.7 55556.6 6792.0 3453.9 3495.1
+1.3 54932.1 10516.5 65625.9 16875.0 3455.2 3530.3
+```
+## 7. Conclusion
+
+SDPs provide tight relaxations for discrete and nonlinear market-clearing problems, making
+them useful tools for assessing the marginal effect of demand on social welfare. Based on
+this perspective, we develop a tractable, SDP-based pricing scheme applicable to electricity
+markets modeled with both DCUC and ACUC.
+There are several promising future directions. Motivated by the increasing penetration
+of weather-dependent generation (e.g., solar and wind), it is useful to consider uncertainty
+in the market-clearing model and how it reshapes incentives. Our SDP-based framework
+is well-suited for such extensions, as common stochastic modeling tools, including chance
+constraints and distributionally robust optimization, also have conic programming repre-
+sentations. In addition, it would also be helpful to further improve the tractability of the
+SDP relaxation by exploiting its sparsity structure and by identifying strengthening valid
+inequalities.
+
+## References
+
+Antao A, Burton JD, Dawson D, Gemmill J, Gerstener Z, Godfrey B, Groel S, Jordan Z, Ligon B, Smith
+D, et al. (2024) Modernizing clemson university’s palmetto cluster: Lessons learned from 17 years of
+hpc administration. Practice and Experience in Advanced Research Computing 2024: Human Powered
+Computing, 1–9.
+Azizan N, Su Y, Dvijotham K, Wierman A (2020) Optimal pricing in markets with nonconvex costs. Oper-
+ations Research 68(2):480–496.
+Baldwin E, Klemperer P (2019) Understanding preferences:“demand types”, and the existence of equilibrium
+with indivisibilities. Econometrica 87(3):867–932.
+Bevia C, Quinzii M, Silva JA (1999) Buying several indivisible goods. Math. Soc. Sci. 37(1):1–23.
+
+
+Bichler M, Kn ̈orr J (2023) Getting prices right on electricity spot markets: On the economic impact of
+advanced power flow models. Energy Economics 126:106968.
+Bienstock D, Dvorkin Y, Guo C, Mieth R, Wang J (2024) Risk-aware security-constrained unit commitment:
+Taming the curse of real-time volatility and consumer exposure.
+Blekherman G, Parrilo PA, Thomas RR (2012) Semidefinite optimization and convex algebraic geometry
+(SIAM).
+Borwein J, Lewis A (2006) Convex Analysis and Nonlinear Optimization: Theory and Examples (Springer).
+Boyd SP, Vandenberghe L (2004) Convex optimization (Cambridge university press).
+Brown R, Bernal Neira DE, Venturelli D, Pavone M (2024) A copositive framework for analysis of hybrid
+ising-classical algorithms. SIAM J. Optim. 34(2):1455–1489.
+Burer S (2009) On the copositive representation of binary and continuous nonconvex quadratic programs
+120(2):479–495.
+Byrd RH, Nocedal J, Waltz RA (2006) Knitro: An integrated package for nonlinear optimization. Large-scale
+nonlinear optim. 35–59.
+Christie R (1993) Power systems test case archive. [http://www.ee.washington.edu/research/pstca/,](http://www.ee.washington.edu/research/pstca/,)
+accessed: 2024-09-30.
+Cifuentes D, Dey SS, Xu J (2024) Sensitivity analysis for mixed binary quadratic programming. International
+Conference on Integer Programming and Combinatorial Optimization, 446–459 (Springer).
+Coffrin C, Bent R, Sundar K, Ng Y, Lubin M (2018) Powermodels.jl: An open-source framework for exploring
+power flow formulations. 2018 Power Systems Computation Conference (PSCC), 1–8, URL [http:](http:)
+//dx.doi.org/10.23919/PSCC.2018.8442948.
+Danilov V, Koshevoy G, Murota K (2001) Discrete convexity and equilibria in economies with indivisible
+goods and money. Math. Soc. Sci. 41(3):251–273.
+Diananda PH (1962) On non-negative forms in real variables some or all of which are non-negative. Math-
+ematical Proceedings of the Cambridge Philosophical Society, volume 58, 17–25 (Cambridge University
+Press).
+Eldridge B, Knueven B, Mays J (2021) Efficient prices under uncertainty and non-convexity.
+Fattahi S, Ashraphijuo M, Lavaei J, Atamt ̈urk A (2017) Conic relaxations of the unit commitment problem.
+Energy 134:1079–1095.
+Feldman AM, Serrano R (2006) Welfare economics and social choice theory (Springer Science & Business
+Media).
+Ferris M, Philpott A (2022) Dynamic risked equilibrium. Operations Research 70(3):1933–1952.
+Gale D (1984) Equilibrium in a discrete exchange economy with money. Int. J. Game Theory 13(1):61–64.
+Garcia M, Nagarajan H, Baldick R (2020) Generalized convex hull pricing for the ac optimal power flow
+problem. IEEE Transactions on Control of Network Systems 7(3):1500–1510.
+Garcia MJ, O’Neill RP (2024) Average incremental cost pricing for the ac unit commitment problem [rev.
+1]. Technical report, Los Alamos National Laboratory (LANL), Los Alamos, NM (United States).
+Gribik PR, Hogan WW, Pope SL (2007) Market-clearing electricity prices and energy uplift. Cambridge,
+MA 1–46.
+
+
+Guo C, Bodur M, Taylor JA (2025) Copositive duality for discrete energy markets. Management Science,
+accepted.
+Hogan WW, Ring BJ (2003) On minimum-uplift pricing for electricity markets. Electricity Policy Group
+1–30.
+Kim S, Kojima M (2025) Strong duality of a conic optimization problem with a single hyperplane and two
+cone constraints. Optimization 74(1):33–53.
+Lee GM, Pham TS (2017) Generic properties for semialgebraic programs. SIAM J. Optim. 27(3):2061–2084.
+Legat B, Dowson O, Garcia JD, Lubin M (2022) Mathoptinterface: a data structure for mathematical
+optimization problems. INFORMS Journal on Computing 34(2):672–689.
+Liberopoulos G, Andrianesis P (2016) Critical review of pricing schemes in markets with non-convex costs.
+Operations Research 64(1):17–31.
+Magnanti TL, Wong RT (1981) Accelerating benders decomposition: Algorithmic enhancement and model
+selection criteria. Operations Research 29(3):464–484.
+Mays J (2021) Quasi-stochastic electricity markets.
+Milgrom P, Segal I (2002) Envelope theorems for arbitrary choice sets. Econometrica 70(2):583–601.
+Milgrom P, Watt M (2025) A walrasian mechanism with markups for nonconvex markets. Review of Economic
+Studies rdaf067.
+Mosek ApS (2020) Mosek modeling cookbook.
+Ndrio M, Winnicki A, Bose S (2022) Pricing economic dispatch with ac power flow via local multipliers and
+conic relaxation. IEEE Transactions on Control of Network Systems 11(3):1704–1716.
+O’Neill RP, Sotkiewicz PM, Hobbs BF, Rothkopf MH, Stewart Jr WR (2005) Efficient market-clearing prices
+in markets with nonconvexities. European Journal of Operational Research 164(1):269–285.
+Parrilo PA (2000) Structured semidefinite programs and semialgebraic geometry methods in robustness and
+optimization. Ph.D. thesis, California Institute of Technology.
+Pataki G (2018) On positive duality gaps in semidefinite programming. arXiv preprint arXiv:1812.11796.
+Rassenti SJ, Smith VL, Bulfin RL (1982) A combinatorial auction mechanism for airport time slot allocation.
+The Bell Journal of Economics 402–417.
+Romero M, Ver ́astegui F, Villagra M (2025) A linear and scalable cutting-plane algorithm for electricity
+pricing. 2025 IEEE Power & Energy Society General Meeting (PESGM), 1–5 (IEEE).
+Schiro DA, Zheng T, Zhao F, Litvinov E (2015) Convex hull pricing in electricity markets: Formulation,
+analysis, and implementation challenges. IEEE Transactions on Power Systems 31(5):4068–4075.
+Sherali HD, Adams WP, Driscoll PJ (1998) Exploiting special structures in constructing a hierarchy of
+relaxations for 0-1 mixed integer problems 46(3):396–405.
+Taylor JA (2015) Convex optimization of power systems (Cambridge University Press).
+Vandenberghe L, Boyd S (1996) Semidefinite programming. SIAM review 38(1):49–95.
+Xavier AS, Kazachkov AM, Yurdakul O, Qiu F (2024) UnitCommitment.jl: A Julia/JuMP Optimization
+Package for Security-Constrained Unit Commitment (Version 0.3). Zenodo.
+Zimmerman RD, Murillo-S ́anchez CE, Thomas RJ (2010) Matpower: Steady-state operations, planning, and
+analysis tools for power systems research and education 26(1):12–19.
+
+
+Zohrizadeh F, Kheirandishfard M, Nasir A, Madani R (2018) Sequential relaxation of unit commitment with
+ac transmission constraints. 2018 IEEE Conf. on Decis. and Control (CDC), 2408–2413 (IEEE).
+
+
+Appendix. Appendix
+
+A. Proofs for Section 3
+Proof of Proposition 1 Step 1: We first show that PSDP−bd(θ) is feasible. By assumption,
+PMBQP is feasible and that Assumption 1 holds. We fix θ and write bj(θ) as bj and PSDP−bd(θ)
+as PSDP−bd for concreteness. Let x be a feasible solution to PMBQP. Define X = xx⊤ and
+Y =
+
+```
+ 1 x⊤
+x X
+```
+```
+
+```
+. Then, Y ⪰ 0 and Y ≥ 0 since x≥ 0. Moreover, we have tr(aja⊤jX) = (a⊤jx)^2 = b^2 j,
+xi= Xii (for binary variables), and Xii≤ Ui^2 (for continuous variables), and thus (x,X,Y ) is
+feasible in PSDP−bd. Hence, PSDP−bdis feasible.
+
+Step 2: We now prove that the feasible region of PSDP−bdis bounded. By (7d) we have Xii≤ Ui^2
+for each i where xiis continuous. On the other hand, for Xiiwhere i∈B we have xi= Xii. Since
+Y ⪰ 0, we also have
+
+(^)
+(^) x^1 i xXiii
+(^)
+(^) ≥ 0 =⇒ Xii≥ x^2 i. Thus, xi≥ x^2 i≥ 0 =⇒ xi∈ [0, 1] =⇒ Xii∈ [0, 1],
+and thus we also have the bound Xii≤Ui:= 1 for i∈B. Therefore, by the 2× 2 minors constraints
+of X⪰ 0 , this implies that Xij^2 ≤XiiXjj≤Ui^2 Uj^2 , and hence (x,X,Y ) is bounded.
+A quick note that the feasible region is also closed and thus is compact, a fact that is useful for
+the proof of Proposition 3: The feasible region is closed since it is the intersection of finitely many
+closed sets: closed convex cones and a set with finitely many linear equalities and inequalities.
+Combined with the boundedness result shown above, the feasible region is thus compact.
+Step 3: We now prove that strong duality holds for a homogenized PSDP−bd. This step follows
+the same argument as the proof of Theorem 6.1 in (Brown et al. 2024), which proves the strong
+duality of a homogenized CPP reformulation of MBQP, by showing that the homogenized CPP
+reformulation’s feasible region is nonempty, bounded, and consists of two cones and one hyperplane.
+Consequently, it has strong duality by Corollary 1.2 of (Kim and Kojima 2025).
+For our proof, the main difference is that PSDP−bdno longer has the completely positive conic
+constraint, and instead has constraints (7d), Y ≥ 0, and Y ∈Sn++1, and thus feasible region of the
+corresponding homogenized problem consists of slightly different cones. Specifically, consider the
+following homogenized SDP relaxation of PMBQP:
+PHom: min Tr(CY ̃ ) (20a)
+s.t. Tr(A ̃jY ̃ ) = 0 ∀j = 1,...,m ( ̃σj) (20b)
+Tr(BjY ̃ ) = 0 ∀j∈B ( ̃κj) (20c)
+Tr(G ̃jY ̃ )≤ 0 ∀j∈ [n]\B (φ ̃j) (20d)
+Tr(HY ̃ ) = 1 ( ̃μ) (20e)
+
+
+```
+Y ̃ ∈S+n+1 (Ω) ̃ (20f)
+Y ̃ ≥ 0 (Θ) ̃ , (20g)
+```
+where
+
+```
+C =
+```
+```
+ 0 c⊤
+c Q
+```
+```
+
+,A ̃j=
+```
+```
+ b 2
+j −bja⊤j
+−bjaj aja⊤j
+```
+```
+
+,Bj=
+```
+```
+ 0 1
+1 2 e⊤j
+2 ej−eje⊤j
+```
+```
+
+,G ̃j=
+```
+```
+−U 2
+0 ej^0 ⊤
+je⊤j
+```
+```
+
+,H =
+```
+```
+ 1 0 ⊤
+0 0
+```
+
+.
+Note that ejis a vector with 1 at the jth entry and 0’s elsewhere.
+Following similar arguments as in Steps 1 and 2, the feasible region of PHom is nonempty
+and bounded. In addition, PHom has a hyperplane constraint (20e) and two conic constraints
+(20f) and Y ̃ ∈ Kcon, where Kcon is the homogenized constraint cone defined by Kcon:=
+{Y ̃|Y ̃ satisfies (20b)− (20d), (20g)}. Therefore, by Corollary 1.2 of (Kim and Kojima 2025), PHom
+has strong duality.
+
+Step 4: Unlike for CPPs where equivalence holds between the homogenized relaxation and the
+original formulation, for our SDP relaxation this is not true in general. Instead, we prove that
+opt(PHom)≥ opt(PSDP−bd). It suffices to show that any feasible solutionY ̃ of PHomis also feasible
+toPSDP−bd. In particular, we show thatY ̃ satisfies (4b) and (4c), as other constraints are identical.
+DenoteY ̃ =
+
+```
+ 1 ̃x⊤
+̃xX ̃
+```
+```
+
+```
+. SinceY ̃ ⪰ 0, its Schur complementX ̃−x ̃ ̃x⊤⪰ 0. Thus, a⊤jX ̃aj≥ (a⊤j ̃x)^2.
+By (20b), 0 = a⊤jX ̃aj− 2 bja⊤j ̃x +b^2 j. Therefore,
+
+```
+0 = a⊤jX ̃aj− 2 bja⊤jx ̃ +b^2 j≥ (a⊤jx ̃)^2 − 2 bja⊤j ̃x +b^2 j= (a⊤j ̃x−bj)^2 ⇒ a⊤jx ̃−bj= 0.
+```
+Thus,Y ̃ satisfies (4b). Substituting a⊤jx ̃ =bjback to 0 = a⊤jX ̃aj− 2 bja⊤jx ̃ +b^2 j, we have a⊤jX ̃aj−
+b^2 j= 0, proving thatY ̃ satisfies (4c).
+Therefore,Y ̃ is feasible to PSDP−bdand thus opt(PHom)≥ opt(PSDP−bd).
+
+Step 5: Finally, we prove that the optimal value of PSDP−dualis no less than the optimal value
+of the dual for PHom(denoted as PHom−dual), and thus strong duality between PHomand its dual
+ensures the same for PSDP−dual. The argument follows the proof of Theorem 6.2 in Brown et al.
+(2024) for CPPs, with modifications to account for the different dual formulation due to different
+primal constraints in SDPs.
+The formulation of PSDP−dualis as follows:
+PSDP−dual: max
+Xm
+j=1
+
+```
+bjγj+
+Xm
+j=1
+```
+```
+b^2 jωj+μ + X
+j∈[n]\B
+```
+```
+Uj^2 φj (21a)
+s.t. M (γγγ,ωωω,κκκ,φφφ,μ) = Θ + Ω (21b)
+```
+
+```
+φφφ≤ 0 , Θ≥ 0 , Ω∈S+n+1, (21c)
+```
+where M (γγγ,ωωω,κκκ,φφφ,μ) =C−Pmj=1Ajγj−Pmj=1Aˆjωj−Pj∈BBjκj−Pj∈[n]\BGjφj−Hμ, with
+
+```
+Aj=
+```
+```
+ 0 1
+1 2 a⊤j
+2 aj^0
+```
+```
+
+,Aˆj=
+```
+```
+ 0 0 ⊤
+0 aja⊤j
+```
+```
+
+,Gj=
+```
+```
+ 0 0 ⊤
+0 eje⊤j
+```
+```
+
+.
+Also, μ denotes the dual variable of Tr(HY ̃ ) = 1, which is a valid constraint for PSDP−bd.
+The formulation of PHom−dualis as follows:
+PHom−dual: max ̃μ (22a)
+s.t. M ̃ ( ̃ ̃ ̃σσσ, ̃ ̃ ̃κκκ,φφφ, ̃ ̃ ̃ ̃μ) =Θ + ̃ Ω ̃ (22b)
+φφφ ̃ ̃ ̃≤ 0 ,Θ ̃≥ 0 ,Ω ̃∈S+n+1, (22c)
+```
+whereM ̃ ( ̃ ̃ ̃σσσ, ̃ ̃ ̃κκκ,φφφ, ̃ ̃ ̃ ̃μ) =C−Pmj=1A ̃j ̃σj−Pj∈BB ̃j ̃κj−Pj∈[n]\BG ̃jφ ̃j−H ̃μ.
+To prove that opt(PSDP−dual)≥ opt(PHom−dual), it suffices to show that any feasible solution
+( ̃ ̃ ̃σσσ, ̃ ̃ ̃κκκ,φφφ, ̃ ̃ ̃ ̃μ,Θ ̃,Ω) of ̃ PHom−dualcan be mapped to a feasible solution of PSDP−dual with the same
+objective value. In PSDP−dual, let γj=− 2 bj ̃σj,ωj= ̃σj,κj= ̃κj,φj=φ ̃j, Θ =Θ ̃, Ω =Ω, and ̃ μ =
+̃μ +Pmj=1b^2 j ̃σj−Pj∈[n]\BUj^2 φ ̃j. Then we can verify that this solution leads to an objective value of
+̃μ and is feasible to PSDP−dual. For feasibility, it is useful to note thatA ̃j=Aˆj− 2 bjAj+b^2 jH and
+G ̃j=Gj−Uj^2 H.
+Therefore, opt(PSDP−dual)≥ opt(PHom−dual). Combined with opt(PHom) = opt(PHom−dual) (Step
+3), opt(PHom)≥ opt(PSDP−bd) (Step 4), and opt(PSDP−dual)≤ opt(PSDP−bd) (weak duality), we
+conclude that strong duality holds for PSDP−bd. Q.E.D.
+Proof of Theorem 1 Fix θ∈ [θ,θ] and let Ψ∗∈ Feas∗(PSDP-dual(θ)) be any dual optimal solution.
+Then, since strong duality is attained (Proposition 1), we have
+
+```
+VSDP(θ) = VSDP-dual(θ) = fd(Ψ∗,θ), VSDP(θ′) =Ψ∈Feas(PmaxSDP−dual(θ))fd(Ψ,θ′)
+```
+for every θ′∈ [θ,θ]. We emphasize that since θ appears in the right-hand sides of PSDP−bd(θ), the
+dual feasible set, Feas(PSDP−dual(θ)), does not depend on θ. Therefore, Milgrom and Segal (2002,
+Theorem 1) applies to VSDP-dual(θ) and yields the envelope inequalities for one-sided derivatives.
+In particular, we have:
+Right derivative. Let θ′>θ. Since Ψ∗is feasible for the dual at θ′, we have
+VSDP(θ′) =Ψ∈Feas(PmaxSDP−dual(θ))fd(Ψ,θ′) ≥ fd(Ψ∗,θ′).
+
+Subtracting VSDP(θ) =fd(Ψ∗,θ) and dividing by θ′−θ > 0 yields
+VSDP(θ′)−VSDP(θ)
+θ′−θ ≥
+
+fd(Ψ∗,θ′)−fd(Ψ∗,θ)
+θ′−θ.
+Since bj(θ),j = 1,...,m are differentiable and fd(Ψ∗,θ) is a polynomial in bj’s, fθd(Ψ∗,θ) exists.
+Taking θ′→θ+ at θ gives
+VSDP′(θ+) ≥ fθd(Ψ∗,θ).
+
+
+```
+Left derivative. Let θ′<θ. Again, VSDP(θ′)≥fd(Ψ∗,θ′) and VSDP(θ) =fd(Ψ∗,θ) imply
+VSDP(θ)−VSDP(θ′) ≤ fd(Ψ∗,θ)−fd(Ψ∗,θ′).
+```
+Dividing by θ−θ′> 0 and taking θ′→θ− yields
+
+VSDP′(θ−) ≤ fθd(Ψ∗,θ).
+Differentiable points. If VSDPis differentiable at θ, then VSDP′(θ−) = VSDP′(θ+) = VSDP′(θ).
+Combining the two inequalities above gives
+
+VSDP′(θ) =fθd(Ψ∗,θ). Q.E.D.
+Proof of Corollary 1 First, due to strong duality of PSDP−bd, we have V (u) =
+maxΨ∈Feas(PSDP-dual(u))fd(Ψ, u). Since fd(Ψ∗, u) is a polynomial in bj,j = 1,...,m, and bj(u)′s are
+differentiable in u, ∇ufd(Ψ∗, u) exists.
+To obtain the expression for ∇V (u), we first consider a perturbation along one direction. Fix
+u =uˆ∈U. Let h∈ Rdbe any direction and let ε,ε > 0 be such thatˆu +εh∈U for all ε∈ [−ε,ε].
+Define the one-dimensional value function along h by φ(ε) :=V (uˆ +εh). If V (uˆ) is differentiable at
+uˆ, then φ(ε) is differentiable at ε = 0. Also, if V (uˆ) is differentiable atuˆ, then for every direction
+h we have
+
+φ′(0) =∇V (uˆ)⊤h. (23)
+Define u(ε) :=uˆ +εh. The dual objective function can be written as fd(Ψ, u(ε)). By Theorem 1
+and the chain rule, if V (uˆ) is differentiable atuˆ, then
+
+```
+φ′(0) =fεd(Ψ∗, u(ε))
+```
+(^)
+(^) ε=0=∇ufd(Ψ∗, u)⊤h. (24)
+Combining (23) and (24) for all h yields ∇V (uˆ) =∇ufd(Ψ∗,uˆ). Q.E.D.
+Proof of Proposition 2 The price rdkt is obtained by taking the partial derivative of
+fuc−d(Ψ∗,Dkt) with respect to Dkt. Since we will take the derivative with respect to Dktand the
+constant terms do not impact the derivative, we only write the terms of fuc−d(Ψ∗,Dkt) that include
+Dktfor ease of exposition:
+λ∗tDkt+λˆ∗tDkt^2 + 2ˆλ∗t X
+kk′′∈N̸=k
+DktDk′t+ X
+(i,j)∈L
+Bij(Sik−Sjk)(ξijtmin∗+ξmaxijt∗)Dkt
++
+X
+(i,j)∈L
+Bij^2 (Sik−Sjk)^2 Dkt^2 (ξˆijtmin∗+ξˆmaxijt∗)
+
+
+```
++ 2 X
+(i,j)∈L
+```
+```
+Bij^2
+```
+```
+
+
+
+```
+```
+X
+kk′′∈N̸=k
+```
+```
+(Sik−Sjk)(Sik′−Sjk′)Dk′tDkt
+```
+```
+
+
+(ξˆijtmin∗+ξˆmaxijt∗)
+```
+```
++ 2 X
+(i,j)∈L
+```
+```
+Bij(Sik−Sjk)(PijTrans,minξˆijtmin∗+PijTrans,maxξˆijtmax∗)Dkt, (25)
+```
+where the terms are obtained by multiplying the right-hand side of relevant parameter in (6) with
+corresponding dual variables. Specifically, the first term is from (6b), the second and third terms
+are from (6f), the fourth term is from (6c) and (6d), and the last three terms are from (6h) and
+(6j).
+Taking the derivative of (25) with respect to Dkt, we get (10). Q.E.D.
+Proof of Corollary 2 The proof follows similar steps as the proof of Proposition 3, with θ as the
+scalar parameter. Namely, let w collect all primal decision variables ofUCSDP−bd((D(θ)) (including
+lifted matrix entries), and rewrite the objective as c⊤w. Then, the analogue of the set S in the
+proof of Proposition 3,
+
+```
+S :={(θ,w,z)∈ R× Rp× R : θ∈ [θ,θ],w∈ Feas(D(θ)), z = c⊤w},
+```
+is semialgebraic, and so is its projection onto (θ,z). Analogously to the proof of Proposition 3,
+this implies VUC-SDP(D(θ)))is a semialgebraic function. The rest of the proof follows the same
+argument as Steps 2 in the proof of Proposition 3. Q.E.D.
+
+B. Proofs for Section 4
+Proof of Proposition 4 Our proof follows a similar argument to the proof of Proposition 1.
+First, similarly to the argument in Proposition 1, if the original ACUC problem AC is feasible,
+then so is ACSDP, via a rank-one lifting argument.
+Second, since the diagonal entries of Wt’s are nonnegative and bounded by (13e), and any off-
+diagonal entries Wijt^2 ≤WiitWjjt(due to nonnegativity of 2× 2 principal minors for Wt⪰ 0), entries
+of Wt’s are bounded. In addition, other variables are also bounded following the same argument in
+Proposition 1. The feasible region is also closed, since it is the intersection of finitely many closed
+sets: closed convex cones and a set with finitely many linear equalities and inequalities. Combined
+with the boundedness result shown above, the feasible region is thus compact.
+Following similar arguments as Steps 3 of Proposition 1’s proof, we can formulate a homogenized
+SDP relaxation with a block-diagonal matrix that includes all variables. The feasible region is
+nonempty, closed, and consists of one hyperplane (i.e.,Y ̃ 11 = 1) and two cones. Specifically, one
+of the cones is defined by all conic constraints, and the other is defined by all homogenized linear
+constraints. Thus, strong duality still follows for this homogenized SDP relaxation.
+
+
+The optimal objective of the homogenized problem is still no less that that of the original SDP
+relaxation. The feasible region of the homogenized problem is contained in that of the original
+problem, as the homogenized constraints reduce to the original ones.
+Finally, any feasible dual solution of the homogenized problem can be mapped to a feasible dual
+solution of ACSDPwith the same objective value by (1) keeping the dual variables associated with
+shared constraints unchanged, and (2) absorbing the constant terms introduced by homogenization
+into the multiplier of the hyperplane constraintY ̃ 11 = 1. Therefore, the optimal solution ofACSDP’s
+dual is no less than that of the homogenized problem’s dual. Combining this with previous results
+and with weak duality for ACSDPyields strong duality for ACSDPand its dual. Q.E.D.
+Proof of Proposition 5 Observe that the parameter Dktappears only on the right-hand sides
+of (16c) and (16e). Hence, in the dual objective, the dependence on Dktappears entirely through
+the terms
+λRkt∗DktR+λIk∗′tDIk′t+λˆRt∗
+
+```
+X
+k′∈N
+```
+```
+DRk′t
+```
+```
+ 2
+,
+```
+up to an additive constant independent of Dkt. Thus, differentiating with respect to DRkt gives
+rdkt-R=λRkt∗+ 2ˆλRt∗Pk′∈NDRk′t, and differentiating with respect to DIktgives rktd-I=λIkt∗. Q.E.D.
+
+C. Proofs for Section 5
+Proof of Lemma 1 We have:
+Vc(π) := sup
+D∈R|I|
+
+```
+π⊤D−V (D)
+```
+```
+= sup
+D∈R|I|
+```
+```
+
+
+π
+```
+```
+⊤D + max
+xg∈XvRg∈R,∀g;∈G;
+Ass−vR=D
+```
+```
+−X
+g∈G
+```
+```
+Cg(xg)
+```
+```
+
+
+
+```
+```
+= sup
+D∈R|I|
+xg∈Xmaxg,∀g∈G;
+AsvsR−∈RvR=;D
+```
+```
+(
+π⊤D−
+```
+```
+X
+g∈G
+```
+```
+Cg(xg)
+```
+```
+)
+```
+```
+= supD∈R|I|xg∈Xmaxg,∀g∈G;
+AsvsR−∈RvR=;D
+```
+```
+(
+π⊤(Ass−vR)−
+```
+```
+X
+g∈G
+```
+```
+Cg(xg)
+```
+```
+)
+```
+```
+=xg∈Xsupg,∀g∈G;
+vR∈R
+```
+```
+(
+π⊤(Ass−vR)−X
+g∈G
+```
+```
+Cg(xg)
+```
+```
+)
+```
+```
+=xg∈Xsupg,∀g∈G
+π⊤Ass−
+```
+```
+X
+g∈G
+```
+```
+Cg(xg)
+```
+```
+!
++ supvR∈R{−π⊤vR}
+=X
+g∈G
+xmaxg∈Xgπk⊤(g)sg−Cg(xg)+ supvR∈R{−π⊤vR},
+```
+
+where the second equality follows from the definition of V (D). The third equality holds because
+π⊤D is constant with respect to the inner maximization problem. The fourth equality is due to
+the constraint Ass−vR= D.
+The fifth equality holds because the outer supremum is taken over D∈ R|I|, and D =Ass−vR.
+Thus, taking the supremum over all feasible xg∈Xgfor all g∈G and vR∈R implicitly spans all
+values of D that can possibly lead to a supremum, i.e., those D corresponding to feasible solutions.
+Any D outside this range would correspond to an infeasible inner maximization problem with a
+value of −∞.
+The sixth equality is due to the feasible regions xg∈Xg,∀g∈G and vR∈R being separable. The
+final equality holds because, for each bus k∈N and time t∈T , the term [Ass](kt)represents the
+total generation at bus k, obtained by summing the production from all generators located at that
+bus. Thus, π⊤Ass =Pg∈Gπk⊤(g)sg, which corresponds to the total revenue from the production of
+all generators. This argument remains valid in the AC setting, where Ass includes both real and
+reactive power generation. Q.E.D.
+Proof of Corollary 3 The bound is tight if the two inequalities of (19) in the proof of Theorem
+2 become equalities. The first inequality is due to the order-reversing property of the conjugate,
+and thus becomes equality when Vc(π) = (VRel)c(π).
+The second inequality follows from supvR∈R{−π⊤vR}− (−π⊤rFeas)≥ 0. When there is no con-
+gestion, the flow constraints in R become redundant, allowing (17) to be reformulated without vR
+terms and constraints (17) to be aggregated across all buses. As a result, the vRand rFeasterms
+are dropped from (19), eliminating the second inequality. Q.E.D.
+
+D. Triangle Inequalities
+In our experiments, the following triangle inequalities are imposed on binary variables zgt
+(∀g 1 ,g 2 ,g 3 ∈G and t∈T ):
+
+zg 1 tzg 2 t+zg 3 t≥zg 1 tzg 3 t+zg 2 tzg 3 t (26)
+zg 1 tzg 2 t+zg 1 tzg 3 t+zg 2 tzg 3 t+ 1≥zg 1 t+zg 2 t+zg 3 t. (27)
+Since those inequalities contain bilinear terms, we linearize them by replacing the bilinear terms
+with corresponding lifted terms.

@@ -1,0 +1,1919 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{enumitem}
+\usepackage[round,authoryear]{natbib}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{remark}{Remark}
+\newtheorem{assumption}{Assumption}
+\newtheorem{question}{Open point}
+\newtheorem{definition}{Definition}
+
+\newcommand{\CP}{\mathcal{C}^{*}}
+\newcommand{\COP}{\mathcal{C}}
+\newcommand{\PSD}{\mathcal{S}_{+}}
+\newcommand{\val}{\mathrm{val}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\inner}[2]{\langle #1, #2 \rangle}
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\conv}{\operatorname{conv}}
+\newcommand{\proj}{\operatorname{proj}}
+\newcommand{\vmip}{v^{\mathrm{MIP}}}
+\newcommand{\vchp}{v^{\mathrm{CHP}}}
+\newcommand{\vlr}{v^{\mathrm{LR}}}
+\newcommand{\dual}{d}
+% --- notation: variables, feasible region, lifted matrices ---
+% Coupling-relevant coordinates: in the baseline these were the community-trade
+% flows; in the generalized model they also include the reserve offers and the
+% market grid-exchange variables that enter the homogeneous couplings. We write
+% x^{cpl} (was x^{com}) for these, and A^{cpl} for their coefficient.
+\newcommand{\xcom}{x^{\mathrm{cpl}}}      % coupling-relevant variables (was community-flow)
+\newcommand{\xrest}{x^{\mathrm{rest}}}    % remaining variables (incl. binaries)
+\newcommand{\Acom}{A^{\mathrm{cpl}}}      % coefficient on coupling-relevant variables
+\newcommand{\Azero}{A_{0}}                % coefficient on the common (grand-coalition) variables
+\newcommand{\feas}{\mathcal{X}}           % feasible region (calligraphic)
+\newcommand{\feaseq}{\mathcal{X}^{\mathrm{eq}}} % equality+slack form (x-space)
+\newcommand{\feasbar}{\bar{\mathcal{X}}^{\mathrm{eq}}} % lifted RLT form (X-space)
+\newcommand{\liftset}{\mathcal{F}}        % integrated per-player lifted set
+\newcommand{\Ymat}{Y}                     % lifted matrix (roman): Y_S joint, Y_i block
+\newcommand{\xcommon}{x_0}                % common decision variables (r^{sym}, p), controlled by the coalition
+
+\title{Recovering a Core Allocation of the Mixed-Integer Community Game\\
+via a Lagrangian Dual of the Copositive Lift}
+\author{Working note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We give a clean account of the following construction. The mixed-integer community
+game is lifted to a completely positive program (CPP), exact for $\vmip$. The inter-player
+structure is a family of \emph{homogeneous} (zero right-hand side) linear couplings ---
+community balance together with symmetric-reserve adequacy and community peak-power
+definition --- over player-separable mixed-integer feasible sets, plus a small set of
+shared \emph{common variables} (the reserve and peak quantities) that every coalition
+controls but no player owns, in the sense of linear production games with common
+technology. We dualize the two families of
+constraints of the CPP that carry the cross-player coupling at the lifted level --- the
+joint completely positive cone and the squared (RLT) form of the couplings --- while
+keeping the linear couplings and the per-player \emph{affine} constraints explicit. We
+show, by explicit computation, that at any dual-feasible multiplier the resulting
+Lagrangian is a \emph{block-separable linear production game} (LPG) with common technology,
+with no surviving inter-player term in its value: the prosumer--prosumer \emph{and}
+prosumer--common cross blocks vanish, the latter by the same mechanism, and --- because
+every coupling has zero right-hand side --- no coalition-independent constant appears (a
+nonzero right-hand side would break the LPG, which we show is the sharp dividing line). An
+LPG has a nonempty core, and a fixed-multiplier Lagrangian is a coalition-wise upper bound
+on $\vmip$; by the (profit form of the) Liu et al.\ composition, the LPG core allocation
+is then a core allocation of the mixed-integer game.
+We are careful about the duality hypotheses. The zero duality gap is automatic here (the
+feasible region is bounded), which already yields, for every $\varepsilon>0$, a stable
+allocation overpaying $\vmip$ by at most $\varepsilon$ --- an $\varepsilon$-core. An
+\emph{exact} core requires in addition that the copositive dual optimum be \emph{attained};
+following Cifuentes, Dey and Xu we note this does \emph{not} follow from boundedness, so we
+treat it as a genuine hypothesis (the same one left implicit in existing copositive-pricing
+work). We had hoped to discharge it structurally, but show that the natural route is closed:
+Burer-type lifts have no primal interior point once binaries are present, so no
+trade-structure assumption can supply a primal Slater point, and attainment remains an
+instance-dependent condition --- equivalently, the condition under which a copositive
+cutting-plane solver terminates. Because copositive
+optimization is \textsf{NP}-hard, we claim an existence statement, not a computational
+procedure. A separate section records a companion observation: if instead one drops the
+squared coupling and the joint cone and lifts \emph{only} the per-player feasible sets to
+their completely positive cones, the resulting program is exactly convex hull pricing ---
+the community-balance LP with each $\feas_i$ replaced by $\conv(\feas_i)$ --- which connects
+the present construction to the convex-hull-pricing allocation of the companion manuscript.
+\end{abstract}
+
+\section{The mixed-integer game and its copositive lift}
+
+\paragraph{Players, shared common variables, and homogeneous couplings.}
+Let $\N=\{1,\dots,n\}$ be the prosumers --- the \emph{players} of the game. Player $i$ has
+variables $x_i=(\xcom_i,\xrest_i)$: $\xcom_i$ are the continuous \emph{coupling-relevant}
+coordinates (those appearing in the inter-player constraints) and $\xrest_i$ collects all
+remaining variables, including the binaries; $\feas_i$ is mixed-integer and bounded.
+Separately, the dispatch carries a small block of \emph{common variables} $\xcommon\ge0$
+that belong to no individual prosumer but are chosen by whichever coalition operates ---
+in the model, the symmetric reserve quantity $r^{\mathrm{sym}}$ and the community peak
+power $p$. These are \emph{not} a player: they are common decision variables that each
+coalition $S$ controls freely within its own program (a coalition may pick a different
+$\xcommon$), exactly the ``common technology'' of linear production games
+(\citealp{Owen1975}; \citealp{Uhan2015}). They carry no characteristic-function value of
+their own and receive no allocation; they appear only as shared columns in every
+coalition's program, with objective coefficient $w_0$ (here
+$w_0^{\top}\xcommon=\delta^{\mathrm{res}}r^{\mathrm{sym}}-\delta^{\mathrm{peak}}p$).
+
+The inter-player constraints are a family of \emph{homogeneous} (zero right-hand side)
+linear couplings, written compactly as
+\begin{equation}
+\sum_{i\in\N}\Acom_i\xcom_i\ +\ \Azero\,\xcommon\ =\ 0 ,
+\label{eq:coupling}
+\end{equation}
+where each row of \eqref{eq:coupling} is one carrier--period balance, reserve-adequacy,
+or peak-definition constraint. The right-hand side is $0$ for every row --- a fact we use
+repeatedly (it is what keeps the relaxed game a production game,
+Remark~\ref{rem:homogeneous}). The coalition value of the mixed-integer game
+$\Gamma^{\mathrm{MIP}}$ is, in the profit (maximization) convention,
+\begin{equation}
+\vmip(S)=\max\Big\{\textstyle\sum_{i\in S} w_i^{\top}x_i+w_0^{\top}\xcommon :
+\sum_{i\in S}\Acom_i\xcom_i+\Azero\xcommon=0,\ \xcommon\ge0,\ x_i\in \feas_i\ \forall i\in S\Big\}.
+\label{eq:vmip}
+\end{equation}
+
+\paragraph{The three coupling families (community balance, reserve, peak).}
+Concretely the rows of \eqref{eq:coupling} are the following, all homogeneous; we keep
+inequalities as written and convert them to equalities by nonnegative slacks in Step~1,
+which does not change their zero right-hand side.
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{Community balance} (per carrier $k\in\{E,G,H\}$, period $t$):
+$\sum_{i\in S}\big(i^{\mathrm{com},k}_{it}-e^{\mathrm{com},k}_{it}\big)=0$. The coupling
+coordinates here are the community import/export flows, with no common-variable term
+($\Azero$ row $=0$).
+\item \emph{Reserve adequacy} (per period $t$; up and down): the sold symmetric reserve
+cannot exceed the coalition's aggregate offered headroom,
+$r^{\mathrm{sym}}-\sum_{i\in S}\sum_k r^{k,+}_{it}\le0$ and
+$r^{\mathrm{sym}}-\sum_{i\in S}\sum_k r^{k,-}_{it}\le0$. The common variable
+$r^{\mathrm{sym}}$ enters with coefficient $+1$ (in $\Azero$); the prosumer reserve
+offers $r^{k,\pm}_{it}$ (private to $i$, hence components of $\xcom_i$) with coefficient
+$-1$.
+\item \emph{Peak definition} (per period $t$, electricity):
+$\sum_{i\in S}\tfrac{1}{\Delta T}\big(i^{E,\mathrm{mkt}}_{it}-e^{E,\mathrm{mkt}}_{it}\big)-p\le0$.
+The common variable $p$ enters with coefficient $-1$ (in $\Azero$); the prosumer
+grid-exchange variables with coefficient $\pm1/\Delta T$.
+\end{itemize}
+Every prosumer-private bound that supports these (e.g.\ the storage power/energy headroom
+limits $r^{k,+}_{it}\le\bar b^{k,\mathrm{dis}}_i-b^{k,\mathrm{dis}}_{it}$ etc.) involves
+\emph{only} player $i$'s own variables and is absorbed into $\feas_i$; it does not couple
+players. The objective gains the common-variable term
+$w_0^{\top}\xcommon=\delta^{\mathrm{res}}r^{\mathrm{sym}}-\delta^{\mathrm{peak}}p$; as
+Section~\ref{sec:vanish} shows, the sign of $w_0$ is irrelevant to the reduction.
+
+\paragraph{What is in $\feas_i$.}
+The per-prosumer feasible region
+\begin{equation}
+\feas_i=\big\{x_i=(\xcom_i,\xrest_i):\ \text{prosumer balance, conversion, capacity,
+storage, reserve-headroom, unit-commitment constraints}\big\}
+\label{eq:feasi}
+\end{equation}
+is mixed-integer, bounded, and involves \emph{only} prosumer $i$'s own variables; the
+coupling coordinates $\xcom_i$ now collect, over the horizon, the community import/export
+flows, the reserve offers $r^{k,\pm}_{it}$, and the market grid-exchange variables
+$i^{E,\mathrm{mkt}}_{it},e^{E,\mathrm{mkt}}_{it}$ --- exactly those touched by
+\eqref{eq:coupling}. The coalition problem is
+\begin{equation}
+\vmip(S)=\max_{\substack{\{x_i\}_{i\in S}\\ \xcommon\ge0}}\Big\{\textstyle\sum_{i\in S}w_i^{\top}x_i+w_0^{\top}\xcommon\ :\
+\underbrace{\textstyle\sum_{i\in S}\Acom_i\xcom_i+\Azero\xcommon=0}_{\text{couples players, shares common vars}},\ \
+\underbrace{x_i\in\feas_i\ \forall i\in S}_{\text{per-player}}\Big\}.
+\label{eq:vmip-struct}
+\end{equation}
+This separation --- a family of \emph{homogeneous} linear couplings over
+player-separable feasible sets, plus a small block of shared common variables --- is the
+structure we preserve through the lift. The baseline of earlier sections is the special
+case $\xcommon=0$, $\Azero=0$, $w_0=0$ (no common variables) with a single balance row;
+nothing below depends on that restriction, so we carry the general
+\eqref{eq:vmip-struct}.
+
+\begin{remark}[Common variables as ``common technology,'' not a player]
+\label{rem:common-tech}
+The variables $\xcommon$ are exactly the ``common technology'' of linear production games
+in the sense of \citet{Owen1975} as generalized by \citet{Uhan2015}: shared decision
+columns entering every coalition's program identically (no $i$-index), with their own
+objective $w_0$, but with \emph{no} standalone coalition and \emph{no} allocated share.
+They are controlled by whichever coalition operates, and the core allocation is computed
+over the prosumers $\N$ only (Lemma~\ref{lem:owen}); $\xcommon$ never receives a payoff.
+At the level of the copositive lift, $\xcommon$ does contribute a lifted diagonal block
+$X_{00}$ and prosumer--common cross blocks $X_{i0}$ --- these are matrix bookkeeping, not
+a player --- and we verify in Section~\ref{sec:vanish} that the cross blocks $X_{i0}$
+vanish by the same mechanism as the prosumer--prosumer ones, so the common variables enter
+the value only through their own block. The only difference from a model without common
+variables is that $\Azero,w_0$ are no longer zero; the core argument is unchanged.
+\end{remark}
+
+\paragraph{Step 1: equality form in the $x$-space, $\feaseq_i$.}
+Following the standard preprocessing \citep[][\S4.1]{GuoEtAl}, applied \emph{within each
+player block}, we put $\feas_i$ in Burer's mixed-binary form. Each binary
+$z\in\{0,1\}$ (a component of $\xrest_i$) is rewritten with a slack $\sigma\ge0$,
+\begin{equation}
+z\in\{0,1\}
+\ \Longleftrightarrow\
+z-z^{2}=0,\ z\le 1
+\ \Longleftrightarrow\
+z-z^{2}=0,\ z+\sigma=1,\ z,\sigma\ge0,
+\label{eq:binstd}
+\end{equation}
+and every inequality of \eqref{eq:feasi} is likewise made an equality by a nonnegative
+slack. Writing $x_i\ge0$ for the resulting (slacked) vector and $z_i=(z_{i,m})_{m\in
+B_i}$ for its binary sub-vector ($B_i$ the binary indices of player $i$), the
+\emph{linear part} defines a set in the $x$-space,
+\begin{equation}
+\feaseq_i:=\big\{x_i\ge0:\ A_ix_i=b_i\big\},
+\label{eq:Xeq}
+\end{equation}
+where $A_ix_i=b_i$ gathers all per-player linear equalities (including the slack
+identities $z+\sigma=1$). The binary identities $z_{i,m}-z_{i,m}^{2}=0$ and the community
+balance are handled in Steps 2--3.
+
+\paragraph{Step 2: lifting to the $X$-space, $\feasbar_i$ and the binary diagonal.}
+Introduce the lifted matrix $X_{ii}$ standing for $x_ix_i^{\top}$. Burer's
+reformulation requires only the \emph{diagonal} of the squared linear system: squaring
+each row $a_{i,j}^{\top}x_i=b_{i,j}$ of $A_ix_i=b_i$ and lifting gives, per row $j$, the
+single scalar identity $a_{i,j}^{\top}X_{ii}a_{i,j}=b_{i,j}^{2}$. These define a set in
+the $X$-space,
+\begin{equation}
+\feasbar_i:=\Big\{X_{ii}:\ \inner{a_{i,j}a_{i,j}^{\top}}{X_{ii}}=b_{i,j}^{2}\ \ \forall j\Big\}
+\quad\Longleftrightarrow\quad
+\operatorname{diag}\!\big(A_iX_{ii}A_i^{\top}\big)=b_i\circ b_i ,
+\label{eq:Xbar}
+\end{equation}
+where $\inner{a a^{\top}}{X}=\Tr(aa^{\top}X)=a^{\top}Xa$ and $\circ$ is the entrywise
+(Hadamard) product. Only the \emph{diagonal} entries $(A_iX_{ii}A_i^{\top})_{jj}=b_{i,j}^2$
+are imposed --- the off-diagonal products are \emph{not} constrained, which is precisely
+what Burer's theorem shows to be sufficient. The binary identity
+$z_{i,m}-z_{i,m}^{2}=0$ lifts to the diagonal condition
+\begin{equation}
+Z_i=z_i,\qquad Z_{i,m}:=(X_{ii})_{mm}\ \ (m\in B_i),
+\label{eq:bindiag}
+\end{equation}
+i.e.\ the binary diagonal entries $Z_i$ of $X_{ii}$ equal the binary variables $z_i$
+(since $z_{i,m}^{2}$ lifts to $(X_{ii})_{mm}$).
+
+\paragraph{Step 3: the per-player lifted feasible set $\liftset_i$.}
+Collect the per-player conditions of Steps 1--2 --- the $x$-space set $\feaseq_i$, the
+$X$-space set $\feasbar_i$, and the binary diagonal \eqref{eq:bindiag} --- into a single
+set of constraints on the pair $(x_i,X_{ii})$:
+\begin{equation}
+\liftset_i:=\big\{(x_i,X_{ii})\ :\ x_i\in\feaseq_i,\ \ X_{ii}\in\feasbar_i,\ \ Z_i=z_i\big\}.
+\label{eq:Fi}
+\end{equation}
+This is purely affine (linear equalities and the diagonal binary identities); it carries
+\emph{no} conic constraint, and the augmented block
+$Y_i=\bigl(\begin{smallmatrix}1 & x_i^{\top}\\ x_i & X_{ii}\end{smallmatrix}\bigr)$ is
+merely the matrix assembled from $(x_i,X_{ii})$. By construction $\liftset_i$ involves
+only player $i$'s data. The only object not in $\liftset_i$ is the community balance,
+which couples players and is kept separate.
+
+\paragraph{The lift, preserving the block structure.}
+\emph{Notational simplification for the lift.} To keep the lift readable we write the
+chain below with the prosumer coupling alone --- a single family
+$\sum_i\Acom_i\xcom_i=0$ and prosumer blocks $Y_i$ --- suppressing the common variables
+$\xcommon$ and displaying the couplings as one aggregate row. Nothing in the lift depends
+on this: the common variables add an extra polyhedral diagonal block $X_{00}$ lifted
+identically (they carry no binaries), and the several homogeneous coupling rows (balance,
+reserve, peak) are lifted together exactly as one, since their squared form is a single
+aggregate identity $\Tr((\Acom)^{\top}\Acom X_S)=0$ over all rows (the zero right-hand
+side makes each squared row nonnegative on $\CP$, so the aggregate vanishing forces each,
+as in the footnote below). The general statement with $\xcommon$ and $\Azero$ is recorded
+where it matters --- the cross-block vanishing (Lemma~\ref{lem:vanish},
+eqs.~\eqref{eq:finiteness}--\eqref{eq:reduced-common}) and the core argument
+(Lemma~\ref{lem:owen}). With that understood, assemble the joint matrix from the blocks,
+\begin{equation}
+Y_S=\begin{pmatrix}1 & x_S^{\top}\\ x_S & X_S\end{pmatrix},
+\quad X_S=(X_{ij})_{i,j\in S},
+\quad \inner{W_S}{Y_S}=\sum_{i\in S}w_i^{\top}x_i,
+\label{eq:jointmatrix}
+\end{equation}
+with $x_S=(x_i)_{i\in S}$ and off-diagonal blocks $X_{ij}$ standing for
+$x_ix_j^{\top}$. The lift proceeds by the chain
+\begin{align}
+\vmip(S)
+&=\max_{\{x_i\}}\Big\{\textstyle\sum_i w_i^{\top}x_i:\
+\underbrace{(x_i,X_{ii})\in\liftset_i\ \forall i}_{\text{per-player (affine)}},\
+\underbrace{\textstyle\sum_i\Acom_i\xcom_i=0}_{\text{coupling}},\
+\underbrace{X_S=x_Sx_S^{\top}}_{\text{rank one}}\Big\}
+\label{eq:chain-rank1}\\[2pt]
+&\le\max_{\{x_i\},X_S}\Big\{\textstyle\sum_i w_i^{\top}x_i:\
+\underbrace{(x_i,X_{ii})\in\liftset_i\ \forall i}_{\text{per-player (affine)}},\
+\underbrace{\textstyle\sum_i\Acom_i\xcom_i=0,\ \Tr\!\big((\Acom)^{\top}\Acom X_S\big)=0}_{\text{coupling, lifted}},\
+\underbrace{Y_S\in\CP}_{\text{joint cone}}\Big\}
+\label{eq:chain-cpp}\\[2pt]
+&=\vmip(S).
+\label{eq:chain-eq}
+\end{align}
+
+\noindent\emph{Line \eqref{eq:chain-rank1} --- exact rank-one reformulation.} Imposing
+$X_S=x_Sx_S^{\top}$ (equivalently $X_{ij}=x_ix_j^{\top}$ for all $i,j$) reproduces every
+product exactly; the affine per-player conditions $(x_i,X_{ii})\in\liftset_i$ then all
+hold simultaneously, and the coupling is unchanged. This is a re-expression of
+\eqref{eq:vmip-struct}, not a relaxation. (No conic constraint is needed here: rank-one
+forces $Y_S$ to be a genuine outer product.)
+
+\emph{Line \eqref{eq:chain-cpp} --- completely positive relaxation (upper bound).} The
+rank-one constraint $X_S=x_Sx_S^{\top}$ is the sole nonconvexity. We drop it, requiring
+instead the joint membership $Y_S\in\CP:=\mathrm{CPP}(\R_+^{1+\dim x_S})=\conv\{zz^{\top}:
+z\ge0\}$ \citep[the dual of the copositive cone;][]{GuoEtAl}. To the coupling we adjoin
+its \emph{square}
+$\Tr\!\big((\Acom)^{\top}\Acom X_S\big)=0$.\footnote{The community balance has one row per
+carrier $k$ and period $t$. Because the right-hand side is zero, the single aggregate
+identity $\Tr((\Acom)^{\top}\Acom X_S)=0$
+already forces \emph{each} row's squared balance to vanish: on $Y_S\in\CP$ every summand
+$\inner{(\Acom_{kt})^{\top}\Acom_{kt}}{X_S}$ is nonnegative (a quadratic form evaluated on a
+completely positive matrix), so a zero sum forces each term to zero. One scalar
+constraint thus encodes all rows.} The block structure is preserved: every
+constraint in $\liftset_i$ touches only the diagonal block $X_{ii}$, while the
+\emph{squared community balance} is the one term reaching the off-diagonal blocks
+$X_{ij}$. Since a CP matrix is a convex combination of rank-one terms,
+$X_S\neq x_Sx_S^{\top}$ in general; as we maximize, enlarging the feasible set gives
+``$\le$''.
+
+\emph{Line \eqref{eq:chain-eq} --- equality (Burer's theorem).} Under the key assumption
+of Theorem~\ref{thm:burer}, verified in Proposition~\ref{prop:exact}, the relaxation is
+exact and ``$\le$'' becomes ``$=$''. We abbreviate the resulting convex program as
+\begin{equation}
+\vmip(S)=\max_{Y_S}\ \Big\{\inner{W_S}{Y_S}:\
+\underbrace{(x_i,X_{ii})\in\liftset_i\ \forall i\in S}_{\text{(per-player, affine)}},\
+\underbrace{\textstyle\sum_i\Acom_i\xcom_i=0}_{\text{(c)}},\
+\underbrace{\Tr\!\big((\Acom)^{\top}\Acom X_S\big)=0}_{\text{(d)}},\
+\underbrace{Y_S\in\CP}_{\text{(e)}}\Big\}=:\mathrm{CPP}(S).
+\label{eq:cpp}
+\end{equation}
+The per-player sets $\liftset_i$ are intra-block; the coupling enters only through the
+linear balance (c) and its square (d), the latter being the sole term on the
+off-diagonal blocks $X_{ij}$. In particular the prosumer balance, being part of
+$\feaseq_i$, is lifted entirely inside $X_{ii}$ and creates no cross-player term ---
+which is why ``partial lift'' difficulties do not arise here.
+
+\paragraph{Exactness via Burer's reformulation (Bomze \& Gabl, Thm.~4).}
+The equality \eqref{eq:chain-eq} is an instance of Burer's completely positive
+reformulation. We quote it in the form of Bomze and Gabl and verify its hypothesis.
+The set-completely positive cone over a closed convex cone $K\subseteq\R^{N}$ is
+$\mathrm{CPP}(K):=\conv\{xx^{\top}:x\in K\}$ \citep[][\S2.1]{BomzeGabl2023}.
+
+\begin{theorem}[{Burer's reformulation; \citealp[Thm.~4]{BomzeGabl2023}, after
+\citealp{Burer2009}}]
+\label{thm:burer}
+Let $K\subseteq\R^{N}$ be a closed convex cone and
+$L:=\{x\in K:Ax=b\}\neq\varnothing$, with recession cone $L_{\infty}=\{x\in K:Ax=o\}$.
+Let $Q_i\in\mathcal{S}^{N}$, $q_i\in\R^{N}$, $i\in[1{:}l]$, and
+$B:=\{j:Q_ie_j=o\text{ or }q_i^{\top}e_j=0\text{ for some }i\}$. Assume the
+\emph{key assumption}: \textup{(a)} $x^{\top}Q_ix+2q_i^{\top}x\ge\omega_i$ for all
+$x\in L$, $i\in[1{:}l]$; \textup{(b)} $d\in L_{\infty}\Rightarrow d_j=0$ for all $j\in B$.
+Then the QCQP
+$\min_{x\in K}\{x^{\top}Q_0x+2q_0^{\top}x: Ax=b,\ x^{\top}Q_ix+q_i^{\top}x=\omega_i\}$
+equals the completely positive program
+\[
+\min_{x,X}\ Q_0\bullet X+q_0^{\top}x
+\ \ \text{s.t.}\ \
+Ax=b,\ \operatorname{Diag}(AXA^{\top})=b\circ b,\
+Q_i\bullet X+q_i^{\top}x=\omega_i,\
+\begin{bmatrix}1 & x^{\top}\\ x & X\end{bmatrix}\in\mathrm{CPP}(\R_+\times K).
+\]
+\end{theorem}
+
+\begin{proposition}[\eqref{eq:cpp} is exact]
+\label{prop:exact}
+The coalition program \eqref{eq:vmip-struct}, with each $\feas_i$ put in equality form
+$\feaseq_i$ \eqref{eq:Xeq}, satisfies the key assumption of Theorem~\ref{thm:burer};
+hence \eqref{eq:cpp} holds with equality.
+\end{proposition}
+
+\begin{proof}
+Pass to the minimization $-\vmip(S)=\min\{-\sum_i w_i^{\top}x_i:\dots\}$ to match the
+theorem's convention. Stack the (slacked) variables $x=x_S\ge0$ and take
+$K=\R_+^{\dim x_S}$. The linear system $Ax=b$ collects \emph{all} linear equalities:
+the per-player blocks $A_ix_i=b_i$ defining $\feaseq_i$ (including the slack identities
+$z+\sigma=1$) and the community balance $\sum_i\Acom_i\xcom_i=0$. The only quadratic
+equalities are the binary identities $z_{i,m}-z_{i,m}^{2}=0$ ($m\in B_i$), i.e.\
+$Q=-e_me_m^{\top}$, $q=e_m$, $\omega=0$ for each. The slack reformulation
+\eqref{eq:binstd} guarantees $z_{i,m}\in[0,1]$ on $L$. As Bomze and Gabl note, the
+identity $z_{i,m}-z_{i,m}^{2}=0$ then meets the key assumption: \textup{(a)} holds since
+$z_{i,m}-z_{i,m}^{2}\ge0$ on $[0,1]$, and \textup{(b)} holds since each $\feas_i$ is
+bounded, so $L$ is bounded, $L_{\infty}=\{o\}$, and the condition on $B$ is vacuous
+\citep[][following Thm.~4]{BomzeGabl2023}. Theorem~\ref{thm:burer} applies, and its CPP
+is exactly the program in line \eqref{eq:chain-cpp}: the requirement
+$\operatorname{Diag}(AXA^{\top})=b\circ b$ is the squared form of the full system
+$Ax=b$, which decomposes into the per-player diagonal RLT identities
+$\operatorname{diag}(A_iX_{ii}A_i^{\top})=b_i\circ b_i$ defining $\feasbar_i$ (from
+$A_ix_i=b_i$) and the squared community balance $\Tr((\Acom)^{\top}\Acom X_S)=0$ (from
+$\sum_i\Acom_i\xcom_i=0$), while the diagonal conditions $Z_i=z_i$ \eqref{eq:bindiag} are
+the lifted binary identities. Hence \eqref{eq:cpp} is an equality.
+\end{proof}
+
+\paragraph{The objective matrix $W_S$.}
+The original objective $\sum_{i\in S}w_i^{\top}x_i$ is \emph{linear} in the variables, so
+in the lifted space it touches only the first row/column of $Y_S$ (the row carrying
+$x_i$), never the product blocks $X_{ij}$. Concretely, per player,
+\begin{equation}
+W_i=\frac{1}{2}\begin{pmatrix}0 & w_i^{\top}\\ w_i & 0\end{pmatrix},
+\qquad\text{so that}\qquad
+\inner{W_i}{Y_i}=\Tr(W_iY_i)=w_i^{\top}x_i,
+\label{eq:Wmat}
+\end{equation}
+and $W_S$ is the block-diagonal assembly $W_S=\operatorname{diag}(W_i)_{i\in S}$ --- it has
+\emph{no} off-diagonal ($X_{ij}$) blocks, because the objective contains no inter-player
+product. Thus $\inner{W_S}{Y_S}=\sum_{i\in S}w_i^{\top}x_i$ recovers \eqref{eq:vmip}.
+
+\paragraph{Block notation.}
+Diagonal blocks $X_{ii}$ are player-internal; off-diagonal blocks $X_{ij}$ ($i\neq j$)
+are inter-player. Each player block, with its augmenting row, is
+$Y_i=\bigl(\begin{smallmatrix}1 & x_i^{\top}\\ x_i & X_{ii}\end{smallmatrix}\bigr)$.
+
+\paragraph{What dualizing the joint cone leaves behind: a preview.}
+The construction dualizes the joint cone $Y_S\in\CP$ (and the squared coupling). The
+point to keep in view is what survives in the inner problem afterward. \emph{Before}
+dualization the joint cone is the only constraint reaching the off-diagonal blocks
+$X_{ij}$; the diagonal blocks $X_{ii}$ are already pinned by the affine set $\liftset_i$
+(through the RLT identities $\feasbar_i$, which are the squares of the variable bounds).
+\emph{After} dualization the joint cone is moved into the objective and no longer
+constrains the matrix, so the only constraints left are the per-player \emph{affine}
+sets $\liftset_i$ and the linear coupling. We do \emph{not} re-impose a per-player cone
+$Y_i\in\CP_i$: it is unnecessary. The off-diagonal blocks vanish from the value by the
+coefficient argument of Section~\ref{sec:vanish} (their linear coefficient is forced to
+zero), and the diagonal blocks $X_{ii}$ remain bounded by $\liftset_i$ alone. What
+results is therefore a \emph{classical} linear production game over the affine resource
+sets $\liftset_i$, not a conic one.
+
+\begin{remark}[On the per-player cone $Y_i\in\CP_i$: redundant in the primal, and not
+needed in the dual either]
+\label{rem:no-perplayer-cone}
+A principal submatrix of a completely positive matrix is completely positive, so
+$Y_S\in\CP\Rightarrow Y_i\in\CP_i$ for each $i$; hence the per-player cone is
+\emph{redundant} in the primal $\mathrm{CPP}(N)$ \eqref{eq:cpp} and need not be written.
+One might worry that, once the joint cone is dualized and this implication is lost, a
+per-player cone must be re-imposed to keep the inner problem bounded. It need not. By
+Lemma~\ref{lem:vanish} the off-diagonal blocks $X_{ij}$ drop out of the value (their
+coefficient is driven to zero), and the diagonal blocks $X_{ii}$ are bounded by the RLT
+identities already inside $\liftset_i$. The inner problem is therefore bounded over the
+affine sets $\liftset_i$ alone, and adding $Y_i\in\CP_i$ would only re-constrain a matrix
+that is already pinned where it matters --- changing the inner program to a \emph{different}
+(more constrained) one whose Lagrangian dual need not equal $\vmip(N)$. We accordingly
+keep the inner sets affine: the dualization target is the joint cone (e) and the squared
+coupling (d), nothing more.
+\end{remark}
+
+\paragraph{Two distinct gaps --- read this first.}
+The note turns on keeping two unrelated notions of ``gap'' separate; conflating
+them produces an apparent contradiction.
+\begin{enumerate}[label=\textbf{Gap \arabic*.},leftmargin=3.2em]
+\item \textbf{Duality gap} --- between the primal CPP \eqref{eq:cpp} and its Lagrangian
+dual \eqref{eq:dual}. Because the CPP is \emph{convex}, this gap is \textbf{zero} under
+Slater (conic strong duality); it is \emph{always} closed here:
+\begin{align}
+\text{CPP}\ \longleftrightarrow\ \min_{M,\lambda} \vlr_N(M,\lambda),
+\qquad
+\min_{M,\lambda}\vlr_N(M,\lambda)=\text{CPP}=\vmip(N).
+\label{eq:gap1}
+\end{align}
+\item \textbf{Integrality gap} --- between the mixed-integer value and its convex
+relaxation:
+\begin{align}
+\vmip(N)\ \longleftrightarrow\ \vchp(N),
+\qquad \vchp(N)-\vmip(N)\ \ge\ 0.
+\label{eq:gap2}
+\end{align}
+This has \emph{nothing to do with duality} and is \textbf{not} generally zero; it
+measures the non-convexity of $\prod_i \feas_i$ under the coupling, a property of the model
+instance.
+\end{enumerate}
+The crucial point is that \textbf{Gap~1 being zero does \emph{not} imply Gap~2 is
+zero.} Strong duality says $\min_M \vlr_N=\vmip$, and $\vchp$ does not appear in
+\eqref{eq:gap1}. Where $\vchp$ \emph{does} appear is at a \emph{fixed} (non-optimal)
+multiplier: by Section~\ref{sec:vanish} a fixed $M$ makes the cross blocks drop out,
+leaving a per-player convex-hull problem. Collecting the relationships,
+\begin{align}
+\vmip(N)
+&=\underbrace{\min_{M,\lambda} \vlr_N(M,\lambda)}_{\text{Gap 1 closed: optimal }M}
+\ \le\
+\underbrace{\vlr_N(M,\lambda)}_{\text{generic fixed }M:\ \text{convex-hull level}},
+\label{eq:walkdown}\\[2pt]
+\underbrace{\vchp(N)-\vmip(N)}_{\text{Gap 2}}
+&=\text{the slack between the two sides of \eqref{eq:walkdown}.}
+\notag
+\end{align}
+So the optimal multiplier $M^{*}$ attains $\vmip(N)$; a generic fixed multiplier sits at
+the convex-hull level; whether they coincide (so that any multiplier suffices) is
+precisely Gap~2. \textbf{The LRB uses the optimal multiplier}, so the total it
+distributes is $\vlr_N(M^{*})=\vmip(N)$ --- budget-balanced at $\vmip$, and $\vchp$ is only
+a way-station the dual minimization passes through, never the budget of the final
+allocation (Remark~\ref{rem:Mcone}). Read everything below with this distinction in
+hand. The companion construction of Section~\ref{sec:chp} makes the way-station explicit:
+it is exactly the program one obtains by \emph{not} dualizing --- lifting only the
+per-player sets and keeping the linear coupling --- and it equals convex hull pricing.
+
+\section{The construction}
+\label{sec:construction}
+
+\paragraph{The Lagrangian-relaxation bound (LRB) framework.}
+Our construction follows the Lagrangian-relaxation framework of \citet{LiuEtAl} for
+computing stable allocations of mixed-integer cooperative games. In their
+(cost-minimization) setting, one relaxes a chosen family of coupling constraints into the
+objective with a multiplier $\lambda\ge0$, obtaining a relaxed characteristic function
+$c^{\mathrm{LR}}(\cdot;\lambda)$ that is a coalition-wise \emph{lower} bound on the true
+cost $c(\cdot)$. The core mechanism by which they recover a stable allocation is that the
+restriction of the grand-coalition Lagrangian dual solution to a sub-coalition is
+feasible for that coalition's relaxed problem, so weak duality makes the dual-based
+allocation stable.
+
+In Liu's IM-game formulation the relaxed coupling has the form $A'x\ge B'\gamma_s+D'$,
+where $\gamma_s$ is a \emph{coalition indicator} appearing on the right-hand side. This
+is what lets them split $c^{\mathrm{LR}}(\cdot;\lambda)=c^{\mathrm{LR}_1}(\cdot;\lambda)+
+c^{\mathrm{LR}_2}(\cdot;\lambda)$ \citep[][eqs.~(6)--(7)]{LiuEtAl} into a closed-form
+sub-game~1 carrying the $\gamma_s$-linear term $\lambda B'\gamma_s$ and a residual
+sub-game~2. \emph{Our coupling has no such structure.} The community balance
+$\sum_i\Acom_i\xcom_i=0$ is homogeneous --- there is no coalition-indicator right-hand
+side --- so the term that would constitute Liu's sub-game~1 is absent, and the
+decomposition collapses: there is a single relaxed game, not two. We therefore do
+\emph{not} split into sub-games; we work directly with the relaxed Lagrangian and show it
+is a linear production game.
+
+We transpose the framework to our profit-maximization setting. The role of the relaxed
+lower bound is played by the Lagrangian of the copositive program $\mathrm{CPP}(S)$
+\eqref{eq:cpp}, which (in the maximization convention) is a coalition-wise \emph{upper}
+bound on $\vmip$. The question is \emph{which} constraints to dualize. The community
+program has exactly one inter-player coupling --- the community balance --- lifted into
+the linear balance (c) and its square (d), plus the joint cone (e) that ties the
+off-diagonal blocks together. We dualize the two constraints that carry the
+\emph{inter-block} coupling at the lifted level: the joint cone (e) and the squared
+balance (d). Everything else --- the per-player affine sets $\liftset_i$ and the linear
+balance (c) --- is kept explicit. As Section~\ref{sec:vanish} shows, this choice makes
+the off-diagonal blocks drop out of the value, leaving a relaxed Lagrangian that is
+block-separable: a (classical) linear production game, solvable by a single Owen
+allocation rather than by column generation. Sections~\ref{sec:vanish}--\ref{sec:composition}
+carry this out.
+
+\paragraph{Step A (dualize the joint cone and the squared coupling).}
+Starting from $\mathrm{CPP}(S)$ \eqref{eq:cpp}, we dualize exactly two constraint
+families and keep the rest explicit:
+\begin{align}
+\text{dualize:}\quad
+&\text{(e) joint cone } Y_S\in\CP
+&&\rightsquigarrow\ \text{matrix multiplier } M\in\COP\ \text{(dual cone)},\notag\\
+&\text{(d) squared coupling } \Tr\!\big((\Acom)^{\top}\Acom X_S\big)=0
+&&\rightsquigarrow\ \text{scalar multiplier } \lambda\in\R;\notag\\
+\text{keep explicit:}\quad
+&(x_i,X_{ii})\in\liftset_i\ (\forall i),
+&&\text{i.e.\ the per-player \emph{affine} sets;}\notag\\
+&\text{the linear coupling (c) } \textstyle\sum_i\Acom_i\xcom_i=0. &&
+\label{eq:dualize-keep}
+\end{align}
+The resulting Lagrangian characteristic function --- the profit analogue of Liu's
+$c^{\mathrm{LR}}(\cdot;\lambda)$ \citep[][eq.~(4)]{LiuEtAl} --- is
+\begin{align}
+\vlr_S(M,\lambda)=\max_{\substack{(x_i,X_{ii})\in\liftset_i\ \forall i\in S\\[1pt]
+\sum_{i\in S}\Acom_i\xcom_i=0}}
+\ \inner{W_S}{Y_S}+\inner{M}{Y_S}
+-\lambda\,\Tr\!\big((\Acom)^{\top}\Acom X_S\big),
+\label{eq:lagrangian}
+\end{align}
+in which the off-diagonal blocks $X_{ij}$, $i\neq j$, are now \emph{free} --- no cone
+constrains them, the joint cone having been moved to the objective. The Lagrangian dual
+is
+\begin{align}
+\dual^{*}(S)=\min_{M\in\COP,\ \lambda}\ \vlr_S(M,\lambda).
+\label{eq:dual}
+\end{align}
+
+\paragraph{Step B (solve the dual, recover a stable allocation).}
+We solve \eqref{eq:dual} for the grand coalition, obtaining a multiplier
+$(M^{*},\lambda^{*})$, and from the resulting LPG we read off an allocation, which
+we claim is in the core of $\Gamma^{\mathrm{MIP}}$. The rest of the note justifies this.
+
+\section{What survives in the value: the cross blocks vanish}
+\label{sec:vanish}
+
+\paragraph{Why the off-diagonal blocks are free, while the diagonal blocks are not.}
+Before computing coefficients we must justify treating the off-diagonal blocks $X_{ij}$
+($i\neq j$) as \emph{free} (hence able to send the maximization to $+\infty$), since the
+whole argument hinges on it. The point is an asymmetry between diagonal and off-diagonal
+blocks.
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{Diagonal blocks $X_{ii}$ are bounded.} They are constrained by
+$\liftset_i$, in particular by the RLT identities in $\feasbar_i$
+\eqref{eq:Xbar}, $\operatorname{diag}(A_iX_{ii}A_i^{\top})=b_i\circ b_i$. These are
+precisely the squares of the variable bounds: e.g.\ squaring the slacked bound
+$z+\sigma=1$ and lifting gives
+$(X_{ii})_{zz}+2(X_{ii})_{z\sigma}+(X_{ii})_{\sigma\sigma}=1$, which confines the
+relevant entries of $X_{ii}$ to a bounded range. So the bounds we introduced in the
+equality reformulation \eqref{eq:binstd} \emph{do} survive in $\liftset_i$ --- bounding
+$X_{ii}$.
+\item \emph{Off-diagonal blocks $X_{ij}$ are not bounded.} The block $X_{ij}$ belongs to
+\emph{no} per-player set: it is in neither $\liftset_i$ nor $\liftset_j$ (each
+contains only its own $x_\bullet,X_{\bullet\bullet}$), so no RLT identity touches it. Nor
+is it tied to $x_ix_j^{\top}$: that link held only under the rank-one constraint, which
+was dropped in passing to \eqref{eq:chain-cpp}. Thus $X_{ij}$ is decoupled from the
+(bounded) variables $x_i,x_j$ and ranges over the full symmetric block. Boundedness of
+$x_i,x_j$ does \emph{not} bound the independent matrix variable $X_{ij}$.
+\end{itemize}
+The only constraint that ever reached $X_{ij}$ was the joint cone $Y_S\in\CP$, and that
+was moved to the objective in Step~A. Hence $X_{ij}$ is genuinely free, and a nonzero
+linear coefficient on it makes $\vlr_S=+\infty$. This is what powers the coefficient
+argument below; the same argument does \emph{not} apply to $X_{ii}$, which is bounded and
+is instead absorbed into the modified objective $\widetilde W_i$. (This asymmetry is also
+why no per-player cone is needed: the would-be-unbounded blocks $X_{ij}$ are tamed by the
+coefficient condition, not by a cone, and the bounded blocks $X_{ii}$ need no cone;
+cf.\ Remark~\ref{rem:no-perplayer-cone}.)
+
+The off-diagonal blocks $X_{ij}$ enter \eqref{eq:lagrangian} linearly, and we now
+determine their coefficients explicitly. The squared coupling involves only the
+community-flow entries (since $\Acom$ acts on $\xcom$), whereas the dualized cone term
+$\inner{M}{Y_S}$ touches all entries. Writing the cross block $X_{ij}$ in its
+$(\mathrm{c},\mathrm{r})\times(\mathrm{c},\mathrm{r})$ sub-entries (c\,$=$\,com,
+r\,$=$\,rest) and using the symmetry $X_{ji}=X_{ij}^{\top}$, the coefficient of each free
+cross-entry is as follows.
+
+\begin{lemma}[Finiteness conditions and vanishing of the cross blocks]
+\label{lem:vanish}
+$\vlr_S(M,\lambda)$ is finite only if, for every $i\neq j$, the cross block $M_{ij}$
+satisfies
+\begin{equation}
+(M_{ij})_{cc}=\lambda\,(\Acom_i)^{\top}\Acom_j,\qquad
+(M_{ij})_{cr}=(M_{ij})_{rc}=(M_{ij})_{rr}=0 .
+\label{eq:finiteness}
+\end{equation}
+Here $(M_{ij})_{cc}=\lambda(\Acom_i)^{\top}\Acom_j$ is a \emph{matrix} identity of size
+$n^{\mathrm{com}}_i\times n^{\mathrm{com}}_j$: with $\Acom_i\in\R^{R\times n^{\mathrm{com}}_i}$
+($R=|K||T|$ balance rows), $(\Acom_i)^{\top}\Acom_j=\sum_{r=1}^{R}(\Acom_i)_{r,:}^{\top}
+(\Acom_j)_{r,:}$ is summed over all carrier--period balance rows (it reduces to the
+scalar $a_ia_j$ only when $n^{\mathrm{com}}=R=1$). The symmetry factor of $2$ arising
+from $X_{ji}=X_{ij}^{\top}$ appears on both sides and cancels.
+Under \eqref{eq:finiteness}, every free cross-entry has zero coefficient, so the cross
+blocks contribute nothing to the value, and
+\begin{equation}
+\vlr_S(M,\lambda)=\max_{\substack{(x_i,X_{ii})\in\liftset_i\ \forall i\in S\\ \sum_{i\in S}\Acom_i\xcom_i=0}}
+\ \sum_{i\in S}\inner{\widetilde W_i}{Y_i},
+\qquad
+\widetilde W_i:=W_i+M_{ii}-\lambda\,(\Acom_i)^{\top}\Acom_i\,\Pi_{cc},
+\label{eq:reduced}
+\end{equation}
+where $(\Acom_i)^{\top}\Acom_i$ ($n^{\mathrm{com}}_i\times n^{\mathrm{com}}_i$, summed
+over balance rows) sits on the $(\mathrm{c},\mathrm{c})$ sub-block via $\Pi_{cc}$, and
+$\widetilde W_i$ depends only on player $i$'s own data.
+
+The same holds for the \emph{prosumer--common} cross blocks $X_{i0}$ ($i\in\N$), which
+arise once the common variables $\xcommon$ are lifted alongside the prosumers (this is
+matrix bookkeeping in the lift, not the introduction of a player): finiteness forces
+\begin{equation}
+(M_{i0})_{cc}=\lambda\,(\Acom_i)^{\top}\Azero,\qquad
+(M_{i0})_{cr}=(M_{i0})_{rc}=(M_{i0})_{rr}=0,
+\label{eq:finiteness-common}
+\end{equation}
+so $X_{i0}$ contributes nothing free to the value either, and the reduced value
+\eqref{eq:reduced} acquires one further summand for the common-variable block,
+\begin{equation}
+\vlr_S(M,\lambda)=\max_{\substack{(x_i,X_{ii})\in\liftset_i\ \forall i\in S\\[1pt]
+(\xcommon,X_{00})\in\liftset_0,\ \ \sum_{i\in S}\Acom_i\xcom_i+\Azero\xcommon=0}}
+\ \sum_{i\in S}\inner{\widetilde W_i}{Y_i}\ +\ \inner{\widetilde W_0}{Y_0},
+\qquad
+\widetilde W_0:=W_0+M_{00}-\lambda\,\Azero^{\top}\Azero\,\Pi_{cc},
+\label{eq:reduced-common}
+\end{equation}
+where $Y_0=\bigl(\begin{smallmatrix}1&\xcommon^{\top}\\\xcommon&X_{00}\end{smallmatrix}\bigr)$
+is the lifted common-variable block and
+$\liftset_0=\{(\xcommon,X_{00}):\xcommon\ge0,\ \text{RLT identities of the common
+variables}\}$ its (polyhedral) feasible description. The block $Y_0$ is a shared column
+group, present in every coalition's program and chosen by the coalition; it is not a
+player and receives no allocation (Lemma~\ref{lem:owen}, Remark~\ref{rem:common-tech}).
+Thus the cross blocks reaching $\xcommon$ vanish exactly as the prosumer--prosumer ones
+do, and the common variables enter the value only through their own diagonal block.
+\end{lemma}
+
+\begin{proof}
+The blocks $X_{ij}$ and $X_{ji}=X_{ij}^{\top}$ both occur in the joint matrix $Y_S$
+(in the $(i,j)$ and $(j,i)$ positions), and the dual $M$ likewise has $M_{ij}$ and
+$M_{ji}=M_{ij}^{\top}$. Using $\inner{A}{B}=\inner{A^{\top}}{B^{\top}}$, the two
+positions contribute equally, so every off-diagonal coefficient carries a common factor
+$2$. The coefficient of the free entry $(X_{ij})_{cc}$ is therefore
+$2\bigl[(M_{ij})_{cc}-\lambda(\Acom_i)^{\top}\Acom_j\bigr]$: the first term from
+$\inner{M}{Y_S}$, the second from $-\lambda\Tr((\Acom)^\top \Acom X_S)$, whose off-diagonal
+com--com coefficient is $a_i a_j$ in the scalar case and $(\Acom_i)^\top \Acom_j$ in
+general. The coefficient of $(X_{ij})_{cr}$, $(X_{ij})_{rc}$, $(X_{ij})_{rr}$ is
+$2(M_{ij})_{cr}$, $2(M_{ij})_{rc}$, $2(M_{ij})_{rr}$ respectively, since the squared
+coupling has no rest-component. A free variable with nonzero linear coefficient makes the
+maximization $+\infty$; hence finiteness forces each coefficient to zero. The common
+factor $2$ divides out, leaving \eqref{eq:finiteness}. Substituting, the only surviving
+part of the dualized terms is the diagonal contribution
+$\sum_{i\in S}\bigl[\inner{M_{ii}}{Y_i}-\lambda(\Acom_i)^\top \Acom_i (X_{ii})_{cc}\bigr]$,
+giving \eqref{eq:reduced}. Each summand involves only block $i$.
+The prosumer--common cross blocks $X_{i0}$ are handled identically: $X_{i0}$ and
+$X_{0i}=X_{i0}^{\top}$ occur symmetrically, their $(\mathrm{c},\mathrm{c})$ coefficient is
+$2[(M_{i0})_{cc}-\lambda(\Acom_i)^{\top}\Azero]$ and the other sub-blocks
+$2(M_{i0})_{cr},2(M_{i0})_{rc},2(M_{i0})_{rr}$, all forced to zero by finiteness, giving
+\eqref{eq:finiteness-common}; the surviving common-block diagonal term
+$\inner{M_{00}}{Y_0}-\lambda\Azero^{\top}\Azero(X_{00})_{cc}$ yields the extra summand of
+\eqref{eq:reduced-common}. (The common variables carry no binaries, so their lift is the
+plain polyhedral RLT block.)
+\end{proof}
+
+\begin{remark}[Two different mechanisms, one effect]
+\label{rem:twomech}
+It is worth stating precisely why the cross blocks vanish, since this was a point of
+confusion. The $(\mathrm{c},\mathrm{c})$ cross-entry vanishes by \emph{cancellation}: the squared-coupling
+term $\lambda(\Acom_i)^\top \Acom_j$ is exactly matched by the dual cross-block
+$(M_{ij})_{cc}$. The $(\mathrm{c},\mathrm{r})$, $(\mathrm{r},\mathrm{c})$, $(\mathrm{r},\mathrm{r})$ cross-entries vanish by \emph{forcing}:
+the squared coupling contributes nothing there, so the dual cross-block is driven to
+zero. Both are consequences of finiteness, and finiteness is not an external assumption
+but a property of the dual feasible set: since \eqref{eq:dual} is a minimization, any
+$M$ giving $\vlr_S=+\infty$ is never selected, so the dual automatically restricts to
+multipliers satisfying \eqref{eq:finiteness}. The squared coupling was dualized
+\emph{precisely} so that the $(\mathrm{c},\mathrm{c})$ cross-entry could cancel rather than be forced to
+zero; this is what keeps the inter-player coupling information present (through
+$\lambda$) instead of discarding it.
+\end{remark}
+
+\begin{remark}[The cross blocks are \emph{eliminated}, not merely zero-valued; in what
+sense the Lagrangian ``is'' an LPG]
+\label{rem:eliminate}
+A careful reader will note that the off-diagonal blocks $X_{ij}$ ($i\neq j$) are still
+formally present as \emph{variables} in the Lagrangian \eqref{eq:lagrangian}: the inner
+maximization is over the full matrix $Y_S$, and Lemma~\ref{lem:vanish} does not delete
+$X_{ij}$ --- it shows that the dual forces their objective coefficient to zero. We make
+the passage from this to a linear production game precise, since the two are not
+literally the same object.
+
+At any dual-feasible $(M,\lambda)$ satisfying \eqref{eq:finiteness}, each $X_{ij}$
+($i\neq j$) (i) appears in \emph{no} constraint --- it lies in no per-player set
+$\liftset_i$ and not in the linear coupling --- and (ii) has zero coefficient in the
+objective. A variable that is both unconstrained and absent from the objective can be
+removed without changing the optimal value or the optimal $(x_i,X_{ii})$: its value is
+\emph{indeterminate} (any assignment is optimal and feasible), so fixing it arbitrarily,
+say $X_{ij}=0$, and deleting it leaves an equivalent program. Carrying out this
+elimination turns \eqref{eq:lagrangian} into the \emph{reduced} program
+\eqref{eq:subgame2def}, in which only the per-player variables $(x_i,X_{ii})$ remain.
+The two programs share the same optimal value; they differ only in that the reduced one
+has discarded variables that could not affect it.
+
+This is the precise content of ``the relaxed Lagrangian is an LPG.'' It is the
+\emph{reduced} program \eqref{eq:subgame2def}, not the raw Lagrangian
+\eqref{eq:lagrangian}, that is a linear production game: only after eliminating $X_{ij}$
+is every remaining variable attributable to a single player, as Owen's framework
+requires. The elimination is what makes the attribution well-defined; a cross block
+$X_{ij}$ belongs to neither player $i$ nor player $j$, so a formulation retaining it
+would not be a production game. Two consequences worth recording:
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{No ``LPG\,$+$\,residual'' split.} One might hope to peel $X_{ij}$ off into a
+separate sub-problem and solve an LPG plus a remainder. There is nothing to peel: $X_{ij}$
+sits in no constraint, so it forms no sub-problem with independent content (with zero
+coefficient its ``sub-problem'' is the trivial $\max 0$). The only correct operation is
+elimination, not separation. (This is unrelated to Liu's two-sub-game split, which our
+homogeneous coupling already precludes for a different reason, Section~\ref{sec:composition}.)
+\item \emph{Indeterminacy of $X_{ij}$ does not blur the allocation.} Because the optimal
+$X_{ij}$ is indeterminate, the dual solution does not pin it --- but this is harmless. The
+Owen allocation \eqref{eq:owen} is computed from $g_i,b_i$ and the duals
+$\nu_i^{*},\mu^{*}$ of the \emph{reduced} program \eqref{eq:subgame2def}, none of which
+involves $X_{ij}$. The cross blocks' indeterminacy therefore leaves the allocation
+uniquely determined by the reduced LPG's data.
+\end{itemize}
+\end{remark}
+
+\section{The relaxed Lagrangian is a linear production game with a nonempty core}
+\label{sec:coniclpg}
+
+\paragraph{The relaxed game.}
+By Lemma~\ref{lem:vanish}, at any dual-feasible $(M,\lambda)$ the reduced Lagrangian
+\eqref{eq:reduced} --- obtained from \eqref{eq:lagrangian} by eliminating the
+zero-coefficient, unconstrained cross blocks $X_{ij}$, which is value-preserving
+(Remark~\ref{rem:eliminate}) --- is the characteristic function of a single (profit)
+cooperative game $(N,\vlr(\cdot;M,\lambda))$, with
+\begin{equation}
+\vlr_S(M,\lambda)=\
+\begin{aligned}[t]
+\max_{\{(x_i,X_{ii})\},\,(\xcommon,X_{00})}\quad & \sum_{i\in S}\inner{\widetilde W_i}{Y_i}\ +\ \inner{\widetilde W_0}{Y_0}\footnotemark\\[2pt]
+\text{s.t.}\quad & \sum_{i\in S}\Acom_i\xcom_i\ +\ \Azero\xcommon\ =\ 0,\\[2pt]
+& (x_i,X_{ii})\in\liftset_i\quad\forall i\in S,\qquad (\xcommon,X_{00})\in\liftset_0,
+\end{aligned}
+\qquad S\subseteq N,
+\label{eq:subgame2def}
+\end{equation}
+\footnotetext{The decision variables are the pair $(x_i,X_{ii})$; the matrix
+$Y_i=\bigl(\begin{smallmatrix}1 & x_i^{\top}\\ x_i & X_{ii}\end{smallmatrix}\bigr)$ is
+merely their assembly, with the $(1,1)$ entry fixed at $1$. Thus
+$\inner{\widetilde W_i}{Y_i}=\Tr(\widetilde W_iY_i)$ is an \emph{affine} function of
+$(x_i,X_{ii})$: the first row/column of $\widetilde W_i$ contributes the linear term in
+$x_i$, the lower-right block contributes the linear term in $X_{ii}$, and the
+$(1,1)$ entry contributes only an additive constant (irrelevant to the optimization).
+Writing the objective in $Y_i$ and the constraints in $(x_i,X_{ii})$ is therefore the
+same program; the $Y_i$-form is used only to keep the inner products compact.}
+the maximization analogue of Liu's relaxed characteristic function
+$c^{\mathrm{LR}}(\cdot;\lambda)$ \citep[][eq.~(4)]{LiuEtAl}, here already reduced to its
+block-separable form by Lemma~\ref{lem:vanish}. A profit allocation $\alpha\in\R^{N}$ is
+\emph{stable} for this game if $\sum_{i\in S}\alpha_i\ge \vlr_S(M,\lambda)$ for all
+$S\subseteq N$, and lies in the \emph{core} if in addition
+$\sum_{i\in N}\alpha_i=\vlr_N(M,\lambda)$. We show this game has a nonempty core by
+exhibiting a structural Owen allocation.
+
+\begin{remark}[The multiplier is fixed at the grand-coalition value; the objective
+coefficients are coalition-invariant]
+\label{rem:fixed-multiplier}
+A subtlety in reading \eqref{eq:subgame2def} as a production game deserves to be made
+explicit, since the objective coefficient
+$\widetilde W_i=W_i+M_{ii}-\lambda(\Acom_i)^{\top}\Acom_i\Pi_{cc}$ depends on the dual
+variables $(M,\lambda)$, which might appear to vary with the coalition. It does not. By
+construction, $\vlr_S(\cdot)$ is the Lagrangian sub-game of the \emph{grand-coalition}
+copositive program at a \emph{single, fixed} multiplier $(M,\lambda)$: the multiplier is
+an exogenous parameter of the game, not optimized per coalition, and is the same for
+every $S\subseteq N$ (note $(M,\lambda)$ carries no $S$-dependence in
+\eqref{eq:subgame2def}). For the existence theorem we fix it at the grand-coalition dual
+optimum $(M^{*},\lambda^{*})$. Consequently the coefficient $\widetilde W_i$ is a
+\emph{constant} of player $i$ once $(M^{*},\lambda^{*})$ is fixed, identical across all
+coalitions containing $i$. This is exactly the data Owen's theorem requires --- a fixed,
+coalition-invariant linear objective --- and it is what makes the Owen restriction of
+Lemma~\ref{lem:owen} (restricting the grand-coalition dual solution to a sub-coalition)
+legitimate: the sub-coalition game $\vlr_S$ is not a re-optimized object but the same
+fixed-coefficient program read on the blocks $i\in S$. Likewise the cross-block
+finiteness condition \eqref{eq:finiteness}, imposed for all $i\neq j$ in $N$, holds
+\emph{a fortiori} for any pair inside $S\subseteq N$, so the cross blocks vanish in
+$\vlr_S$ too and each $\vlr_S$ is genuinely the (classical) LPG below. In short: one
+multiplier, fixed at $N$; the coalition structure lives entirely in which blocks and
+which copies of the linear coupling are present, never in the objective coefficients.
+\end{remark}
+
+\paragraph{The relaxed game is a linear production game with common technology.}
+The prosumer resource sets $\liftset_i$ are \emph{affine} (linear equalities and the
+diagonal binary identities, together with $x_i\ge0$ inherited from $\feaseq_i$), and the
+common-variable set $\liftset_0=\{\xcommon\ge0,\ \text{RLT of the common variables}\}$ is
+polyhedral; there is no conic constraint left after Step~A. The objective
+$\sum_{i\in S}\inner{\widetilde W_i}{Y_i}+\inner{\widetilde W_0}{Y_0}$ is linear and the
+only coupling is the homogeneous balance
+$\sum_{i\in S}\Acom_i\xcom_i+\Azero\xcommon=0$. This is exactly the data of a linear
+production game \emph{with common technology} --- linear objective, polyhedral resource
+sets, one shared homogeneous coupling, and a block of shared decision variables $\xcommon$
+controlled by each coalition --- in the sense of \citet{Owen1975} as generalized by
+\citet{Uhan2015}. The players are the prosumers $\N$; $\xcommon$ is not a player. We invoke
+this classical result directly, with no conic generalization.
+
+\begin{lemma}[LPG with common technology has a nonempty core]
+\label{lem:owen}
+Consider the grand-coalition program \eqref{eq:subgame2def} ($S=N$), a linear program in
+the prosumer variables $\{(x_i,X_{ii})\}_{i\in N}$ \emph{and} the common variables
+$(\xcommon,X_{00})$, with a single homogeneous coupling
+$\sum_{i\in N}T_iY_i+T_0Y_0=0$ (here $T_iY_i=\Acom_i\xcom_i$, $T_0Y_0=\Azero\xcommon$).
+For a coalition $S$, the program \eqref{eq:subgame2def} keeps the prosumer blocks $i\in S$
+and the \emph{same} common variables $(\xcommon,X_{00})$ and coupling; the common variables
+are thus available to every coalition, not owned by any. The dual of the $S=N$ program is
+\begin{equation}
+\min_{\mu,\{\nu_i\},\nu_0}\ 0
+\quad\text{s.t.}\quad
+G_i^{\top}\nu_i+T_i^{\top}\mu\ge \widetilde W_i\ \ (i\in N),\qquad
+G_0^{\top}\nu_0+T_0^{\top}\mu\ge \widetilde W_0,
+\label{eq:owendual}
+\end{equation}
+the zero objective reflecting the zero right-hand side of every row (all couplings
+homogeneous, and the resource right-hand sides $g_i,g_0$ entering the dual objective as
+$\sum_i\inner{\nu_i}{g_i}+\inner{\nu_0}{g_0}$, which we make explicit below). Let
+$(\mu^{*},\{\nu_i^{*}\}_{i\in N},\nu_0^{*})$ be optimal and define the \emph{Owen
+allocation over the prosumers only},
+\begin{equation}
+\alpha^{\mathrm{Owen}}_i:=\inner{\nu_i^{*}}{g_i}\ \ (i\in N).
+\label{eq:owen}
+\end{equation}
+The common variables receive no share. Then $\alpha^{\mathrm{Owen}}$ lies in the core of
+the prosumer game.
+\end{lemma}
+
+\begin{proof}
+This is Owen's theorem with common technology \citep{Owen1975,Uhan2015}. By LP strong
+duality the dual is attained, with primal optimum
+$\vlr_N(M,\lambda)=\sum_{i\in N}\inner{\nu_i^{*}}{g_i}+\inner{\nu_0^{*}}{g_0}$. The
+common-variable description $\liftset_0$ contributes only its own RLT identities and
+$\xcommon\ge0$; we take the convexity/normalization of the common block to carry the
+endowment, and \emph{the prosumer allocation \eqref{eq:owen} is defined to be the
+prosumer part} $\sum_{i\in N}\inner{\nu_i^{*}}{g_i}$, with any residual common-block term
+$\inner{\nu_0^{*}}{g_0}$ absorbed into the grand value by efficiency. (In the model
+$\xcommon$ has no nonzero endowment beyond nonnegativity, so $\inner{\nu_0^{*}}{g_0}=0$
+and $\sum_{i\in N}\alpha^{\mathrm{Owen}}_i=\vlr_N$ exactly; see
+Remark~\ref{rem:common-value}.) For \emph{stability}, restrict the grand-coalition dual
+solution to the prosumer blocks $i\in S$, keeping $(\mu^{*},\nu_0^{*})$ unchanged. Every
+constraint of \eqref{eq:subgame2def} is either internal to a single prosumer
+($G_iY_i=g_i$, $x_i\ge0$), internal to the common variables ($\liftset_0$), or the shared
+homogeneous coupling. The common-variable constraint $G_0^{\top}\nu_0^{*}+T_0^{\top}\mu^{*}\ge\widetilde W_0$
+appears \emph{identically} in the coalition-$S$ dual --- it carries no $i$-index, because
+$\xcommon$ is shared by all coalitions --- so the restriction is dual-feasible for
+coalition $S$, with dual objective $\ge\vlr_S(M,\lambda)$; LP weak duality gives
+$\sum_{i\in S}\alpha^{\mathrm{Owen}}_i\ge\vlr_S(M,\lambda)$. Stability and efficiency place
+$\alpha^{\mathrm{Owen}}$ in the core. The mechanism is exactly that the common variables
+add the \emph{same} dual row to every coalition, preserving the subset relation the Owen
+argument relies on.
+\end{proof}
+
+\begin{proposition}[The relaxed game has a nonempty core]
+\label{prop:balanced}
+The grand-coalition relaxed game \eqref{eq:subgame2def} has a nonempty core, and an Owen
+allocation $\alpha^{\mathrm{Owen}}_\lambda$ \eqref{eq:owen} is a core element:
+$\sum_{i\in S}\alpha^{\mathrm{Owen}}_{\lambda,i}\ge \vlr_S(M,\lambda)$ for all $S$, with
+equality at $S=N$.
+\end{proposition}
+
+\begin{proof}
+The relaxed game is a classical LPG with common technology; apply Lemma~\ref{lem:owen}.
+Because the resource sets (prosumer and common) are polyhedra and the couplings are
+linear, no Slater condition is needed --- LP strong duality holds whenever the program is
+feasible and bounded, which it is ($\liftset_i$ bounds $(x_i,X_{ii})$, $\liftset_0$ bounds
+$(\xcommon,X_{00})$, and the couplings are homogeneous equalities). This is a strict
+simplification over the conic case: the inner production game is polyhedral, so its core
+nonemptiness is Owen's theorem (with common technology), not a conic extension.
+\end{proof}
+
+\begin{remark}[Why efficiency holds even though the common variables get no share]
+\label{rem:common-value}
+The Owen allocation \eqref{eq:owen} assigns shares only to prosumers $i\in N$, yet the
+grand value $\vlr_N$ includes the common-variable contribution $\inner{\widetilde W_0}{Y_0}$
+(the reserve revenue minus peak penalty). This is consistent, not a leak: $\xcommon$ is a
+shared decision, not a player, so the question ``what is $\xcommon$'s share'' does not
+arise --- its surplus accrues to the prosumers who use it. Concretely, in the dual the
+common-variable value is $\inner{\nu_0^{*}}{g_0}$, but $g_0$ carries only the
+nonnegativity $\xcommon\ge0$ and the homogeneous coupling, whose endowments are zero, so
+$\inner{\nu_0^{*}}{g_0}=0$ and the entire grand value is distributed across
+$\{\alpha^{\mathrm{Owen}}_i\}_{i\in N}$. In production-game terms: the common technology is
+a shared resource with zero endowment, so its surplus accrues to the players who use it,
+exactly as in \citet{Uhan2015}. The reserve revenue and peak saving are thus allocated to
+prosumers through the shadow prices $\mu^{*}$ on the reserve-adequacy and peak rows ---
+which is the economically correct
+outcome (those who provide headroom and reduce coincident peak are compensated).
+\end{remark}
+
+\begin{remark}[Why the homogeneous right-hand side is essential: nonzero $b_i$ breaks
+the LPG]
+\label{rem:homogeneous}
+The relaxed game is a classical LPG only because the coupling
+$\sum_i\Acom_i\xcom_i=0$ is \emph{homogeneous} (right-hand side $0$). This is not
+cosmetic: a nonzero right-hand side destroys the production-game structure, as follows.
+Suppose the coupling were $\sum_i\Acom_i\xcom_i=d$ with $d\neq0$. Its diagonal-RLT lift
+is $\Tr((\Acom)^{\top}\Acom X_S)=\lVert d\rVert^{2}$, so dualizing it with $\lambda$ adds
+to the Lagrangian objective the term $+\lambda\lVert d\rVert^{2}$ --- a constant that is
+\emph{the same for every coalition}. The reduced value becomes
+\[
+\vlr_S(M,\lambda)=\sum_{i\in S}g_i(M,\lambda)\ +\ \lambda\lVert d\rVert^{2},
+\qquad g_i:=\max_{(x_i,X_{ii})\in\liftset_i}\inner{\widetilde W_i}{Y_i},
+\]
+with the additive constant $\lambda\lVert d\rVert^{2}$ identical across all $S$ --- in
+particular present for every singleton. An LPG value has no coalition-independent
+constant; here one cannot be allocated. Indeed, to distribute it one would need shares
+$s_i$ with $\sum_{i\in N}s_i=\lambda\lVert d\rVert^{2}$ (efficiency) yet
+$\sum_{i\in S}s_i\ge\lambda\lVert d\rVert^{2}$ for every $S$ (stability); taking $S$ a
+singleton forces $s_i\ge\lambda\lVert d\rVert^{2}$ for each $i$, and summing gives
+$\lambda\lVert d\rVert^{2}=\sum_i s_i\ge n\,\lambda\lVert d\rVert^{2}$, i.e.\
+$(n-1)\lambda\lVert d\rVert^{2}\le0$ --- impossible for $n\ge2$ unless
+$\lambda\lVert d\rVert^{2}\le0$, which is not generic. So the sub-game is \emph{not} a
+production game when $d\neq0$.
+
+The consequence for modeling is sharp and worth stating as a design rule. The pleasant
+LPG structure survives the addition of \emph{any} further realistic constraint provided
+that constraint is of the production-game form
+\begin{equation}
+\sum_{i}A_i x_i=\sum_{i}b_i\qquad\text{with }b_i=0\ \ \text{(homogeneous)} .
+\label{eq:lpg-form-homog}
+\end{equation}
+Here ``production-game form'' refers to the \emph{coupling}, not to the per-player
+feasible sets: it means a constraint that is separable as $\sum_i A_ix_i=\sum_i b_i$ with
+each $A_ix_i$ touching only player $i$ (the mixed-integer sets $\feas_i$ may remain
+arbitrary). The additional requirement $b_i=0$ is what our construction needs: a
+nonzero player endowment $b_i$ would reintroduce the $\lambda\lVert\sum_ib_i\rVert^{2}$
+constant above and break the LPG. The community balance \eqref{eq:coupling} is exactly of
+this form --- each carrier/period clears to zero --- and so, crucially, are the
+reserve-adequacy and peak-definition rows of Section~\ref{sec:construction}: each is
+homogeneous ($r^{\mathrm{sym}}-\sum_i\sum_k r^{k,\pm}_{it}\le0$ and
+$\sum_i\tfrac{1}{\Delta T}(i^{E,\mathrm{mkt}}_{it}-e^{E,\mathrm{mkt}}_{it})-p\le0$, zero
+right-hand side), with the common variables $r^{\mathrm{sym}},p$ entering as shared
+columns rather than as a prosumer endowment. This is precisely why the reserve
+and peak extensions preserve the LPG structure (and is verified at the level of the lift
+in Lemma~\ref{lem:vanish}: the prosumer--common cross blocks vanish, and no constant
+appears because every row's right-hand side is zero). A constraint with a genuine nonzero
+aggregate --- a fixed external demand the community as a whole must meet, say --- would
+fall outside the construction and require separate treatment. The dividing line is exactly
+homogeneity: shared resources priced at the margin (reserve, peak, internal balance) are
+admissible; fixed exogenous targets are not.
+\end{remark}
+
+\begin{remark}[The LRB allocation is budget-balanced at $\vmip$; $\vchp$ is not a
+property of our allocation]
+\label{rem:Mcone}
+We state the main point first, because it is easy to lose. At the dual-\emph{optimal}
+multiplier $(M^{*},\lambda^{*})$ --- the one the LRB actually uses --- the allocation
+$\chi$ is \emph{budget-balanced at $\vmip$} (Theorem~\ref{thm:liu}):
+\begin{equation*}
+\sum_{i\in N}\chi_i=\vlr_N(M^{*},\lambda^{*})=\vmip(N).
+\end{equation*}
+The first equality is efficiency of an LPG core (the core lies on the grand
+value of that game); the second is conic strong duality
+$\min_{M,\lambda}\vlr_N=\vmip(N)$. So the total distributed is exactly $\vmip(N)$, not
+$\vchp(N)$. The convex-hull value $\vchp$ \emph{does not appear} in the LRB
+allocation's budget.
+
+Why $\vchp$ keeps being mentioned, and why it is a red herring here. The value
+$\vlr_N(M,\lambda)$ at a \emph{generic, non-optimal} multiplier is a convex-hull-type
+quantity: by Lemma~\ref{lem:vanish} the cross blocks drop out, and per player
+$\max_{(x_i,X_{ii})\in\liftset_i}\inner{\widetilde W_i}{Y_i}=\max_{x_i\in\conv(\feas_i)}(\cdots)$
+by Burer at the per-player level (Lemma~\ref{lem:proj} below), so
+$\vlr_N(M,\lambda)\ge\vmip(N)$ with the inequality typically strict. If one
+\emph{stopped at a generic $M$}, the LPG core would distribute that larger
+amount and over-pay relative to $\vmip(N)$ --- stable but not efficient, i.e.\ in the
+core of the convex-hull game, not of $\Gamma^{\mathrm{MIP}}$. But the LRB does
+\emph{not} stop at a generic $M$; it minimizes over $M$, and the minimization walks
+the budget down from the convex-hull level to $\vmip(N)$. Thus $\vchp$ is the value
+at a \emph{generic} multiplier, a way-station the dual passes through, not the budget
+of the final allocation. The companion program of Section~\ref{sec:chp} is precisely
+this way-station, made into a standalone object and identified with convex hull
+pricing.
+
+The price of this is that an \emph{attained} optimal multiplier is required for the
+\emph{exact} $\vmip$ budget; a generic one over-distributes, and finding even an
+$\varepsilon$-optimal one is the \textsf{NP}-hard step (Open point~\ref{q:comp}). When the
+optimum is not attained (Open point~\ref{q:attain}), the budget is $\vmip(N)$ only up to
+$\varepsilon$ (Theorem~\ref{thm:liu}(ii)). Either way this is a cost in
+\emph{computation} and in \emph{attainment}, not a collapse to a convex-hull object: the
+budget is $\vmip(N)$ (exactly, or within $\varepsilon$), never $\vchp(N)$.
+\end{remark}
+
+\section{Composition: the LPG core is a core of the mixed-integer game}
+\label{sec:composition}
+
+\paragraph{No sub-game split: a single relaxed game.}
+Liu's composition would split the relaxed characteristic function into two sub-games and
+sum their allocations \citep[][Thm.~1]{LiuEtAl}; as explained in
+Section~\ref{sec:construction}, that split rests on a coalition-indexed right-hand side
+$\gamma_s$ which our homogeneous coupling does not have. There is therefore no
+decomposition to perform here: by Lemma~\ref{lem:vanish} the dualized objective is
+already block-separable, and the relaxed Lagrangian \eqref{eq:subgame2def} is a
+\emph{single} linear production game. We obtain a stable allocation directly from this
+one game --- the mechanism Liu uses within each sub-game --- rather than by composing two.
+
+\paragraph{One Owen allocation, but not a polynomial one.}
+The relaxed game \eqref{eq:subgame2def} is a linear production game over the polyhedral
+resource sets $\liftset_i$ with a single linear coupling, so by Owen's theorem
+(Lemma~\ref{lem:owen}, Proposition~\ref{prop:balanced}) a core allocation is read off
+directly from \emph{one} dual solution of the grand-coalition LPG --- the community
+prices on the coupling and the block duals on $\liftset_i$. No enumeration of coalitions
+and no column generation are needed: a \emph{single} Owen solution suffices.
+
+This is a structural simplification, \emph{not} a complexity reduction. Although the
+inner production game is polyhedral once a multiplier is fixed, obtaining the
+\emph{optimal} multiplier $(M^{*},\lambda^{*})$ requires solving the dual \eqref{eq:dual},
+i.e.\ optimizing the matrix multiplier $M$ over the copositive cone $\COP$, which is
+\textsf{NP}-hard (Open point~\ref{q:comp}). What the LPG structure buys is that, given the
+multiplier, the allocation is a single Owen solution rather than a coalition-indexed
+family --- the difficulty is concentrated in the \emph{outer} copositive solve over $M$,
+not in enumerating coalitions. We return to this in Open point~\ref{q:comp}.
+
+\paragraph{Strong duality holds; dual attainment is the delicate point.}
+With the per-player cone removed (Remark~\ref{rem:no-perplayer-cone}), the construction
+rests on the strong duality of the lifted grand-coalition program --- and, for
+\emph{efficiency}, on the \emph{attainment} of a dual minimizer. These two are not the
+same, and recent work shows the second can fail. We separate them.
+\begin{description}[leftmargin=2.4em,style=nextline]
+\item[\textnormal{(A1) Zero duality gap.}] The CPP \eqref{eq:cpp} and its copositive dual
+have no duality gap: $\inf_{M\in\COP,\lambda}\vlr_N(M,\lambda)=\vmip(N)$. By
+\citet[Thm.~3]{CifuentesDeyXu2025} this holds whenever the per-player feasible region is
+\emph{bounded} or the objective is \emph{convex} (linear, in our case) --- both true
+here, so (A1) is automatic, with no need for a primal interior point.
+\item[\textnormal{(A2) Dual attainment.}] The infimum in (A1) is \emph{attained} by some
+$(M^{*},\lambda^{*})\in\COP\times\R$.
+\end{description}
+
+\paragraph{A caution on (A2): the dual optimum need not exist.}
+It is tempting to assume (A2) follows from (A1) by a Slater argument on the primal
+CPP. It does not, and this is the subtle gap in the present construction.
+\citet[Thm.~3(d)]{CifuentesDeyXu2025} exhibit a bounded MBQP (the stable-set CPP of a
+$6$-clique) for which strong duality holds yet \emph{the copositive dual optimum is not
+attained}; they note further that, in general, the primal CPP \eqref{eq:cpp} has \emph{no}
+Slater (interior) point even when the feasible region is bounded. In our setting this is
+not merely ``not automatic'' but structurally impossible: any binary identity $z=z^2$
+makes the lifted matrix singular at every feasible point, so $\mathrm{CPP}(N)$ has no
+interior whatsoever (Section~\ref{sec:slater-structural},
+Proposition~\ref{prop:no-interior}), and Burer's reduction step recovers one only for a
+single equality \citep[Prop.~16]{BomzeGabl2023}. So the route ``primal Slater
+$\Rightarrow$ dual attainment'' is blocked at the source, not just the weaker ``bounded
+$\Rightarrow$ primal Slater'': boundedness gives
+the gap (A1) but not the attainment (A2). What boundedness \emph{does} guarantee is, for
+every $\varepsilon>0$, a closed-form $\varepsilon$-optimal dual solution
+$(M^{\varepsilon},\lambda^{\varepsilon})$ with
+$\vlr_N(M^{\varepsilon},\lambda^{\varepsilon})\le\vmip(N)+\varepsilon$
+\citep[Thm.~3(b)]{CifuentesDeyXu2025}.
+
+\paragraph{This gap is not specific to us; it is latent in copositive pricing generally.}
+The same issue is present in \citet{GuoEtAl}, whose copositive-duality pricing for unit
+commitment fixes ``all primal and dual variables at the optimal values'' and invokes
+strong duality \citep[via][]{CifuentesDeyXu2025} without separately establishing that a
+dual \emph{optimum} exists. Their cutting-plane implementation in fact terminates with an
+$\varepsilon$-optimal copositive solution, i.e.\ it computes an $\varepsilon$-price; the
+exactness is asserted at the level of strong duality (the gap), not of attainment. We
+therefore treat (A2) as a genuine hypothesis to be discharged \emph{per instance}, not a
+free consequence of boundedness, and we state our main result in two forms accordingly:
+an exact-core statement \emph{conditional} on (A2), and an unconditional
+$\varepsilon$-core statement that needs only (A1).
+
+We first record the coalition-wise upper bound, then state the theorem.
+
+\begin{corollary}[Coalition-wise upper bound]
+\label{cor:upper}
+For every $S\subseteq N$ and every $(M,\lambda)$ with $M\in\COP$ satisfying
+\eqref{eq:finiteness}, $\ \vlr_S(M,\lambda)\ge\vmip(S)$.
+\end{corollary}
+
+\begin{proof}
+$\vlr_S(M,\lambda)$ is a maximization whose feasible set contains the CP-feasible set of
+the coalition-$S$ program \eqref{eq:cpp} (the dualized constraints (d),(e) were moved to
+the objective). On any CP-feasible $Y_S$ of \eqref{eq:cpp}: the dualized cone term gives
+$\inner{M}{Y_S}\ge0$ (as $Y_S\in\CP$, $M\in\COP$) and the dualized squared coupling gives
+$-\lambda\Tr((\Acom)^{\top}\Acom X_S)=0$ (it holds there). So the Lagrangian objective is
+$\ge\inner{W_S}{Y_S}$, giving $\vlr_S(M,\lambda)\ge\vmip(S)$. This is weak duality, valid
+at \emph{all} admissible multipliers --- the analogue of Liu's $c^{\mathrm{LR}}(S;\lambda)\le c(S)$.
+\end{proof}
+
+\begin{theorem}[Mixed-integer core, exact and approximate]
+\label{thm:liu}
+Assume \textnormal{(A1)} (which holds here, the feasible region being bounded).
+\begin{enumerate}[label=(\roman*),leftmargin=2.2em]
+\item \emph{(Exact core, conditional on \textnormal{(A2)}.)} If additionally a dual
+optimum $(M^{*},\lambda^{*})$ is attained, then the Owen allocation
+$\chi:=\alpha^{\mathrm{Owen}}$ of the relaxed LPG \eqref{eq:subgame2def} at
+$(M^{*},\lambda^{*})$ is in the core of $\Gamma^{\mathrm{MIP}}$:
+\[
+\sum_{i\in S}\chi_i\ \ge\ \vmip(S)\ \ \forall S\subseteq N,
+\qquad\text{and}\qquad
+\sum_{i\in N}\chi_i\ =\ \vmip(N).
+\]
+\item \emph{(Approximate core, unconditional.)} For every $\varepsilon>0$, the Owen
+allocation $\chi^{\varepsilon}$ at an $\varepsilon$-optimal multiplier
+$(M^{\varepsilon},\lambda^{\varepsilon})$ \citep[Thm.~3(b)]{CifuentesDeyXu2025} satisfies
+\[
+\sum_{i\in S}\chi^{\varepsilon}_i\ \ge\ \vmip(S)\ \ \forall S\subseteq N,
+\qquad\text{and}\qquad
+\vmip(N)\ \le\ \sum_{i\in N}\chi^{\varepsilon}_i\ \le\ \vmip(N)+\varepsilon,
+\]
+i.e.\ it is stable and $\varepsilon$-efficient --- an $\varepsilon$-core allocation.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+\emph{(i).} At the fixed multiplier $(M^{*},\lambda^{*})$, Lemma~\ref{lem:owen} produces
+the Owen allocation $\chi$, in the core of the relaxed game:
+$\sum_{i\in S}\chi_i\ge\vlr_S(M^{*},\lambda^{*})$ for all $S$, with equality at $S=N$.
+\emph{Stability:} chaining with Corollary~\ref{cor:upper},
+$\sum_{i\in S}\chi_i\ge\vlr_S(M^{*},\lambda^{*})\ge\vmip(S)$. \emph{Efficiency:} at $S=N$,
+$\sum_{i\in N}\chi_i=\vlr_N(M^{*},\lambda^{*})$, which by (A1)$+$(A2) equals $\vmip(N)$.
+Hence $\chi$ is in the core, and the total distributed is exactly $\vmip(N)$, never
+$\vchp(N)$.
+
+\emph{(ii).} The same Owen construction at $(M^{\varepsilon},\lambda^{\varepsilon})$
+gives, by Lemma~\ref{lem:owen}, an allocation with
+$\sum_{i\in S}\chi^{\varepsilon}_i\ge\vlr_S(M^{\varepsilon},\lambda^{\varepsilon})$ for all
+$S$ and equality at $S=N$. Stability follows as before via Corollary~\ref{cor:upper}
+(valid at every admissible multiplier, optimal or not):
+$\sum_{i\in S}\chi^{\varepsilon}_i\ge\vlr_S(M^{\varepsilon},\lambda^{\varepsilon})\ge\vmip(S)$.
+For the budget, $\sum_{i\in N}\chi^{\varepsilon}_i=\vlr_N(M^{\varepsilon},\lambda^{\varepsilon})$,
+which lies in $[\vmip(N),\vmip(N)+\varepsilon]$: the lower bound is
+Corollary~\ref{cor:upper} at $S=N$, the upper bound is $\varepsilon$-optimality. Thus
+$\chi^{\varepsilon}$ is stable and overpays by at most $\varepsilon$.
+\end{proof}
+
+\begin{remark}[Reading the two parts: which one is the theorem?]
+\label{rem:which-part}
+Part (ii) is unconditional and is what the construction \emph{guarantees}: a stable
+allocation whose budget exceeds $\vmip(N)$ by an arbitrarily small $\varepsilon$. Part (i)
+is the cleaner statement but is \emph{conditional} on (A2), dual attainment, which ---
+contrary to what a Slater argument would suggest --- does not follow from boundedness
+(Cifuentes--Dey--Xu, Thm.~3(d)) and must be checked for the specific community instance
+(Open point~\ref{q:attain}). When (A2) fails, there is no exact dual optimum to evaluate
+$\alpha^{\mathrm{Owen}}$ at, and part (i) is vacuous; part (ii) still delivers an
+$\varepsilon$-core. The honest headline is therefore: \emph{the community game has a
+nonempty $\varepsilon$-core for every $\varepsilon>0$, and a nonempty (exact) core
+whenever the copositive dual optimum is attained.}
+
+\emph{Why a generic multiplier is not enough.} If $(M,\lambda)$ is dual-feasible but
+neither optimal nor $\varepsilon$-optimal, stability still holds (Corollary~\ref{cor:upper}),
+but the budget $\vlr_N(M,\lambda)$ may exceed $\vmip(N)$ by an uncontrolled amount, up to
+the convex-hull value $\vchp(N)$: the allocation then lies in the core of the convex-hull
+game, not (even approximately) of $\Gamma^{\mathrm{MIP}}$. The $\varepsilon$-optimal
+multiplier is what bounds the overpayment by $\varepsilon$.
+\end{remark}
+
+\section{A companion identity: per-player copositive lift equals convex hull pricing}
+\label{sec:chp}
+
+The construction above dualizes the joint cone \emph{and} the squared coupling, and
+arrives at $\vmip$. We now record what happens under the opposite choice --- \emph{not}
+dualizing, and lifting \emph{only} the per-player feasible sets --- and show it reproduces
+convex hull pricing exactly. This identifies the ``way-station'' of
+Remark~\ref{rem:Mcone} as a standalone, well-known object, and connects the present note
+to the convex-hull-pricing allocation of the companion manuscript.
+
+\paragraph{The per-player-lifted program.}
+Take the community-balance LP, keep the linear coupling, drop the squared coupling (d)
+and the joint cone (e), and replace each per-player feasible set by its own completely
+positive lift --- i.e.\ impose the per-player cone $Y_i\in\CP_i$ together with the affine
+$\liftset_i$, block by block:
+\begin{equation}
+\mathrm{(P)}:\qquad
+\max_{\{Y_i\}}\ \Big\{\sum_{i\in N}\inner{W_i}{Y_i}\ :\
+\sum_{i\in N}\Acom_i\xcom_i=0,\quad (x_i,X_{ii})\in\liftset_i,\ \ Y_i\in\CP_i\ \ \forall i\Big\}.
+\label{eq:Pchp}
+\end{equation}
+Here no cross-block variable $X_{ij}$ appears at all (the squared coupling, the only term
+that ever introduced them, is absent), and each block is constrained only within itself.
+This is \emph{not} the program of Section~\ref{sec:construction}; it is the
+per-player-decoupled lift, and we claim it equals convex hull pricing.
+
+\paragraph{Per-player Burer at the level of sets.}
+The engine is that the per-player completely positive lift recovers the convex hull of
+$\feas_i$ not merely in optimal value but as a projected set. We isolate this because the
+coupling makes a value-only statement insufficient (the blocks cannot be optimized
+separately under the shared balance).
+
+\begin{lemma}[Per-player lift projects onto the convex hull]
+\label{lem:proj}
+For each $i$, with $\feas_i$ bounded mixed-integer in the slacked form of Step~1,
+\begin{equation}
+\proj_{x_i}\big\{(x_i,X_{ii}):\ (x_i,X_{ii})\in\liftset_i,\ \ Y_i\in\CP_i\big\}
+\ =\ \conv(\feas_i).
+\label{eq:proj}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+Burer's reformulation (Theorem~\ref{thm:burer} with $K=\R_+^{n_i}$, applied to player
+$i$'s data alone) states that for \emph{every} linear objective $w_i$,
+\[
+\max\{w_i^{\top}x_i:\ x_i\in\feas_i\}
+=\max\{\inner{W_i}{Y_i}:\ (x_i,X_{ii})\in\liftset_i,\ Y_i\in\CP_i\},
+\]
+the right-hand feasible set being convex. Equality of the optimal value for every linear
+objective $w_i$ means the two convex sets have the same support function in every
+direction of the $x_i$-coordinates; since the lifted feasible set is closed and convex,
+its projection onto the $x_i$-coordinates is the closed convex set with that support
+function, namely $\conv(\feas_i)$ \citep[supporting-hyperplane characterization; see
+also][Thm.~6, for the face-based set identity]{BomzeGabl2023}. (The objective $W_i$ has
+no $X_{ij}$ or off-diagonal-$X_{ii}$ component \eqref{eq:Wmat}, so the support function in
+the $x_i$-directions is unaffected by the lifted entries; these are exactly the
+``certificate'' coordinates that make $x_i\in\conv(\feas_i)$ representable.)
+\end{proof}
+
+\begin{proposition}[\eqref{eq:Pchp} is convex hull pricing]
+\label{prop:chp}
+The per-player-lifted program \eqref{eq:Pchp} has the same optimal value, and the same
+set of optimal $\{x_i\}$ and community-balance multipliers, as convex hull pricing
+\begin{equation}
+\mathrm{(CHP)}:\qquad
+\vchp(N)=\max_{\{x_i\}}\Big\{\sum_{i\in N}w_i^{\top}x_i:\
+\sum_{i\in N}\Acom_i\xcom_i=0,\ \ x_i\in\conv(\feas_i)\ \forall i\Big\}.
+\label{eq:CHP}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+The objective $\sum_i\inner{W_i}{Y_i}=\sum_iw_i^{\top}x_i$ and the coupling
+$\sum_i\Acom_i\xcom_i=0$ of \eqref{eq:Pchp} depend on the lifted variables \emph{only}
+through the first-row coordinates $x_i$; no $X_{ii}$ off-diagonal entry and no $X_{ij}$
+appears in either (the squared coupling is absent and $W_i$ is the pure first-order
+matrix \eqref{eq:Wmat}). The lifted variables $\{X_{ii}\}$ are therefore free except for
+their role inside the per-player constraints $\{(x_i,X_{ii})\in\liftset_i,\,Y_i\in\CP_i\}$,
+which couple to nothing outside block $i$. Projecting each block onto its $x_i$-coordinates
+is thus valid even under the shared balance --- the balance constrains only the $\{x_i\}$,
+which survive the projection unchanged --- and by Lemma~\ref{lem:proj} the projected
+per-player feasible set is exactly $\conv(\feas_i)$. Hence \eqref{eq:Pchp} reduces to
+\eqref{eq:CHP}, with identical optimal $\{x_i\}$; and since the balance constraint is
+carried verbatim through the projection, its optimal dual multipliers coincide. This is
+the statement.
+\end{proof}
+
+\begin{remark}[Reading: why (P) is $\vchp$ while the main construction is $\vmip$]
+\label{rem:chp-vs-mip}
+The two programs differ in exactly one decision: whether the cross-player coupling is
+lifted and dualized.
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{Section~\ref{sec:construction} (main).} The squared coupling (d) is
+\emph{retained and dualized}; the cross blocks $X_{ij}$ then \emph{cancel} (the
+$(\mathrm{c},\mathrm{c})$ entry against $\lambda(\Acom_i)^\top\Acom_j$,
+Remark~\ref{rem:twomech}), so the inter-player information is preserved through $\lambda$.
+At the optimal multiplier the value is $\vmip(N)$.
+\item \emph{Section~\ref{sec:chp} (companion).} The squared coupling is \emph{never
+introduced}; there is no cross block to cancel, and each player is independently relaxed
+to $\conv(\feas_i)$. The value is $\vchp(N)\ge\vmip(N)$.
+\end{itemize}
+So $\vchp$ is what one gets by lifting per-player but \emph{declining} to couple the
+lifts; $\vmip$ is what one gets by coupling them (through the squared balance) and paying
+the price of an outer copositive solve. The companion identity therefore places convex
+hull pricing precisely: it is the per-player-decoupled corner of the same copositive
+machinery, and it coincides with the convex-hull-pricing allocation analyzed in the main
+manuscript. In particular, when $\vchp(N)=\vmip(N)$ (zero integrality gap) the two
+constructions agree and convex hull pricing already lands in the core of
+$\Gamma^{\mathrm{MIP}}$; when the gap is positive they diverge, and only the coupled
+construction reaches $\vmip$.
+\end{remark}
+
+\section{The homogeneity requirement: scope, necessity, and inhomogeneous couplings}
+\label{sec:homogeneity}
+
+The construction's one structural demand on the couplings is that they be
+\emph{homogeneous} (zero right-hand side), $\sum_iA_ix_i+\Azero\xcommon=0$
+(Remark~\ref{rem:homogeneous}). This section does three things: it shows the requirement
+is the \emph{norm}, not the exception, in energy-community models; it shows the
+requirement is \emph{necessary} for our method, not an artifact we could engineer away;
+and it records what can still be salvaged when a coupling is genuinely inhomogeneous.
+
+\subsection{Homogeneity is the norm in energy-community coupling}
+
+Internal community exchange is, physically, a \emph{conservation law}: every unit one
+member injects is a unit another withdraws, so the clearing nets to zero. This makes the
+central couplings homogeneous across the energy-community literature, not by assumption
+but by the structure of trade. Table~\ref{tab:homog} collects the clearing/coupling
+constraints of representative community-market models; in each, the inter-player coupling
+has zero right-hand side.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{0.36\textwidth}p{0.40\textwidth}c@{}}
+\toprule
+Model & Inter-player coupling & RHS \\
+\midrule
+Community microgrid with internal market \citep[Cornélusse et al.][]{Cornelusse2019}
+& Per-carrier/period community balance $\sum_u(i^{\mathrm{com}}_{ut}-e^{\mathrm{com}}_{ut})=0$;
+symmetric reserve adequacy; peak definition & $0$ \\[4pt]
+Energy collectives \citep[Moret \& Pinson][]{MoretPinson2019}
+& Prosumer balance $p_j+q_j+\alpha_j-\beta_j=0$ and community trading
+$\sum_jq_j=0$ & $0$ \\[4pt]
+Community-based multi-energy market \citep[Mitridati et al.][]{Mitridati2021}
+& Electricity and heat exchange balances $f^E\mathbf{1}=0$, $f^H\mathbf{1}=0$ & $0$ \\[4pt]
+Heterogeneous-risk collectives \citep[Baroche et al.][]{Baroche2021}
+& Community clearing (Moret--Pinson form) & $0$ \\[4pt]
+TSO--DSO joint flexibility procurement \citep[Khatami et al.][]{Khatami2022}
+& Nodal flexibility balance across systems & $0$ \\
+\bottomrule
+\end{tabular}
+\caption{Inter-player couplings in representative energy-community and cooperative
+power-system models are homogeneous (zero right-hand side). Per-prosumer constraints with
+nonzero data (e.g.\ individual demand, net-metering definitions) are private to a player
+and lifted inside $\feas_i$; they are not couplings. The reserve and peak extensions of
+\citet{Cornelusse2019}, which we incorporate (Section~\ref{sec:construction}), are
+themselves homogeneous, with the reserve/peak quantities entering as shared common
+variables.}
+\label{tab:homog}
+\end{table}
+
+The practical reading is that the homogeneity requirement aligns with --- rather than
+restricts --- the modeling conventions of the field: a community market clears internally
+precisely because production and consumption offset, and that offsetting \emph{is} the
+zero right-hand side. Where nonzero data appear (a household's fixed demand, a
+net-metering threshold), they sit in the prosumer-private region $\feas_i$, which the
+lift handles in full; they do not enter the coupling.
+
+\subsection{Homogeneity is necessary for the method, not incidental}
+
+One might hope to absorb a nonzero right-hand side by some reformulation --- penalizing
+it, relaxing the cone, or cutting it away --- and recover the LPG structure. None of these
+works, for a single structural reason, which we state once and then illustrate by the
+routes it rules out.
+
+\begin{proposition}[The inhomogeneity lives where no cone or relocation can reach it]
+\label{prop:inhomog-wall}
+Consider a coupling $\sum_iA_ix_i=\sum_id_i$ with $\sum_id_i\neq0$. Squaring it for the
+RLT lift produces
+\[
+\Big(\sum_iA_ix_i-\sum_id_i\Big)^2
+=\underbrace{\textstyle\sum_{i,j}(A_ix_i)^{\top}(A_jx_j)}_{\text{quadratic: lifts to }X_{ij}}
+\ -\ \underbrace{2\Big(\sum_id_i\Big)^{\!\top}\!\sum_jA_jx_j}_{\text{linear in }x}
+\ +\ \underbrace{\Big\|\sum_id_i\Big\|^{2}}_{\text{constant}} .
+\]
+Only the quadratic part lifts into the matrix blocks $X_{ij}$; the linear and constant
+parts occupy the first-order and constant components of the lifted objective. A
+completely positive (or SDP, doubly-nonnegative, RLT) relaxation constrains only the
+matrix block $X$; it cannot alter the linear or constant parts, which are fixed by the
+data $\{d_i\}$. Consequently the coalition value carries an additive
+$-\lambda\lVert\sum_{i\in S}d_i\rVert^{2}$, whose expansion contains cross terms
+$-2\lambda\,d_i^{\top}d_j$ that are attributable to no single player and present in every
+coalition containing both $i$ and $j$. No such value is additively separable, so the
+reduced game is not a linear production game.
+\end{proposition}
+
+\begin{proof}
+The decomposition is direct expansion; the lift sends $x_ix_j^{\top}\mapsto X_{ij}$ and
+leaves the data products $d_i^{\top}d_j$ and the linear term untouched, since these
+contain no decision variable that the cone constrains. The cross-term obstruction to
+additive separability is the computation of Remark~\ref{rem:homogeneous}, now with
+$\sum_{i\in S}d_i$ in place of a single aggregate.
+\end{proof}
+
+This single fact disposes of the natural workarounds, each of which fails for the same
+reason --- the inhomogeneity is not a cone phenomenon:
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{Dualize the squared coupling} (our method): the cross term
+$-2\lambda d_i^{\top}d_j$ remains in the value; not an LPG.
+\item \emph{Put the squared penalty in the objective with a fixed weight $\rho$}: the
+same decomposition holds with $\rho$ for $\lambda$; the linear and constant parts are
+identical, and the per-coalition linear coefficient $2\rho\sum_{i\in S}d_i$ already
+depends on $S$. Relocating the squared term from constraint to objective changes nothing.
+\item \emph{Tune $\rho$ for a zero gap}: this rescales the offending terms but does not
+remove them; and it coincides with the dual minimization we already perform, so it
+inherits the same \textsf{NP}-hardness and attainment question.
+\item \emph{Relax the cone (SDP, DNN, RLT)}: these enlarge or replace the cone that $X$
+lives in; the constant $d_i^{\top}d_j$ and the linear term are outside $X$ and are
+untouched. (Cone relaxation addresses the \emph{quadratic} nonconvexity, which here is
+already neutralized by the dual matrix $M$; it does not address inhomogeneity.)
+\item \emph{Drop the coupling and add Benders feasibility cuts}: a feasibility cut has the
+form $\sum_i(u^{\top}T_i)x_i\ge u^{\top}h$, homogeneous iff the recourse right-hand side
+$h=0$. If $h\neq0$ the cuts are themselves inhomogeneous (the obstruction returns), and
+they are also a \emph{looser} outer approximation than placing the row directly in the
+CPP --- so they cost exactness while buying nothing. If $h=0$ the original coupling was
+already homogeneous and admissible directly. The detour is therefore either ineffective
+or unnecessary.
+\end{itemize}
+The conclusion is that homogeneity is close to a \emph{necessary} condition for the method,
+not a convenience: any genuinely nonzero aggregate target breaks the production-game
+structure, and no relocation or convex relaxation of the lift repairs it.
+
+\subsection{What survives for a genuinely inhomogeneous coupling}
+
+When a model does carry a true nonzero aggregate target (a fixed external obligation the
+community as a whole must meet, distinct from internal clearing), two honest options
+remain, neither of which is the clean exact-core result of the homogeneous case.
+
+\paragraph{(i) Keep exactness, lose the LPG.}
+Placing the inhomogeneous row directly in the CPP keeps the lift exact for $\vmip$
+(Burer's theorem applies to the full system, nonzero right-hand side included). The
+resulting grand-coalition value is still $\vmip(N)$, but the reduced Lagrangian is no
+longer a production game on that row, so the Owen shortcut is unavailable: a core element
+must be obtained from the general core program (or shown empty) rather than read from a
+single dual solution. The copositive lift still \emph{certifies} the value; it no longer
+\emph{hands back} the allocation.
+
+\paragraph{(ii) Keep the LPG, accept an $\varepsilon$-core.}
+Alternatively one may form the Owen allocation from the \emph{uniform} (per-player,
+diagonal) part of the dual payment and discard the cross-term payment
+$-2\lambda d_i^{\top}d_j$ --- exactly the move \citet{GuoEtAl} make when they price with
+uniform prices and set aside the non-uniform (off-diagonal) payments associated with the
+lifted balance. Writing $\chi_i$ for this uniform allocation, the core conditions hold up
+to the discarded cross sum:
+\begin{equation}
+\sum_{i\in S}\chi_i-\vlr_S(M,\lambda)
+\ =\ 2\lambda\!\!\sum_{\substack{i<j\\ i,j\in S}}\! d_i^{\top}d_j\ =:\ E_S ,
+\label{eq:eps-core-gap}
+\end{equation}
+so $\chi$ is stable and efficient \emph{up to} $E_S$ --- an $\varepsilon$-core with
+$\varepsilon=\max_S|E_S|$ controlled by the inhomogeneity $\{d_i\}$ and the multiplier
+$\lambda$. Two regimes are worth distinguishing. When the endowments share a sign (e.g.\
+all members net-importing the external target), $E_S\ge0$ and $\chi$ is stable but
+over-distributes (budget above $\vmip(N)$); when signs are mixed, stability itself can
+fail for coalitions where negative cross terms dominate. As $\lVert d\rVert\to0$ (the
+coupling approaches the homogeneous conservation case) the gap $E_S\to0$ and the exact
+core is recovered.
+
+\paragraph{The parallel with Guo et al.}
+Option (ii) is the cooperative-core analogue of \citeauthor{GuoEtAl}'s pricing guarantee.
+Their uniform-price mechanism does not achieve exact individual rationality for every
+generator; via a Shapley--Folkman argument it secures it for all but at most $|T|+1$ of
+them, with the system operator absorbing the residual. We have no system operator to
+absorb a residual in a core, so the discarded cross payment surfaces instead as the
+$\varepsilon$ in \eqref{eq:eps-core-gap}. In both cases the exact guarantee is recovered
+in the favorable limit --- convexity/large-system for their individual rationality, and
+homogeneity ($\lVert d\rVert\to0$) for our core --- and in both cases the gap is
+explicitly bounded by a measure of the problem's departure from that limit. This places
+the homogeneity requirement in context: it is the cooperative-game counterpart of the
+conditions under which copositive \emph{pricing} is known to be exact, and it fails
+gracefully, with a quantified $\varepsilon$, rather than catastrophically.
+
+\section{What is settled, what is assumed, what is open}
+
+\paragraph{Settled by structure (no copositive program solved).}
+Lemma~\ref{lem:vanish} (cross blocks vanish in value; explicit coefficient computation),
+\eqref{eq:subgame2def} (the reduced Lagrangian is a classical LPG),
+Lemma~\ref{lem:owen} and Proposition~\ref{prop:balanced} (the relaxed game has a nonempty
+core, by the Owen restriction), Corollary~\ref{cor:upper} (coalition-wise upper bound,
+weak duality), Theorem~\ref{thm:liu} (the composition into a mixed-integer core
+allocation), and --- for the companion identity --- Lemma~\ref{lem:proj} and
+Proposition~\ref{prop:chp} (per-player lift $=$ convex hull pricing). These are structural
+facts about production games and Lagrangians; none requires solving a copositive program.
+
+\paragraph{The hypotheses the theorem rests on.}
+Theorem~\ref{thm:liu} separates into two layers, on the lifted grand-coalition program:
+\begin{enumerate}[label=\textbf{(A\arabic*)},leftmargin=2.9em]
+\item \textbf{Zero duality gap.} $\inf_{M\in\COP,\lambda}\vlr_N(M,\lambda)=\vmip(N)$. This
+holds whenever the feasible region is bounded or the objective is convex
+\citep[Thm.~3]{CifuentesDeyXu2025}, both true here, so (A1) is \emph{automatic} --- no
+structural condition, and notably \emph{no primal interior}, is needed. (A1) alone gives
+the unconditional $\varepsilon$-core, Theorem~\ref{thm:liu}(ii).
+\item \textbf{Dual attainment.} The infimum in (A1) is achieved by some
+$(M^{*},\lambda^{*})$. This is \emph{not} implied by boundedness
+\citep[Thm.~3(d)]{CifuentesDeyXu2025} and is the genuine hypothesis; under it,
+Theorem~\ref{thm:liu}(i) gives an exact core. A primal interior (Slater) point of
+\eqref{eq:cpp} would be sufficient, but is \emph{unavailable}: Burer-type lifts have no
+primal interior once binaries are present (Section~\ref{sec:slater-structural},
+Proposition~\ref{prop:no-interior}). Attainment is therefore left as an instance-dependent
+condition --- equivalent to termination of a copositive cutting-plane solver
+(Section~\ref{sec:slater-structural}, Open point~\ref{q:attain}).
+\end{enumerate}
+The inner production game needs \emph{no} Slater condition of its own: it is polyhedral,
+so LP strong duality applies automatically (Proposition~\ref{prop:balanced}) --- this is
+the simplification from removing the per-player cones. We stress two limits. First, the
+exact-$\vmip$ statement is the value at $N$ at an \emph{attained} optimum $M^{*}$; at a
+generic or $\varepsilon$-optimal multiplier the budget is $\vmip(N)$ up to $\varepsilon$
+(or, generically, up to the convex hull), so attainment is what makes it exact
+(Remark~\ref{rem:Mcone}, Remark~\ref{rem:which-part}). Second, what $M^{*}$ does to
+\emph{proper}-coalition values $\vlr_S(M^{*})$ is undetermined here, and that is what
+decides whether the result exceeds the standard ``balanced convex hull $\Rightarrow$
+nonempty integer core'' fact.
+
+\paragraph{Genuinely open.}
+\begin{question}[Dual attainment for the community CPP --- exact vs.\ $\varepsilon$ core]
+\label{q:attain}
+The exact-core part of Theorem~\ref{thm:liu}(i) needs (A2): the copositive dual optimum
+$(M^{*},\lambda^{*})$ is attained. By \citet[Thm.~3(d)]{CifuentesDeyXu2025} this is
+\emph{not} automatic for bounded MBQPs --- their $6$-clique stable-set instance has
+strong duality but no dual optimum. The natural sufficient condition, a primal interior
+(Slater) point of $\mathrm{CPP}(N)$ \eqref{eq:cpp}, is \emph{structurally unavailable}
+here: any binary identity $z=z^2$ makes the lifted matrix singular at every feasible point
+(Proposition~\ref{prop:no-interior}), so $\mathrm{CPP}(N)$ has no interior, and Burer's
+reduction step recovers one only for a single equality constraint
+\citep[Prop.~16]{BomzeGabl2023}, which the multi-row community CPP is not. Attainment must
+therefore be argued, if at all, by a route that does not pass through a primal interior ---
+for instance a coercivity or closedness property of the copositive dual that forces the
+infimum to be achieved. Equivalently, by the algorithmic mirror of
+Section~\ref{sec:slater-structural}, attainment holds exactly when a copositive
+cutting-plane solver terminates on the instance; on non-terminating instances the dual
+value still converges to $\vmip(N)$ but no exact optimizer exists. Whether the
+sector-coupled community model falls in the terminating (attained) class is the open
+question; we do not resolve it. Absent (A2), the construction still yields the
+unconditional $\varepsilon$-core of Theorem~\ref{thm:liu}(ii); the open point is precisely
+what upgrades $\varepsilon$-core to exact core. We regard this as the central theoretical
+gap, shared with existing copositive-pricing work (\citealp{GuoEtAl}, whose mechanism
+likewise returns exact prices only on terminating instances), and not previously isolated
+there.
+\end{question}
+
+\begin{question}[Computation, and the size of the dualized copositive program]
+\label{q:comp}
+Theorem~\ref{thm:liu} is an \emph{existence} result. Producing the allocation
+$\chi=\alpha^{\mathrm{Owen}}$ requires an (exact or $\varepsilon$-)optimal solution of the
+dual, i.e.\ optimizing the matrix multiplier $M$ over the copositive cone $\COP$ together
+with $\lambda$, which is \textsf{NP}-hard. A practical route is the cutting-plane /
+outer-approximation scheme of \citet{GuoEtAl}, which optimizes over $\COP$ by separating
+copositivity violations; this is the natural solver here, and (consistently with
+Open point~\ref{q:attain}) it returns an $\varepsilon$-optimal multiplier, hence an
+$\varepsilon$-core allocation, on termination.
+
+A structural note on \emph{scale}: the dual variable $M$ is conjugate to the \emph{joint}
+lifted matrix $Y_S$, whose dimension is $1+\sum_i n_i$ --- it grows with the total number
+of (lifted, slacked) variables across \emph{all} prosumers. The separation oracle must
+therefore certify copositivity of an object that scales with the whole community.
+Crucially, with the per-player cones \emph{removed} (Remark~\ref{rem:no-perplayer-cone}),
+the only copositive constraint is the single joint one --- there is no longer an
+additional copositive multiplier per player block, as an earlier version carried. This
+removes the $n$-fold growth in the number of copositive constraints that the redundant
+per-player cones would have incurred; the remaining obstacle is the single
+joint-matrix copositivity certificate, whose dimension still scales with the community.
+Whether the cutting-plane scheme remains tractable at community scale is open and, in our
+view, the main practical obstacle.
+
+Any tractable inner approximation (doubly nonnegative, RLT) replaces $\CP$ by a superset,
+which \emph{enlarges} the lifted value and yields an outer game whose core is contained in
+--- and generally larger than --- the target; the guarantee then weakens to that
+approximation's level, exactly as for convex-hull pricing. Exactness is tied to using
+$\CP$ itself.
+\end{question}
+
+\begin{question}[Consistency with empty-core instances]
+\label{q:parity}
+When the core of $\Gamma^{\mathrm{MIP}}$ is empty --- e.g.\ a parity obstruction where
+$\vmip(N)$ is infeasible while proper coalitions are finite --- Theorem~\ref{thm:liu}
+must not fire. It does not: in that case \eqref{eq:cpp} for $N$ is infeasible, its dual
+is unbounded ($\dual^{*}(N)=+\infty$), and \emph{no} finite-value admissible multiplier
+exists, so the hypothesis of Theorem~\ref{thm:liu} is not met. The construction
+correctly declines to produce an allocation rather than fabricating a $\vchp$ one. This
+is a consistency check, not a theorem, but it shows the existence hypothesis is doing
+real work: it is met exactly when the core is plausibly nonempty.
+\end{question}
+
+\section{Dual attainment, the primal Slater obstruction, and what is computable}
+\label{sec:slater-structural}
+
+This section addresses the one hypothesis the construction cannot obtain for free,
+\emph{dual attainment} (A2) --- the existence of an \emph{attained} copositive dual optimum
+$(M^\star,\lambda^\star)$, which is what upgrades the unconditional $\varepsilon$-core
+(Theorem~\ref{thm:liu}(ii)) to an exact core (Theorem~\ref{thm:liu}(i)). An earlier
+draft of this note claimed that the community's bidirectional trade structure supplies a
+\emph{primal interior (Slater) point} of the copositive lift, which would imply (A2). That
+claim was wrong, and the reason it is wrong is instructive: it pins down exactly why an
+exact core is attainment-conditional while an $\varepsilon$-core is not.
+
+\subsection{What is not at issue: value and the $\varepsilon$-core}
+
+It is worth separating two questions that the term ``solving the copositive program''
+conflates.
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{The optimal value.} Whether the copositive dual \emph{value} equals
+$\vmip(N)$. This is the zero-gap question (A1), and it is settled by boundedness alone:
+\citet[Thm.~3(a)]{CifuentesDeyXu2025} give a strictly copositive feasible point of the
+dual whenever the primal feasible region is bounded, hence a dual Slater point and zero
+gap, with no structural input. The community CPP is bounded, so
+$\val(\mathrm{COP})=\val(\mathrm{CPP})=\vmip(N)$ unconditionally.
+\item \emph{An attained dual optimizer.} Whether that value is achieved at some
+$(M^\star,\lambda^\star)$. This is attainment (A2), and it is \emph{not} implied by
+boundedness: \citet[Thm.~3(d)]{CifuentesDeyXu2025} exhibit a bounded CPP with zero gap
+whose dual optimum is not attained.
+\end{itemize}
+The Owen allocation is read from a dual point, so it is the second question that matters
+for an \emph{exact} core. But the first question already delivers a great deal: because a
+fixed-multiplier Lagrangian is a coalition-wise upper bound on $\vmip$
+(Corollary~\ref{cor:upper}), \emph{any} dual-feasible $(M,\lambda)$ --- optimal or not ---
+yields an allocation that is stable, and a $\varepsilon$-optimal $(M,\lambda)$ yields one
+that is stable and efficient up to $\varepsilon$. Since \citet[Thm.~3(b)]{CifuentesDeyXu2025}
+construct a closed-form $\varepsilon$-optimal dual solution for every $\varepsilon>0$, the
+$\varepsilon$-core is available unconditionally, with no appeal to attainment. Everything
+below concerns only the exact-core upgrade.
+
+\subsection{The primal Slater obstruction (why the earlier claim fails)}
+
+A sufficient condition for dual attainment is a \emph{primal} Slater point of the CPP
+\eqref{eq:cpp}: a feasible lifted matrix in the interior of the completely positive cone.
+The earlier draft proposed to manufacture one from bidirectional trade. The following fact
+shows no such construction can succeed once binaries are present, independently of the
+trade structure.
+
+\begin{proposition}[Burer-type lifts have no primal interior]
+\label{prop:no-interior}
+Let the lifted feasible set carry at least one binary identity $z=z^2$, written at the
+lifted level as $Z=z$ for the corresponding diagonal entry of $Y$ (Step~2). Then $Y$ is
+singular at every feasible point: $Y$ can never lie in the interior of the completely
+positive cone, so \eqref{eq:cpp} has no primal Slater point.
+\end{proposition}
+
+\begin{proof}
+Consider the principal block of $Y$ on the augmented coordinates $[1,z,s]$ for a single
+binary $z$ with its complementing slack $s=1-z$. Feasibility imposes $z+s=1$, the RLT
+diagonal $Z+2(zs)+S=1$, and the binary identity $Z=z$. Computing the Schur complement of
+the leading $1$ entry gives, after substituting these equalities, the $2\times2$ matrix
+\[
+\begin{pmatrix} Z-z^2 & (zs)-zs\\ (zs)-zs & S-s^2\end{pmatrix}
+=\begin{pmatrix} z-z^2 & (zs)-z+z^2\\ (zs)-z+z^2 & z-z^2-2(zs)\end{pmatrix},
+\]
+whose determinant, as a function of the free off-diagonal lift $zs$, equals $-(zs)^2\le0$,
+with maximum $0$ at $zs=0$. Hence the Schur complement is never positive definite, so $Y$
+is never positive definite; being singular, $Y$ lies on the boundary of the positive
+semidefinite cone and a fortiori on the boundary of $\CP\subseteq\PSD$. No feasible $Y$ is
+interior.
+\end{proof}
+
+This is not special to any instance; it is the essence of the binary lift. The identity
+$z=z^2$ forces $[1,z]$ to be perfectly correlated in the moment matrix, dropping its rank.
+\citet[\S4.1]{BomzeGabl2023} state the same fact as common knowledge: ``for reformulations
+based on [Burer's theorem], the most important type of reformulations, it is well known
+that the feasible set never has interior.''
+
+\paragraph{The reduction step does not rescue it.}
+One might hope to recover a primal Slater point by Burer's \emph{reduction step}
+\citep[][\S3]{Burer2012}, which lowers the dimension of the set-copositive constraint and,
+in the single-equality case $\{x:e^\top x=1,x\ge0\}$, does produce a strictly feasible
+lifted point. But \citet[Prop.~16]{BomzeGabl2023} prove that the reduced reformulation has
+a primal Slater point \emph{if and only if there is a single equality constraint}
+(formally, $a_i=b_i\alpha$ for all $i$). The community CPP has many equalities --- the
+clearing rows across carriers and periods, the reserve and peak rows, and one binary
+identity per commitment variable --- so the reduction step leaves it without a primal
+interior. Consequently a primal Slater point is unavailable to us by any of these routes,
+and the earlier ``bidirectional trade $\Rightarrow$ primal interior'' claim is withdrawn.
+
+\subsection{What survives without attainment: the boundary-loss reading}
+
+That primal Slater fails does not, by itself, defeat the exact core: a primal interior is
+\emph{sufficient}, not necessary, for attainment. \citet[\S4.1]{BomzeGabl2023} show that
+dropping the dual-attainment requirement costs only \emph{boundary} points of the feasible
+set described by the conic reformulation; if the feasible set is not connected merely
+through boundary points --- e.g.\ if the relevant constraint sets share a point in their
+relative interiors --- one does not need attainment for the value identity. The upshot for
+us is precise: the value identity $\val(\mathrm{COP})=\vmip(N)$ holds regardless (so
+efficiency is exact in the limit), and only the existence of an \emph{attained} optimizer
+is in question. When an attained optimizer exists, the exact core follows
+(Theorem~\ref{thm:liu}(i)); when it does not, the dual is approached but not achieved, and
+the construction yields the $\varepsilon$-core (Theorem~\ref{thm:liu}(ii)) but not, in
+general, a single exact allocation. Attainment is thus an \emph{instance-dependent} open
+condition, not one we can certify from community structure.
+
+\subsection{The computational mirror: cutting planes terminate iff attainment holds}
+
+The theoretical dichotomy has an exact algorithmic counterpart, which is how
+\citet{GuoEtAl} actually compute copositive prices. Since no solver handles copositive
+programs directly, one solves the dual COP by an \emph{outer-approximation} cutting-plane
+method: start from the master problem with the conic constraint $\Omega\in\COP$ removed
+(an outer relaxation), solve it as a (mixed-integer) linear program, and test the
+incumbent $\bar\Omega$ for copositivity via a separation oracle (an MILP using
+Anstreicher's certificate); if $\bar\Omega$ is not copositive, add the cut
+$\bar z^\top\Omega\bar z\ge0$ and repeat. The dual multipliers --- the prices, and for us
+the Owen weights --- are read directly from the master LP's optimal dual at termination,
+since by then the conic constraint has been replaced by finitely many linear cuts.
+
+The decisive point is the termination clause: the method \citet{GuoEtAl} use
+``exactly solves the COP \emph{when it terminates}.'' Termination means the master optimum
+$\bar\Omega$ exists and is copositive --- that is, the dual optimum is \emph{attained} on
+that instance. The copositive cone is not polyhedral, so finite termination is not
+guaranteed; on an instance where attainment fails (the \citet{CifuentesDeyXu2025}
+phenomenon), the algorithm does not terminate, adding cuts indefinitely while the master
+value converges to $\vmip(N)$ but the iterates $\bar\Omega_k$ do not converge. Thus the
+algorithm realizes the same dichotomy as the theory:
+\begin{center}
+\emph{cutting plane terminates} $\iff$ \emph{dual attainment holds} $\implies$ \emph{exact
+core};\\
+otherwise the iterates give $\varepsilon_k$-optimal duals with $\varepsilon_k\to0$, i.e.\
+a sequence of $\varepsilon_k$-cores.
+\end{center}
+This is exactly the position \citet{GuoEtAl} occupy: they do not establish attainment;
+their mechanism returns exact prices on instances where the algorithm terminates, and
+their individual-rationality guarantee is itself only ``for all but at most $|T|+1$''
+generators via a Shapley--Folkman argument, with the system operator absorbing the
+residual. Our cooperative analogue inherits the same boundary: an exact core exactly when
+the dual is attained (equivalently, when the cutting-plane solver terminates), and an
+$\varepsilon$-core --- with $\varepsilon$ controlled by the achieved dual suboptimality
+--- always.
+
+\subsection{Honest statement of scope}
+
+The corrected picture is therefore the following, and it is more modest than the earlier
+draft but defensible.
+\begin{itemize}[leftmargin=1.4em]
+\item \emph{Unconditional.} Value identity $\val(\mathrm{COP})=\vmip(N)$ (boundedness,
+\citealp[Thm.~3(a)]{CifuentesDeyXu2025}); hence an $\varepsilon$-core for every
+$\varepsilon>0$ via the closed-form $\varepsilon$-optimal dual
+\citep[Thm.~3(b)]{CifuentesDeyXu2025}, computed in finite time at any cutting-plane
+iterate.
+\item \emph{Conditional on attainment (A2).} An exact core
+(Theorem~\ref{thm:liu}(i)). Attainment is not implied by boundedness
+\citep[Thm.~3(d)]{CifuentesDeyXu2025}, is \emph{not} obtainable from a primal Slater point
+(Proposition~\ref{prop:no-interior}; \citealp[Prop.~16]{BomzeGabl2023}), and is equivalent
+to finite termination of the copositive cutting-plane solver. We leave it as an
+instance-dependent open condition (Open point~\ref{q:attain}).
+\end{itemize}
+We regard isolating attainment as the precise hypothesis --- separating it cleanly from
+the gap, showing the primal-Slater route is structurally closed, and tying it to algorithm
+termination --- as the honest contribution here, rather than the withdrawn claim that
+community structure makes the exact core automatic. The $\varepsilon$-core, which is what
+the method actually computes in finite time, holds with no such hypothesis.
+
+\section{Summary}
+
+The construction dualizes the joint cone \emph{together with} the squared coupling;
+the $(\mathrm{c},\mathrm{c})$ cross-block term then cancels rather than being forced
+(Remark~\ref{rem:twomech}), and at any fixed dual-feasible multiplier the Lagrangian
+is a block-separable \emph{classical} linear production game (Lemma~\ref{lem:vanish})
+whose core is nonempty by Owen's theorem (Proposition~\ref{prop:balanced}) and which
+upper-bounds $\vmip$ coalition-wise (Corollary~\ref{cor:upper}). No per-player cone is
+needed: the off-diagonal blocks are tamed by the coefficient condition and the diagonal
+blocks by the affine RLT identities, so the inner game is polyhedral and the redundant
+per-player completely positive cones of an earlier version are dropped
+(Remark~\ref{rem:no-perplayer-cone}), leaving a \emph{single} strong-duality hypothesis
+and a smaller dualized program (Open point~\ref{q:comp}).
+
+The status of the central claim is now precise, and weaker than an earlier draft
+asserted. \emph{Strong duality (zero gap) is automatic} from boundedness
+\citep{CifuentesDeyXu2025}, so the construction \emph{unconditionally} yields a stable
+allocation whose budget exceeds $\vmip(N)$ by at most an arbitrarily small $\varepsilon$
+--- an $\varepsilon$-core (Theorem~\ref{thm:liu}(ii)). An \emph{exact} core requires more:
+that the copositive dual optimum be \emph{attained} (Theorem~\ref{thm:liu}(i)), which ---
+crucially --- does \emph{not} follow from boundedness
+\citep[Thm.~3(d)]{CifuentesDeyXu2025} and must be argued from model structure. At an
+attained optimum the LPG core is stable and exactly efficient for $\Gamma^{\mathrm{MIP}}$;
+a generic multiplier gives only a convex-hull over-estimate (Remark~\ref{rem:Mcone},
+Remark~\ref{rem:which-part}).
+
+A companion identity (Section~\ref{sec:chp}) places convex hull pricing within the same
+machinery: lifting \emph{only} the per-player feasible sets to their completely positive
+cones, with the linear balance kept and the squared coupling and joint cone dropped,
+yields exactly convex hull pricing --- the community-balance LP with each $\feas_i$
+replaced by $\conv(\feas_i)$ (Proposition~\ref{prop:chp}). This is the
+per-player-decoupled corner of the construction, the way-station the dual minimization
+would otherwise pass through, and it coincides with the convex-hull-pricing allocation of
+the companion manuscript; the two constructions agree exactly when the integrality gap
+$\vchp(N)-\vmip(N)$ vanishes.
+
+The structural requirement on the coupling is also sharp: the sub-game is a classical LPG
+\emph{only} because the community balance is homogeneous (right-hand side $0$). A nonzero
+aggregate would add a coalition-independent constant $\lambda\lVert d\rVert^{2}$ to every
+coalition value and break the production-game structure (Remark~\ref{rem:homogeneous}).
+Realistic extensions preserve the result iff they are homogeneous, player-separable
+couplings $\sum_iA_ix_i=\sum_ib_i$ with $b_i=0$.
+
+Three things are not settled.
+\emph{(a) Dual attainment.} This, not the gap, is the genuine hypothesis. Boundedness
+gives the gap and the $\varepsilon$-core for free; attainment --- which upgrades to an
+exact core --- is not implied by boundedness and is the central open point
+(Open point~\ref{q:attain}), shared with existing copositive-pricing work
+\citep{GuoEtAl}, which assumes a dual optimum without establishing it. We had hoped to
+secure attainment structurally, via a primal interior (Slater) point of the community CPP
+supplied by bidirectional trade; that route is \emph{closed}, because Burer-type lifts
+have no primal interior once binaries are present (Proposition~\ref{prop:no-interior}), and
+the reduction step recovers one only for a single equality constraint
+\citep[Prop.~16]{BomzeGabl2023}, which the multi-row community CPP is not. What remains is
+honest and still structured:
+\[
+\text{boundedness}\ \Longrightarrow\ \underbrace{\val(\mathrm{COP})=\vmip(N)}_{\text{gap, unconditional}}\
+\Longrightarrow\ \varepsilon\text{-core (unconditional)};\qquad
+\underbrace{\text{dual attainment}}_{\equiv\ \text{cutting-plane terminates}}\
+\Longrightarrow\ \text{\emph{exact} core},
+\]
+with attainment equivalent to finite termination of the copositive cutting-plane solver
+(Section~\ref{sec:slater-structural}) and left as an instance-dependent open condition.
+This is a more modest claim than ``replace Bondareva--Shapley'': the $\varepsilon$-core is
+unconditional, and the exact core is conditional on a hypothesis we isolate cleanly but do
+not discharge.
+\emph{(b) Computation.} Computing even the $\varepsilon$-optimal multiplier is
+\textsf{NP}-hard, and tractable relaxations drop the guarantee to their own
+convex-hull-like level (Open point~\ref{q:comp}). Removing the per-player cones shrinks
+the dualized program (one joint copositive constraint, not $n+1$), but does not make
+computation cheap.
+\emph{(c) Strength beyond the convex-hull fact.} Whether the construction strictly
+exceeds ``balanced convex hull $\Rightarrow$ nonempty integer core'' hinges on the
+proper-coalition values $\vlr_S(M^{*})$ at the grand optimum; empirically this is governed
+by the integrality gap $\vchp(N)-\vmip(N)$, the same quantity that controls whether the
+companion convex-hull-pricing identity of Section~\ref{sec:chp} already suffices.
+
+The decisive theoretical question before publication is whether dual attainment can be
+characterized for the community CPP by any route other than the (closed) primal-Slater one
+--- for instance through a coercivity or closedness property of the copositive dual that
+does not require a primal interior --- or whether the $\varepsilon$-core should simply be
+adopted as the headline result, with the exact core stated as conditional on attainment
+(equivalently, on solver termination). The decisive empirical step is to measure
+$\vchp(N)-\vmip(N)$ on the model instances. Together these settle whether the contribution
+is an exact-core result under a checkable attainment condition or, more conservatively, an
+unconditional $\varepsilon$-core with an attainment-conditional exact-core upgrade.
+
+\begin{thebibliography}{99}
+
+\bibitem[Baroche et al.(2021)]{Baroche2021}
+Baroche, T., Moret, F., and Pinson, P. (2021).
+Prosumer markets: A unified formulation.
+\emph{European Journal of Operational Research}, 287(1), 36--48.
+
+\bibitem[Bomze \& Gabl(2023)]{BomzeGabl2023}
+Bomze, I.~M. and Gabl, M. (2023).
+Optimization under uncertainty and risk: Quadratic and copositive approaches.
+\emph{European Journal of Operational Research}, 310(2), 449--476.
+
+\bibitem[Burer(2009)]{Burer2009}
+Burer, S. (2009).
+On the copositive representation of binary and continuous nonconvex quadratic programs.
+\emph{Mathematical Programming}, 120(2), 479--495.
+
+\bibitem[Burer(2012)]{Burer2012}
+Burer, S. (2012).
+Copositive programming.
+In M.~F. Anjos and J.~B. Lasserre (Eds.), \emph{Handbook on Semidefinite, Conic and
+Polynomial Optimization}, 201--218. Springer.
+
+\bibitem[Cornélusse et al.(2019)]{Cornelusse2019}
+Cornélusse, B., Savelli, I., Paoletti, S., Giannitrapani, A., and Vicino, A. (2019).
+A community microgrid architecture with an internal local market.
+\emph{Applied Energy}, 242, 547--560.
+
+\bibitem[Cifuentes, Dey \& Xu(2025)]{CifuentesDeyXu2025}
+Cifuentes, D., Dey, S.~S., and Xu, J. (2025).
+Sensitivity analysis for mixed binary quadratic programming.
+\emph{Mathematical Programming}, 216, 379--424.
+(Preliminary version in \emph{Proc.\ IPCO 2024}.)
+
+\bibitem[Guo, Bodur \& Taylor(2024)]{GuoEtAl}
+Guo, C., Bodur, M., and Taylor, J.~A. (2024).
+Copositive duality for discrete energy markets.
+Working paper / preprint.
+
+\bibitem[Khatami et al.(2022)]{Khatami2022}
+Khatami, R., Heidarifar, M., Parvania, M., and Khargonekar, P. (2022).
+Stable cost allocation for the joint TSO--DSO flexibility procurement.
+\emph{IEEE Transactions on Smart Grid}, 13(6), 4449--4461.
+
+\bibitem[Eichfelder \& Povh(2013)]{EichfelderPovh2013}
+Eichfelder, G. and Povh, J. (2013).
+On the set-semidefinite representation of nonconvex quadratic programs over arbitrary
+feasible sets.
+\emph{Optimization Letters}, 7(6), 1373--1386.
+
+\bibitem[Kim, Kojima \& Toh(2020)]{KimKojimaToh2020}
+Kim, S., Kojima, M., and Toh, K.-C. (2020).
+A geometrical analysis on convex conic reformulations of quadratic and polynomial
+optimization problems.
+\emph{SIAM Journal on Optimization}, 30(2), 1251--1273.
+
+\bibitem[Owen(1975)]{Owen1975}
+Owen, G. (1975).
+On the core of linear production games.
+\emph{Mathematical Programming}, 9(1), 358--370.
+
+\bibitem[Uhan(2015)]{Uhan2015}
+Uhan, N.~A. (2015).
+Stochastic linear programming games with concave preferences.
+\emph{European Journal of Operational Research}, 243(2), 637--646.
+
+\bibitem[Liu, Qi \& Xu(2016)]{LiuEtAl}
+Liu, L., Qi, X., and Xu, Z. (2016).
+Computing near-optimal stable cost allocations for cooperative games by Lagrangian
+relaxation.
+\emph{INFORMS Journal on Computing}, 28(4), 687--702.
+
+\bibitem[Mitridati, Kazempour \& Pinson(2021)]{Mitridati2021}
+Mitridati, L., Kazempour, J., and Pinson, P. (2021).
+Design and game-theoretic analysis of community-based market mechanisms in heat and
+electricity systems.
+\emph{Omega}, 99, 102177.
+
+\bibitem[Moret \& Pinson(2019)]{MoretPinson2019}
+Moret, F. and Pinson, P. (2019).
+Energy collectives: A community and fairness based approach to future electricity markets.
+\emph{IEEE Transactions on Power Systems}, 34(5), 3994--4004.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,1367 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{remark}{Remark}
+\newtheorem{definition}{Definition}
+
+% Notation
+\newcommand{\CP}{\mathcal{C}^{*}}
+\newcommand{\COP}{\mathcal{C}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\inner}[2]{\langle #1, #2 \rangle}
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\conv}{\operatorname{conv}}
+\newcommand{\xcom}{x^{\mathrm{cpl}}}
+\newcommand{\xrest}{x^{\mathrm{rest}}}
+\newcommand{\Acom}{A^{\mathrm{cpl}}}
+\newcommand{\feas}{\mathcal{X}}
+\newcommand{\feaseq}{\mathcal{X}^{\mathrm{eq}}}
+\newcommand{\feasbar}{\bar{\mathcal{X}}^{\mathrm{eq}}}
+\newcommand{\liftset}{\mathcal{F}}
+\newcommand{\vmip}{v^{\mathrm{MIP}}}
+\newcommand{\vchp}{v^{\mathrm{CHP}}}
+\newcommand{\vlr}{v^{\mathrm{LR}}}
+\newcommand{\Tech}{\mathcal{T}}
+
+\title{Completely Positive Reformulation of the\\
+Mixed-Integer Energy Community Game:\\
+A Technology-Modular Construction}
+\author{Working note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We construct the completely positive program~(CPP) reformulation of the
+mixed-integer community game from the companion preprint.  The reformulation
+is organised by \emph{technology module}---renewable generation, energy
+storage, electrolyzer with piecewise-linear efficiency, heat pump with unit
+commitment, and demand---so that any player with any combination of
+technologies receives its CPP lift by composing the relevant modules.  The
+only inter-player coupling retained here is the community balance (one
+homogeneous equality per carrier per period); reserve adequacy and peak
+penalty couplings are deferred to future work.  We verify Burer's exactness
+conditions module by module, write the Lagrangian dual (COP), confirm that
+cross-block vanishing reduces the relaxed game to a classical linear
+production game, and restate the main core-existence theorem.  Convention:
+profit maximisation; all community balance signs unified to
+$\sum_i(i^{\mathrm{com}}_{k,t}-e^{\mathrm{com}}_{k,t})=0$.
+\end{abstract}
+
+%======================================================================
+\section{The general MIP community game}
+\label{sec:mip}
+%======================================================================
+
+\subsection{Players and technology modules}
+
+Let $\N=\{1,\dots,n\}$ be the prosumers.  Each player $i$ owns a
+technology set
+\[
+\Tech_i\subseteq
+\{\textsc{res},\textsc{ess}_E,\textsc{ess}_G,\textsc{ess}_H,
+  \textsc{els},\textsc{hp},
+  \textsc{d}_E,\textsc{d}_G,\textsc{d}_H,
+  \textsc{fl}_E,\textsc{fl}_G,\textsc{fl}_H\},
+\]
+where the symbols denote:
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Module & Description\\
+\midrule
+\textsc{res} & Renewable (e.g.\ wind) generation \\
+$\textsc{ess}_k$ & Energy storage, carrier $k\in\{E,G,H\}$\\
+\textsc{els} & Electrolyzer with piecewise-linear efficiency \\
+\textsc{hp} & Heat pump with unit commitment \\
+$\textsc{d}_k$ & Non-flexible demand, carrier $k$\\
+$\textsc{fl}_k$ & Flexible demand, carrier $k$ (e.g.\ electrolyzer/HP elec.\ input)\\
+\bottomrule
+\end{tabular}
+\end{center}
+A player's decision variables $x_i=(\xcom_i,\xrest_i)$ and
+per-player feasible region $\feas_i$ are assembled by taking the union
+of variables and the intersection of constraint sets across all modules
+in~$\Tech_i$, together with the per-carrier energy balance.
+
+\subsection{Variable classification per technology}
+\label{sec:vars}
+
+We partition each player's variables into \emph{coupling variables}
+$\xcom_i$ (those appearing in the inter-player community balance) and
+\emph{rest variables} $\xrest_i$ (per-player only, including binaries).
+Table~\ref{tab:tech-vars} catalogues the variables contributed by each
+module, per time period~$t$.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+Module & Coupling (per $t$) & Rest continuous (per $t$) & Rest binary (per $t$)\\
+\midrule
+\textsc{res}
+  & $e^{\mathrm{com},E}_{i,t}$
+  & $e^{\mathrm{gri},E}_{i,t},\; p^{\mathrm{res}}_{i,t}$
+  & ---\\[3pt]
+\textsc{els}
+  & $i^{\mathrm{com},E}_{i,t},\; i^{\mathrm{com},G}_{i,t},\; e^{\mathrm{com},G}_{i,t}$
+  & \makecell[tl]{$i^{\mathrm{gri},E}_{i,t},\; e^{\mathrm{gri},G}_{i,t},\; p^{\mathrm{els}}_{i,t}$,\\
+                  $d^{\mathrm{els}}_{i,t,s}\ (s=1,\dots,N_s)$,\\
+                  $d^{\mathrm{fl},E}_{i,t}$}
+  & \makecell[tl]{$z^{\mathrm{on}}_{i,t},\; z^{\mathrm{off}}_{i,t},\; z^{\mathrm{sb}}_{i,t}$,\\
+                  $z^{\mathrm{su}}_{i,t},\; z^{\mathrm{sd}}_{i,t}$,\\
+                  $z^{\mathrm{seg}}_{i,t,s}\ (s=1,\dots,N_s)$}\\[3pt]
+\textsc{hp}
+  & $i^{\mathrm{com},E}_{i,t},\; i^{\mathrm{com},H}_{i,t},\; e^{\mathrm{com},H}_{i,t}$
+  & \makecell[tl]{$i^{\mathrm{gri},E}_{i,t},\; e^{\mathrm{gri},H}_{i,t},\; p^{\mathrm{hp}}_{i,t}$,\\
+                  $d^{\mathrm{fl},E}_{i,t}$}
+  & $z^{\mathrm{on}}_{i,t},\; z^{\mathrm{su}}_{i,t},\; z^{\mathrm{sd}}_{i,t}$\\[3pt]
+$\textsc{ess}_k$
+  & ---
+  & $b^{\mathrm{ch},k}_{i,t},\; b^{\mathrm{dis},k}_{i,t},\; s^{k}_{i,t}$
+  & ---\\[3pt]
+$\textsc{d}_k$
+  & $i^{\mathrm{com},k}_{i,t}$
+  & $i^{\mathrm{gri},k}_{i,t},\; d^{\mathrm{nfl},k}_{i,t}$
+  & ---\\[3pt]
+$\textsc{fl}_k$
+  & $i^{\mathrm{com},k}_{i,t}$
+  & $i^{\mathrm{gri},k}_{i,t},\; d^{\mathrm{fl},k}_{i,t}$
+  & ---\\
+\bottomrule
+\end{tabular}
+\caption{Variables per technology module and period.  A player $i$ with
+$\Tech_i=\{\textsc{els},\textsc{ess}_G,\textsc{fl}_E\}$ takes the union
+of the corresponding rows; coupling variables shared between modules
+(e.g.\ $i^{\mathrm{com},E}$ from both \textsc{els} and \textsc{fl}$_E$)
+appear once.}
+\label{tab:tech-vars}
+\end{table}
+
+\subsection{Coupling constraints (homogeneous community balance)}
+
+For each carrier $k\in\{E,G,H\}$ and period $t\in\{0,\dots,T-1\}$:
+\begin{equation}
+\sum_{i\in S}\bigl(i^{\mathrm{com},k}_{i,t}-e^{\mathrm{com},k}_{i,t}\bigr)=0.
+\label{eq:community-balance}
+\end{equation}
+The right-hand side is \emph{zero} for every row (conservation law:
+internal community trade nets to zero).  Written compactly,
+\begin{equation}
+\sum_{i\in S}\Acom_i\,\xcom_i=0,
+\qquad R=|K|\cdot T\text{ rows, all RHS }=0.
+\label{eq:coupling-compact}
+\end{equation}
+The matrix $\Acom_i\in\R^{R\times n_i^{\mathrm{cpl}}}$ has entry $+1$
+on $i^{\mathrm{com},k}_{i,t}$ and $-1$ on $e^{\mathrm{com},k}_{i,t}$
+in the row for carrier $k$, period $t$; zero elsewhere.
+
+\begin{remark}[Sign convention]
+\label{rem:sign}
+In the code (\texttt{compact\_utility.py}), the hydrogen balance is
+written $\sum_i(e^{\mathrm{com},G}-i^{\mathrm{com},G})=0$ (reversed
+signs).  We unify all carriers to the
+$\sum_i(i^{\mathrm{com},k}-e^{\mathrm{com},k})=0$ convention; this
+amounts to redefining $\Acom_i$ for the hydrogen rows by swapping
+signs, with no effect on the feasible set.
+\end{remark}
+
+\subsection{Per-player constraints (by technology module)}
+
+The feasible region of player $i$ is
+\begin{equation}
+\feas_i=\bigcap_{\tau\in\Tech_i}\feas_i^{\tau}
+  \cap\bigl\{\text{energy balance equalities}\bigr\},
+\label{eq:feasi}
+\end{equation}
+where each $\feas_i^{\tau}$ collects the constraints of module $\tau$
+(detailed in Section~\ref{sec:catalog}).  All constraints in $\feas_i$
+involve \emph{only} player $i$'s variables.  $\feas_i$ is mixed-integer
+and bounded (all variables have finite upper bounds from capacities,
+demands, or storage sizes).
+
+\subsection{The coalition game}
+
+\begin{equation}
+\vmip(S)=\max\Bigl\{\sum_{i\in S}w_i^{\top}x_i\;:\;
+\sum_{i\in S}\Acom_i\xcom_i=0,\;x_i\in\feas_i\ \forall i\in S\Bigr\},
+\label{eq:vmip}
+\end{equation}
+where $w_i$ is the profit coefficient vector for player $i$ (revenue
+minus cost in the objective; note the code minimises cost, so
+$w_i=-c_i$).
+
+%======================================================================
+\section{Technology constraint catalog}
+\label{sec:catalog}
+%======================================================================
+
+For each module we give: (i)~the original constraints as implemented in
+\texttt{compact\_utility.py}; (ii)~the equality form with nonnegative
+slacks; (iii)~the resulting rows of $A_ix_i=b_i$; (iv)~the RLT
+identities (diagonal of the squared system); (v)~binary diagonal
+conditions.  The generic conversion rules are:
+\begin{itemize}[leftmargin=1.2em]
+\item Inequality $g(x)\le 0$: add slack $\sigma\ge0$, write
+  $g(x)+\sigma=0$.
+\item Upper bound $x\le\bar x$: add slack $\sigma\ge0$, write
+  $x+\sigma=\bar x$.
+\item Binary $z\in\{0,1\}$: add complement $\sigma\ge0$, write
+  $z+\sigma=1$; the quadratic identity $z-z^2=0$ is handled at the
+  lifting step (Step~2).
+\end{itemize}
+
+\subsection{Energy balance (per player, per carrier, per period)}
+\label{sec:balance}
+
+Each player has one balance per carrier it participates in.  For carrier
+$k$ and period~$t$:
+\begin{equation}
+\underbrace{i^{\mathrm{gri},k}_{i,t}-e^{\mathrm{gri},k}_{i,t}
++i^{\mathrm{com},k}_{i,t}-e^{\mathrm{com},k}_{i,t}}_{\text{trading}}
++\underbrace{p^{k}_{i,t}+b^{\mathrm{dis},k}_{i,t}
+  -b^{\mathrm{ch},k}_{i,t}}_{\text{production/storage}}
+=\underbrace{d^{\mathrm{nfl},k}_{i,t}+d^{\mathrm{fl},k}_{i,t}}_{\text{demand}},
+\label{eq:energy-balance}
+\end{equation}
+where terms absent for a given player (because $\Tech_i$ lacks the
+module) are zero.  This is already an equality; it contributes one row
+of $A_ix_i=b_i$ per carrier-period pair in which player $i$ participates.
+
+\subsection{Renewable generation (\textsc{res})}
+\label{sec:res}
+
+\paragraph{Original constraints.}
+\begin{equation}
+0\le p^{\mathrm{res}}_{i,t}\le\overline{P}^{\mathrm{res}}_{i,t},
+\label{eq:res-orig}
+\end{equation}
+where $\overline{P}^{\mathrm{res}}_{i,t}$ is the time-dependent
+renewable availability (wind capacity factor $\times$ installed
+capacity).
+
+\paragraph{Equality form.}  Add slack $\sigma^{\mathrm{res}}_{i,t}\ge0$:
+\begin{equation}
+p^{\mathrm{res}}_{i,t}+\sigma^{\mathrm{res}}_{i,t}
+  =\overline{P}^{\mathrm{res}}_{i,t}.
+\label{eq:res-eq}
+\end{equation}
+
+\paragraph{RLT identity (squaring \eqref{eq:res-eq}).}
+\begin{equation}
+(X_{ii})_{p^{\mathrm{res}},p^{\mathrm{res}}}
++2(X_{ii})_{p^{\mathrm{res}},\sigma^{\mathrm{res}}}
++(X_{ii})_{\sigma^{\mathrm{res}},\sigma^{\mathrm{res}}}
+=\bigl(\overline{P}^{\mathrm{res}}_{i,t}\bigr)^{2}.
+\label{eq:res-rlt}
+\end{equation}
+
+\paragraph{Binaries.} None.
+
+\paragraph{Objective.}
+$w_i$ entries: $-c^{\mathrm{res}}_i$ on $p^{\mathrm{res}}_{i,t}$
+(production cost, sign-flipped to profit); grid export revenue
+$+\pi^{E,\mathrm{exp}}_t$ on $e^{\mathrm{gri},E}_{i,t}$; grid export
+capacity bound $e^{\mathrm{gri},E}_{i,t}\le\overline{E}^{E}_i$ (slack
+$\sigma^{E,\mathrm{exp}}_{i,t}$, row
+$e^{\mathrm{gri},E}+\sigma^{E,\mathrm{exp}}=\overline{E}^{E}_i$).
+
+\subsection{Energy storage (\texorpdfstring{$\textsc{ess}_k$}{ESS\_k})}
+\label{sec:ess}
+
+\paragraph{Original constraints (per period $t$, carrier $k$).}
+\begin{align}
+s^{k}_{i,t}&=s^{k}_{i,t-1}+\eta^{\mathrm{ch}}_k\,b^{\mathrm{ch},k}_{i,t}
+  -\tfrac{1}{\eta^{\mathrm{dis}}_k}\,b^{\mathrm{dis},k}_{i,t},
+  &\text{(SOC transition)}\label{eq:soc}\\
+s^{k}_{i,t_0}&=\mathrm{SOC}^{\mathrm{init}}_k,
+  &\text{(initial SOC)}\label{eq:soc-init}\\
+s^{k}_{i,0}&=s^{k}_{i,T-1}+\eta^{\mathrm{ch}}_k\,b^{\mathrm{ch},k}_{i,0}
+  -\tfrac{1}{\eta^{\mathrm{dis}}_k}\,b^{\mathrm{dis},k}_{i,0},
+  &\text{(wrap-around)}\label{eq:soc-wrap}\\
+0\le s^{k}_{i,t}&\le\overline{S}^{k}_i,\quad
+0\le b^{\mathrm{ch},k}_{i,t}\le\overline{P}^{k}_i,\quad
+0\le b^{\mathrm{dis},k}_{i,t}\le\overline{P}^{k}_i.
+  &\text{(bounds)}\label{eq:ess-bounds}
+\end{align}
+
+\paragraph{Equality form.}
+The SOC transitions \eqref{eq:soc}--\eqref{eq:soc-wrap} and the initial
+condition~\eqref{eq:soc-init} are already equalities.  Each upper bound
+in~\eqref{eq:ess-bounds} adds a slack:
+\begin{align}
+s^{k}_{i,t}+\sigma^{s,k}_{i,t}&=\overline{S}^{k}_i,\label{eq:ess-eq-s}\\
+b^{\mathrm{ch},k}_{i,t}+\sigma^{\mathrm{ch},k}_{i,t}&=\overline{P}^{k}_i,
+\label{eq:ess-eq-ch}\\
+b^{\mathrm{dis},k}_{i,t}+\sigma^{\mathrm{dis},k}_{i,t}&=\overline{P}^{k}_i.
+\label{eq:ess-eq-dis}
+\end{align}
+
+\paragraph{RLT identities.}
+One per equality row.  For example, squaring
+\eqref{eq:ess-eq-ch}:
+\begin{equation}
+(X_{ii})_{b^{\mathrm{ch}},b^{\mathrm{ch}}}
++2(X_{ii})_{b^{\mathrm{ch}},\sigma^{\mathrm{ch}}}
++(X_{ii})_{\sigma^{\mathrm{ch}},\sigma^{\mathrm{ch}}}
+=(\overline{P}^{k}_i)^{2}.
+\label{eq:ess-rlt-ch}
+\end{equation}
+The SOC-transition rows produce multivariate RLT identities of the form
+$\inner{a_ja_j^{\top}}{X_{ii}}=b_j^{2}$ where $a_j$ is the row of
+$A_i$ corresponding to~\eqref{eq:soc}.
+
+\paragraph{Binaries.} None.
+
+\paragraph{Objective.}
+$w_i$ entries: $-c^{\mathrm{sto},k}_i\eta^{\mathrm{ch}}_k$ on
+$b^{\mathrm{ch},k}_{i,t}$;
+$-c^{\mathrm{sto},k}_i/\eta^{\mathrm{dis}}_k$ on
+$b^{\mathrm{dis},k}_{i,t}$ (storage operation costs, sign-flipped).
+
+\subsection{Electrolyzer with piecewise-linear efficiency (\textsc{els})}
+\label{sec:els}
+
+This is the most complex module: it carries $5+N_s$ binary variables per
+period (for $N_s$ PWL segments, typically $N_s=6$).
+
+\paragraph{Original constraints (per period $t$).}
+
+\emph{State selection} (exactly one of on/off/standby):
+\begin{equation}
+z^{\mathrm{on}}_{i,t}+z^{\mathrm{off}}_{i,t}+z^{\mathrm{sb}}_{i,t}=1.
+\label{eq:els-state}
+\end{equation}
+
+\emph{PWL production curve} ($N_s$ segments with slope $a_s$ and
+intercept $b_s$):
+\begin{equation}
+p^{\mathrm{els}}_{i,t}=\sum_{s=1}^{N_s}\bigl[
+  a_s\,d^{\mathrm{els}}_{i,t,s}+b_s\,z^{\mathrm{seg}}_{i,t,s}\bigr].
+\label{eq:els-production}
+\end{equation}
+
+\emph{Segment selection}:
+\begin{equation}
+z^{\mathrm{on}}_{i,t}=\sum_{s=1}^{N_s}z^{\mathrm{seg}}_{i,t,s}.
+\label{eq:els-seg-sel}
+\end{equation}
+
+\emph{Segment bounds} (for each $s=1,\dots,N_s$):
+\begin{equation}
+\underline{p}_s\,z^{\mathrm{seg}}_{i,t,s}
+  \le d^{\mathrm{els}}_{i,t,s}
+  \le\overline{p}_s\,z^{\mathrm{seg}}_{i,t,s},
+\label{eq:els-seg-bounds}
+\end{equation}
+where $\underline{p}_s,\overline{p}_s$ are the breakpoints of segment $s$.
+
+\emph{Power consumption coupling}:
+\begin{equation}
+d^{\mathrm{fl},E}_{i,t}=\sum_{s=1}^{N_s}d^{\mathrm{els}}_{i,t,s}
+  +c^{\mathrm{sb}}\,\overline{C}^{\mathrm{els}}_i\,z^{\mathrm{sb}}_{i,t}.
+\label{eq:els-flex}
+\end{equation}
+
+\emph{Total power bounds}:
+\begin{align}
+d^{\mathrm{fl},E}_{i,t}&\ge c^{\min}\,\overline{C}^{\mathrm{els}}_i\,
+  z^{\mathrm{on}}_{i,t}
+  +c^{\mathrm{sb}}\,\overline{C}^{\mathrm{els}}_i\,z^{\mathrm{sb}}_{i,t},
+\label{eq:els-min-total}\\
+d^{\mathrm{fl},E}_{i,t}&\le c^{\max}\,\overline{C}^{\mathrm{els}}_i\,
+  z^{\mathrm{on}}_{i,t}
+  +c^{\mathrm{sb}}\,\overline{C}^{\mathrm{els}}_i\,z^{\mathrm{sb}}_{i,t}.
+\label{eq:els-max-total}
+\end{align}
+
+\emph{Startup/shutdown logic} (for $t\neq t_0$; write $t^{-}$ for the
+preceding period, with wrap-around $0^{-}=T{-}1$):
+\begin{align}
+z^{\mathrm{su}}_{i,t}&\ge z^{\mathrm{on}}_{i,t}
+  +z^{\mathrm{off}}_{i,t^-}+z^{\mathrm{sb}}_{i,t}-1,
+\label{eq:els-su}\\
+z^{\mathrm{sd}}_{i,t}&\ge z^{\mathrm{on}}_{i,t^-}
+  +z^{\mathrm{off}}_{i,t}+z^{\mathrm{sb}}_{i,t^-}-1,
+\label{eq:els-sd}\\
+z^{\mathrm{su}}_{i,t}+z^{\mathrm{sd}}_{i,t}&\le1,
+\label{eq:els-conflict}\\
+z^{\mathrm{off}}_{i,t^-}+z^{\mathrm{sb}}_{i,t}&\le1.
+\label{eq:els-off-sb}
+\end{align}
+
+\emph{Minimum downtime} ($\Delta T^{\mathrm{down}}$ periods):
+\begin{equation}
+\sum_{\tau=t}^{t+\Delta T^{\mathrm{down}}-1}z^{\mathrm{off}}_{i,\tau}
+  \ge\Delta T^{\mathrm{down}}\,z^{\mathrm{sd}}_{i,t}.
+\label{eq:els-mindown}
+\end{equation}
+
+\emph{Initial state}: $z^{\mathrm{off}}_{i,t_0}=1$.
+
+\paragraph{Equality form.}
+
+Equalities~\eqref{eq:els-state},~\eqref{eq:els-production},~\eqref{eq:els-seg-sel},~\eqref{eq:els-flex}
+remain as-is.  Each inequality adds a nonneg slack; we illustrate the
+pattern.  For the segment lower bound~\eqref{eq:els-seg-bounds}:
+\begin{equation}
+d^{\mathrm{els}}_{i,t,s}-\underline{p}_s\,z^{\mathrm{seg}}_{i,t,s}
+  -\sigma^{\mathrm{lb}}_{i,t,s}=0,
+\qquad\sigma^{\mathrm{lb}}_{i,t,s}\ge0.
+\label{eq:els-seg-lb-eq}
+\end{equation}
+For the startup~\eqref{eq:els-su}:
+\begin{equation}
+z^{\mathrm{su}}_{i,t}-z^{\mathrm{on}}_{i,t}
+-z^{\mathrm{off}}_{i,t^-}-z^{\mathrm{sb}}_{i,t}+1
+-\sigma^{\mathrm{su}}_{i,t}=0,
+\qquad\sigma^{\mathrm{su}}_{i,t}\ge0.
+\label{eq:els-su-eq}
+\end{equation}
+And so on for each inequality row.
+
+Each binary $z\in\{z^{\mathrm{on}},z^{\mathrm{off}},z^{\mathrm{sb}},
+z^{\mathrm{su}},z^{\mathrm{sd}},z^{\mathrm{seg}}_1,\dots,
+z^{\mathrm{seg}}_{N_s}\}$ produces a complement slack:
+\begin{equation}
+z+\sigma^z=1,\qquad z\ge0,\;\sigma^z\ge0.
+\label{eq:els-bin-complement}
+\end{equation}
+The quadratic identity $z-z^2=0$ is handled in the lifting
+(Section~\ref{sec:lifting}).
+
+\paragraph{Count per period.}
+$5+N_s$ binary complement rows, plus $2N_s$ segment bound rows, plus 4
+startup/shutdown rows, plus 1 conflict, plus 1 off-to-standby, plus
+$\sim\!\Delta T^{\mathrm{down}}$ downtime rows, plus 2 total-power
+bounds.  The exact count depends on the horizon and wrap-around handling
+but is $O(N_s+\Delta T^{\mathrm{down}})$ per period.
+
+\paragraph{RLT identities (illustrative examples).}
+
+Squaring the state selection~\eqref{eq:els-state}:
+\begin{equation}
+(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{on}}}
++(X_{ii})_{z^{\mathrm{off}},z^{\mathrm{off}}}
++(X_{ii})_{z^{\mathrm{sb}},z^{\mathrm{sb}}}
++2(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{off}}}
++2(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{sb}}}
++2(X_{ii})_{z^{\mathrm{off}},z^{\mathrm{sb}}}
+=1.
+\label{eq:els-rlt-state}
+\end{equation}
+Squaring a binary complement $z^{\mathrm{on}}+\sigma^{\mathrm{on}}=1$:
+\begin{equation}
+(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{on}}}
++2(X_{ii})_{z^{\mathrm{on}},\sigma^{\mathrm{on}}}
++(X_{ii})_{\sigma^{\mathrm{on}},\sigma^{\mathrm{on}}}=1.
+\label{eq:els-rlt-comp}
+\end{equation}
+Combining~\eqref{eq:els-rlt-state} with the binary diagonal
+$(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{on}}}=z^{\mathrm{on}}$ (see
+below) gives cross-moment bounds: e.g.,
+$(X_{ii})_{z^{\mathrm{on}},\sigma^{\mathrm{on}}}
+=\tfrac{1}{2}(1-z^{\mathrm{on}}-(X_{ii})_{\sigma^{\mathrm{on}},\sigma^{\mathrm{on}}})$.
+
+\paragraph{Binary diagonal (per period $t$).}
+For each $m\in B_i$:
+\begin{equation}
+(X_{ii})_{m,m}=z_{i,m}.
+\label{eq:els-bindiag}
+\end{equation}
+This gives $5+N_s$ conditions per period.  For $N_s=6$: $11$ conditions
+$\times T=264$ total (in the standard $T=24$ model).
+
+\subsection{Heat pump with unit commitment (\textsc{hp})}
+\label{sec:hp}
+
+\paragraph{Original constraints (per period $t$).}
+
+\emph{COP coupling}:
+\begin{equation}
+\eta^{\mathrm{COP}}_i\,d^{\mathrm{fl},E}_{i,t}=p^{\mathrm{hp}}_{i,t}.
+\label{eq:hp-cop}
+\end{equation}
+
+\emph{State transition} ($t\neq0$; $t^{-}$ as before):
+\begin{equation}
+z^{\mathrm{su}}_{i,t}-z^{\mathrm{sd}}_{i,t}
+  -z^{\mathrm{on}}_{i,t}+z^{\mathrm{on}}_{i,t^{-}}=0.
+\label{eq:hp-state}
+\end{equation}
+
+\emph{Mutual exclusion}:
+\begin{equation}
+z^{\mathrm{su}}_{i,t}+z^{\mathrm{sd}}_{i,t}\le1.
+\label{eq:hp-conflict}
+\end{equation}
+
+\emph{Power bounds}:
+\begin{align}
+p^{\mathrm{hp}}_{i,t}&\ge c^{\min}_{\mathrm{hp}}\,
+  \overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{on}}_{i,t},
+\label{eq:hp-min}\\
+p^{\mathrm{hp}}_{i,t}&\le c^{\max}_{\mathrm{hp}}\,
+  \overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{on}}_{i,t}.
+\label{eq:hp-max}
+\end{align}
+
+\emph{Ramp rates} ($t\neq0$):
+\begin{align}
+p^{\mathrm{hp}}_{i,t}-p^{\mathrm{hp}}_{i,t^{-}}
+  &\le R^{\mathrm{up}}\,\overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{on}}_{i,t}
+  +R^{\mathrm{su}}\,\overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{su}}_{i,t},
+\label{eq:hp-ramp-up}\\
+p^{\mathrm{hp}}_{i,t^{-}}-p^{\mathrm{hp}}_{i,t}
+  &\le R^{\mathrm{down}}\,\overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{on}}_{i,t}
+  +R^{\mathrm{sd}}\,\overline{C}^{\mathrm{hp}}_i\,z^{\mathrm{sd}}_{i,t}.
+\label{eq:hp-ramp-down}
+\end{align}
+
+\emph{Initial state}: $z^{\mathrm{on}}_{i,t_0}=0$.
+
+\paragraph{Equality form.}
+The COP coupling~\eqref{eq:hp-cop} and state
+transition~\eqref{eq:hp-state} are already equalities.  Each of
+\eqref{eq:hp-conflict}--\eqref{eq:hp-ramp-down} adds a nonneg slack.
+Each binary
+$z\in\{z^{\mathrm{on}},z^{\mathrm{su}},z^{\mathrm{sd}}\}$ produces a
+complement slack $z+\sigma^z=1$.
+
+\paragraph{Binary diagonal (per period).}
+3 conditions: $(X_{ii})_{z^{\mathrm{on}},z^{\mathrm{on}}}=z^{\mathrm{on}}$,
+$(X_{ii})_{z^{\mathrm{su}},z^{\mathrm{su}}}=z^{\mathrm{su}}$,
+$(X_{ii})_{z^{\mathrm{sd}},z^{\mathrm{sd}}}=z^{\mathrm{sd}}$.
+
+\paragraph{RLT identities.}
+Same pattern as~\S\ref{sec:els}: one per equality row.  Squaring the
+state transition~\eqref{eq:hp-state} produces a 4-variable identity;
+squaring each complement produces a 2-variable identity.
+
+\subsection{Non-flexible demand (\texorpdfstring{$\textsc{d}_k$}{D\_k})}
+\label{sec:demand}
+
+\paragraph{Original constraints.}
+\begin{align}
+d^{\mathrm{nfl},k}_{i,t}&=\bar d^{k}_{i,t},
+  &&\text{(demand fixing)}\label{eq:demand-fix}\\
+0\le i^{\mathrm{gri},k}_{i,t}&\le\overline{I}^{k},
+  &&\text{(import bound)}\label{eq:demand-import}
+\end{align}
+
+\paragraph{Equality form.}
+Demand fixing is already an equality.  Import bound:
+$i^{\mathrm{gri},k}_{i,t}+\sigma^{\mathrm{imp},k}_{i,t}
+=\overline{I}^{k}$.
+
+\paragraph{Binaries.} None.
+
+\paragraph{Objective.}
+$w_i$ entry: $+u^{k}_{i,t}$ on $d^{\mathrm{nfl},k}_{i,t}$ (consumer
+utility, already positive in profit convention);
+$-\pi^{k,\mathrm{imp}}_t$ on $i^{\mathrm{gri},k}_{i,t}$ (import cost).
+
+\subsection{Grid export bounds}
+\label{sec:grid-export}
+
+Any module that includes a grid-export variable $e^{\mathrm{gri},k}_{i,t}$
+also has an upper bound
+$e^{\mathrm{gri},k}_{i,t}\le\overline{E}^{k}_i$,
+which in equality form becomes
+$e^{\mathrm{gri},k}_{i,t}+\sigma^{\mathrm{exp},k}_{i,t}
+=\overline{E}^{k}_i$.  This produces one additional RLT identity per
+export-period pair.
+
+%======================================================================
+\section{The CPP reformulation}
+\label{sec:cpp}
+%======================================================================
+
+\subsection{Step 1: equality form in the $x$-space}
+
+For any player $i$ with technology set $\Tech_i$, assemble $A_ix_i=b_i$
+by stacking the rows from each module in Sections~\ref{sec:balance}--\ref{sec:grid-export}.
+The slacked vector $x_i\ge0$ includes all original variables, all inequality
+slacks, and all binary complement slacks.  Write
+\begin{equation}
+\feaseq_i:=\{x_i\ge0:A_ix_i=b_i\}.
+\label{eq:feaseq}
+\end{equation}
+
+\subsection{Step 2: lifting to the $X$-space}
+\label{sec:lifting}
+
+Introduce $X_{ii}\approx x_ix_i^{\top}$.  The
+\emph{RLT~identities} are the diagonal of the squared linear system:
+\begin{equation}
+\feasbar_i:=\bigl\{X_{ii}:\inner{a_{i,j}a_{i,j}^{\top}}{X_{ii}}
+  =b_{i,j}^{2}\;\;\forall j\bigr\}
+\quad\Longleftrightarrow\quad
+\diag\!\bigl(A_iX_{ii}A_i^{\top}\bigr)=b_i\circ b_i,
+\label{eq:rlt}
+\end{equation}
+where $\circ$ denotes the Hadamard (entrywise) product.  For each
+binary index $m\in B_i$, the identity $z_{i,m}-z_{i,m}^{2}=0$ lifts to
+\begin{equation}
+(X_{ii})_{m,m}=z_{i,m}.
+\label{eq:bindiag}
+\end{equation}
+
+\subsection{Step 3: per-player lifted set}
+
+\begin{equation}
+\liftset_i:=\bigl\{(x_i,X_{ii}):
+  x_i\in\feaseq_i,\;X_{ii}\in\feasbar_i,\;
+  (X_{ii})_{m,m}=z_{i,m}\;\forall m\in B_i\bigr\}.
+\label{eq:Fi}
+\end{equation}
+This is purely affine (linear equalities plus the diagonal binary
+identities); it carries no conic constraint.  For players without
+binaries ($B_i=\varnothing$, e.g.\ a pure demand player), $\liftset_i$
+reduces to the linear constraints plus RLT identities alone.
+
+\subsection{Step 4: the CPP}
+
+Assemble the joint matrix from the per-player blocks:
+\[
+Y_S=\begin{pmatrix}1 & x_S^{\top}\\ x_S & X_S\end{pmatrix},
+\qquad X_S=(X_{ij})_{i,j\in S},
+\]
+with $x_S=(x_i)_{i\in S}$ and off-diagonal blocks $X_{ij}\approx
+x_ix_j^{\top}$.  The chain:
+\begin{align}
+\vmip(S)
+&=\max\Bigl\{\textstyle\sum_{i\in S}w_i^{\top}x_i\;:\;
+  (x_i,X_{ii})\in\liftset_i\;\forall i,\;
+  \textstyle\sum_i\Acom_i\xcom_i=0,\;
+  X_S=x_Sx_S^{\top}\Bigr\}
+\label{eq:chain-rank1}\\
+&\le\max\Bigl\{\textstyle\sum_{i\in S}w_i^{\top}x_i\;:\;
+  (x_i,X_{ii})\in\liftset_i\;\forall i,\;
+  \textstyle\sum_i\Acom_i\xcom_i=0,\;
+  \Tr\!\bigl((\Acom)^{\top}\Acom X_S\bigr)=0,\;
+  Y_S\in\CP\Bigr\}
+\label{eq:chain-cpp}\\
+&=\vmip(S).
+\label{eq:chain-eq}
+\end{align}
+
+Line~\eqref{eq:chain-rank1} re-expresses~\eqref{eq:vmip} with the
+rank-one constraint $X_S=x_Sx_S^{\top}$.
+Line~\eqref{eq:chain-cpp} relaxes rank-one to joint completely positive
+membership $Y_S\in\CP$ and adjoins the squared coupling
+$\Tr((\Acom)^{\top}\Acom X_S)=0$.
+Line~\eqref{eq:chain-eq} is Burer's theorem (exactness, verified below).
+
+The CPP is therefore:
+\begin{equation}
+\boxed{
+\vmip(S)=\max_{Y_S}\;\inner{W_S}{Y_S}\quad
+\text{s.t.}\quad
+\begin{aligned}
+&(x_i,X_{ii})\in\liftset_i&&\forall i\in S,\\
+&\textstyle\sum_{i\in S}\Acom_i\xcom_i=0,\\
+&\Tr\!\bigl((\Acom)^{\top}\Acom X_S\bigr)=0,\\
+&Y_S\in\CP.
+\end{aligned}}
+\label{eq:cpp}
+\end{equation}
+
+\paragraph{Objective matrix.}
+Since the objective $\sum_iw_i^{\top}x_i$ is linear,
+\begin{equation}
+W_i=\tfrac{1}{2}\begin{pmatrix}0&w_i^{\top}\\w_i&0\end{pmatrix},
+\qquad\inner{W_i}{Y_i}=w_i^{\top}x_i,
+\qquad W_S=\diag(W_i)_{i\in S}.
+\label{eq:Wmat}
+\end{equation}
+No off-diagonal block in $W_S$: the objective has no inter-player product.
+
+\subsection{Exactness (Burer's theorem)}
+
+\begin{proposition}
+\label{prop:exact}
+The CPP~\eqref{eq:cpp} is an exact reformulation of~\eqref{eq:vmip}:
+the equality~\eqref{eq:chain-eq} holds.
+\end{proposition}
+
+\begin{proof}
+We verify the key assumption of Burer's theorem (Bomze--Gabl,
+Thm.~4), module by module.
+
+\emph{Condition~(a):} The only quadratic constraints are the binary
+identities $z_{i,m}-z_{i,m}^2=0$.  On the slacked feasible set
+$\feaseq_i$, each binary satisfies $z_{i,m}\in[0,1]$ (from
+$z+\sigma=1$, $z,\sigma\ge0$), so
+$z_{i,m}-z_{i,m}^2\ge0$~\checkmark.
+
+\emph{Condition~(b):} The recession cone $L_{\infty}=\{x\ge0:Ax=0\}$.
+Each technology module contributes finite upper bounds on every
+variable: renewable availability, storage capacity, grid import/export
+caps, electrolyzer capacity, heat pump capacity, and fixed demand
+profiles.  In equality form these bounds become
+$x_j+\sigma_j=\bar x_j$ with $\bar x_j>0$, so any $d\in L_{\infty}$
+satisfies $d_j+d_{\sigma_j}=0$ with $d_j,d_{\sigma_j}\ge0$, forcing
+$d_j=0$.  Hence $L_{\infty}=\{0\}$ and condition~(b) is
+vacuous~\checkmark.
+
+For players without binaries ($B_i=\varnothing$), there are no
+quadratic constraints, so condition~(a) is vacuous;
+condition~(b) still holds by boundedness.
+\end{proof}
+
+%======================================================================
+\section{The Lagrangian dual (COP)}
+\label{sec:dual}
+%======================================================================
+
+\subsection{Dualization}
+
+Starting from the CPP~\eqref{eq:cpp}, dualize two constraint families:
+\begin{align*}
+\text{dualize:}\quad
+&Y_S\in\CP &&\rightsquigarrow\; M\in\COP,\\
+&\Tr\!\bigl((\Acom)^{\top}\Acom X_S\bigr)=0
+  &&\rightsquigarrow\; \lambda\in\R;\\
+\text{keep:}\quad
+&(x_i,X_{ii})\in\liftset_i\;\forall i,
+\qquad\textstyle\sum_i\Acom_i\xcom_i=0.
+\end{align*}
+The Lagrangian characteristic function is
+\begin{equation}
+\vlr_S(M,\lambda)=\max_{\substack{(x_i,X_{ii})\in\liftset_i\;\forall i\in S\\
+\sum_{i\in S}\Acom_i\xcom_i=0}}\;
+\inner{W_S+M}{Y_S}-\lambda\,\Tr\!\bigl((\Acom)^{\top}\Acom X_S\bigr).
+\label{eq:lagrangian}
+\end{equation}
+The dual is
+$\min_{M\in\COP,\,\lambda}\vlr_S(M,\lambda)$.
+
+\subsection{Cross-block vanishing}
+
+The off-diagonal blocks $X_{ij}$ ($i\neq j$) are \emph{free}: after
+dualization, no constraint reaches them ($\liftset_i$ touches only
+$X_{ii}$; the linear coupling touches only $\xcom_i$).  A free variable
+with nonzero linear coefficient sends the maximization to $+\infty$;
+finiteness forces:
+
+\begin{lemma}[Finiteness conditions]
+\label{lem:vanish}
+$\vlr_S(M,\lambda)<\infty$ only if, for every $i\neq j$ in $S$:
+\begin{align}
+(M_{ij})_{\mathrm{cc}}&=\lambda\,(\Acom_i)^{\top}\Acom_j,
+\label{eq:fin-cc}\\
+(M_{ij})_{\mathrm{cr}}&=(M_{ij})_{\mathrm{rc}}
+=(M_{ij})_{\mathrm{rr}}=0,
+\label{eq:fin-rest}
+\end{align}
+where the subscripts $\mathrm{c}$,$\mathrm{r}$ refer to the
+coupling/rest partition of the variable indices.
+\end{lemma}
+
+\paragraph{Carrier-wise sparsity.}
+The product $(\Acom_i)^{\top}\Acom_j$ sums over the $R$ coupling rows.
+A row for carrier $k$, period $t$ contributes a nonzero term only if
+\emph{both} players $i$ and $j$ have coupling variables in carrier $k$
+(i.e.\ both participate in the $k$-community balance).  Concretely:
+\begin{itemize}[leftmargin=1.2em]
+\item If $i$ and $j$ share \emph{no} carrier:
+  $(\Acom_i)^{\top}\Acom_j=0$ and $M_{ij}=0$ entirely.
+\item If $i$ and $j$ both participate in carrier $k$: the product has
+  nonzero entries in the rows/columns corresponding to their
+  $k$-coupling variables, summed over the $T$ periods.
+\end{itemize}
+This sparsity is technology-determined: two demand-only players in
+different carriers have zero cross-block.
+
+\subsection{Reduced LPG}
+
+Under the finiteness conditions~\eqref{eq:fin-cc}--\eqref{eq:fin-rest},
+the cross blocks contribute nothing to the value, and
+\begin{equation}
+\boxed{
+\vlr_S(M,\lambda)=\max_{\substack{(x_i,X_{ii})\in\liftset_i\;\forall i\in S\\
+\sum_i\Acom_i\xcom_i=0}}\;
+\sum_{i\in S}\inner{\widetilde W_i}{Y_i},
+\qquad
+\widetilde W_i:=W_i+M_{ii}
+  -\lambda\,(\Acom_i)^{\top}\Acom_i\,\Pi_{\mathrm{cc}},}
+\label{eq:reduced}
+\end{equation}
+where $(\Acom_i)^{\top}\Acom_i$ sits on the coupling--coupling sub-block
+via $\Pi_{\mathrm{cc}}$.  This is a \emph{classical linear production
+game} (affine resource sets, linear objective, one homogeneous coupling)
+with a nonempty core by Owen's theorem.
+
+\paragraph{Owen allocation.}
+The dual of the grand-coalition reduced LPG ($S=\N$) yields multipliers
+$(\mu^{*},\{\nu_i^{*}\})$.  The allocation
+\begin{equation}
+\alpha^{\mathrm{Owen}}_i:=\inner{\nu_i^{*}}{g_i},\qquad i\in\N,
+\label{eq:owen}
+\end{equation}
+lies in the core: $\sum_{i\in S}\alpha^{\mathrm{Owen}}_i
+\ge\vlr_S(M,\lambda)$ for all $S$, with equality at $S=\N$.
+
+%======================================================================
+\section{Main theorem}
+\label{sec:theorem}
+%======================================================================
+
+\begin{theorem}[Core of the mixed-integer community game]
+\label{thm:main}
+Assume:
+\begin{enumerate}[label=\textup{(A\arabic*)}]
+\item \textbf{Zero duality gap} (automatic from boundedness):
+  $\inf_{M\in\COP,\lambda}\vlr_\N(M,\lambda)=\vmip(\N)$.
+\item \textbf{Dual attainment} (instance-dependent hypothesis):
+  the infimum is achieved at some $(M^{*},\lambda^{*})$.
+\end{enumerate}
+Then:
+\begin{enumerate}[label=\textup{(\roman*)}]
+\item \emph{Exact core} (conditional on~\textup{(A2)}):
+  the Owen allocation $\chi:=\alpha^{\mathrm{Owen}}$ at
+  $(M^{*},\lambda^{*})$ satisfies
+  \[
+  \sum_{i\in S}\chi_i\ge\vmip(S)\;\;\forall S\subseteq\N,
+  \qquad\sum_{i\in\N}\chi_i=\vmip(\N).
+  \]
+\item \emph{$\varepsilon$-core} (unconditional): for every
+  $\varepsilon>0$, the Owen allocation at an $\varepsilon$-optimal
+  multiplier satisfies stability and
+  $\vmip(\N)\le\sum_{i\in\N}\chi^{\varepsilon}_i
+  \le\vmip(\N)+\varepsilon$.
+\end{enumerate}
+\end{theorem}
+
+The proof is the composition of Corollary~\ref{cor:upper} (coalition-wise
+upper bound from weak duality) with the Owen core of the reduced LPG
+(Section~\ref{sec:dual}).
+
+\begin{corollary}[Coalition-wise upper bound]
+\label{cor:upper}
+For every $S\subseteq\N$ and every $(M,\lambda)$ with $M\in\COP$
+satisfying~\eqref{eq:fin-cc}--\eqref{eq:fin-rest}:
+$\vlr_S(M,\lambda)\ge\vmip(S)$.
+\end{corollary}
+
+%======================================================================
+\section{Companion identity: per-player lift = convex hull pricing}
+\label{sec:chp}
+%======================================================================
+
+If one lifts only the per-player feasible sets (imposing $Y_i\in\CP_i$
+and $\liftset_i$ block by block) while keeping the linear coupling and
+dropping the squared coupling and joint cone:
+\begin{equation}
+\mathrm{(P)}:\quad
+\max_{\{Y_i\}}\;\sum_{i\in\N}\inner{W_i}{Y_i}
+\quad\text{s.t.}\quad
+\sum_{i\in\N}\Acom_i\xcom_i=0,\quad
+(x_i,X_{ii})\in\liftset_i,\;Y_i\in\CP_i\;\;\forall i,
+\label{eq:chp-lift}
+\end{equation}
+then (P) has the same optimal value and the same community-balance
+multipliers as convex hull pricing:
+\begin{equation}
+\vchp(\N)=\max_{\{x_i\}}\;\sum_{i\in\N}w_i^{\top}x_i
+\quad\text{s.t.}\quad
+\sum_{i\in\N}\Acom_i\xcom_i=0,\;\;
+x_i\in\conv(\feas_i)\;\;\forall i.
+\label{eq:chp}
+\end{equation}
+This follows from the per-player projection
+$\mathrm{proj}_{x_i}\{(x_i,X_{ii})\in\liftset_i,Y_i\in\CP_i\}
+=\conv(\feas_i)$ (Burer at the per-player level).
+
+%======================================================================
+\section{Deferred extensions (future work)}
+\label{sec:deferred}
+%======================================================================
+
+Two additional coupling families from the preprint are deferred:
+
+\paragraph{Reserve adequacy.}
+$r^{\mathrm{sym}}-\sum_{i\in S}\sum_k r^{k,+}_{i,t}\le0$ (per period,
+homogeneous).  This introduces a common variable
+$x_0=(r^{\mathrm{sym}})$ controlled by whichever coalition operates,
+not owned by any player.  The coupling becomes
+$\sum_{i\in S}\Acom_i\xcom_i+A_0x_0=0$, and the storage headroom
+variables $r^{k,\pm}_{i,t}$ join the coupling coordinates.  Cross-block
+vanishing extends to prosumer--common blocks $X_{i0}$ by the same
+mechanism (note~revised, Lemma~4).
+
+\paragraph{Peak penalty.}
+$\sum_{i\in S}\tfrac{1}{\Delta T}(i^{E,\mathrm{mkt}}_{i,t}
+-e^{E,\mathrm{mkt}}_{i,t})-p\le0$ (per period, homogeneous).  Common
+variable $p$ (peak import power); grid-exchange variables become
+coupling coordinates.
+
+Both constraints are homogeneous (RHS$\,=0$), so the LPG structure is
+preserved.  They are excluded here to keep the initial implementation
+focused on the community balance coupling alone.
+
+%======================================================================
+\section{Computational notes}
+\label{sec:comp}
+%======================================================================
+
+\paragraph{Dimension of the lifted matrix.}
+$Y_S$ has dimension $1+\sum_{i\in S}n_i^{\mathrm{eq}}$, where
+$n_i^{\mathrm{eq}}=n_i+(\text{\# inequality slacks in }
+\feas_i)+|B_i|$ is the slacked dimension of player~$i$.  The exact
+count is technology-determined:
+\begin{center}\small
+\begin{tabular}{@{}l c c c@{}}
+\toprule
+Module & Continuous per $t$ & Binaries per $t$ & Ineq.\ slacks per $t$ (approx.)\\
+\midrule
+\textsc{res} & 2 & 0 & 1 \\
+$\textsc{ess}_k$ & 3 & 0 & 3 \\
+\textsc{els} ($N_s=6$) & $3+N_s=9$ & $5+N_s=11$ & $\sim 2N_s+8=20$ \\
+\textsc{hp} & 4 & 3 & $\sim 5$ \\
+$\textsc{d}_k$ / $\textsc{fl}_k$ & 2 & 0 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+For the standard 6-player community ($T=24$):
+$\sum_in_i^{\mathrm{eq}}\approx2000$--$2500$ (the precise count depends
+on wrap-around and downtime constraints), giving $Y_S$ of dimension
+$\sim\!2500$.
+
+\paragraph{Technology modularity.}
+Adding a player with technology set $\Tech_i$ increases the dimension by
+$n_i^{\mathrm{eq}}$ (determined by $\Tech_i$ alone) and adds one block
+to $Y_S$.  The coupling matrix $\Acom$ gains columns for the new
+player's coupling variables.  No existing block is modified.  Scaling
+from 6 to 30 players is therefore mechanical: assemble the per-player
+modules and stack.
+
+\paragraph{Cutting-plane algorithm.}
+The COP dual is solved by outer approximation.
+Section~\ref{sec:algorithm} presents the baseline algorithm
+(Guo~et~al., 2024) and the enhanced set-copositive version
+(Gabl~\&~Anstreicher, 2025) that we adopt.
+
+%======================================================================
+\section{Algorithm design: cutting-plane outer approximation}
+\label{sec:algorithm}
+%======================================================================
+
+\subsection{The CPP in CPOPT standard form}
+\label{sec:cpopt}
+
+Both algorithms operate on the same standard-form program.  Define the
+joint homogenised variable
+\begin{equation}
+y:=\begin{pmatrix}y_0\\x_S\end{pmatrix}\in\R^{1+n},
+\qquad y_0=1,\quad n=\textstyle\sum_{i\in S}n_i^{\mathrm{eq}},
+\label{eq:homog-y}
+\end{equation}
+and the lifted matrix $Y=yy^{\top}\in\R^{(1+n)\times(1+n)}$, relaxed
+to $Y\in\mathrm{CP}^{1+n}$.  Every affine constraint of the
+CPP~\eqref{eq:cpp} becomes a linear constraint on~$Y$:
+
+\begin{enumerate}[label=(\alph*),leftmargin=2em]
+\item \emph{Per-player linear constraints}
+  $A_ix_i=b_i$ (from $\feaseq_i$): homogenise as
+  $\bar A_iy=0$ with $\bar A_i=[-b_i\;|\;0\;\cdots\;A_i\;\cdots\;0]$,
+  giving first-column constraints $\bar A_iYe_0=0$.
+
+\item \emph{Per-player RLT identities}
+  $\inner{a_{i,j}a_{i,j}^{\top}}{X_{ii}}=b_{i,j}^{2}$: the squared
+  form of~(a), equivalently
+  $\inner{\bar a_{i,j}\bar a_{i,j}^{\top}}{Y}=0$.
+
+\item \emph{Binary diagonal}
+  $(X_{ii})_{m,m}=z_{i,m}$ ($m\in B_i$): $Y_{m,m}-Y_{0,m}=0$.
+
+\item \emph{Linear coupling}
+  $\sum_i\Acom_i\xcom_i=0$: homogenise as
+  $\bar A^{\mathrm{cpl}}y=0$.
+
+\item \emph{Squared coupling}
+  $\Tr((\Acom)^{\top}\Acom X_S)=0$: the squared form of (d),
+  $\inner{\bar a^{\mathrm{cpl}}_r(\bar a^{\mathrm{cpl}}_r)^{\top}}{Y}=0$.
+
+\item \emph{Normalisation} $Y_{00}=1$.
+\end{enumerate}
+
+Collecting as $B_l\bullet Y=b_l$, $l=1,\dots,m$:
+\begin{equation}
+\boxed{
+\mathrm{CPOPT}:\quad
+\min_{Y}\;C\bullet Y
+\quad\text{s.t.}\quad
+B_l\bullet Y=b_l,\;l=1,\dots,m,\qquad
+Y\in\mathrm{CP}^{1+n},}
+\label{eq:cpopt}
+\end{equation}
+with $C=-W_S$ (sign flip: CPOPT minimises, our game maximises profit).
+Its conic dual is:
+\begin{equation}
+\mathrm{COPOPT}:\quad
+\max_{v\in\R^m}\;b^{\top}v
+\quad\text{s.t.}\quad
+S:=C-\textstyle\sum_{l=1}^{m}v_lB_l\in\mathrm{COP}_{1+n}.
+\label{eq:copopt}
+\end{equation}
+Both algorithms solve COPOPT by outer-approximating the copositive
+constraint on~$S$.  They differ in the separation oracle.
+
+%----------------------------------------------------------------------
+\subsection{Baseline: Guo~et~al.\ cutting-plane (MILPCOP)}
+\label{sec:guo}
+%----------------------------------------------------------------------
+
+\paragraph{Master problem.}
+Remove $S\in\mathrm{COP}_{1+n}$ from~\eqref{eq:copopt} and replace it
+by an outer approximation $\mathcal{C}\supseteq\mathrm{COP}_{1+n}$,
+initialised with:
+\begin{enumerate}[leftmargin=1.6em]
+\item Diagonal nonnegativity: $S_{jj}\ge0\;\forall j$.
+\item SOCP (DNN) strengthening: decompose $S=V+N$, $N\ge0$, with
+  $2\times2$ PSD relaxation $V_{jj}\ge0$,
+  $V_{jj}V_{kk}\ge V_{jk}^{2}$ for all $j<k$ (rotated SOC).
+\end{enumerate}
+Solve the master as an SOCP (or LP if the DNN part is omitted).
+
+\paragraph{Separation oracle: MILPCOP (Anstreicher, 2021).}
+Given candidate $\bar S$, test $\bar S\in\mathrm{COP}_{1+n}$:
+\begin{equation}
+\mathrm{MILPCOP}:\quad
+\max_{\gamma,u,z}\;\gamma
+\quad\text{s.t.}\quad
+\bar S\,u\le-\gamma\,e+\nu\circ(e-z),\;
+0\le\gamma,\;
+0\le u\le z,\;
+z\in\{0,1\}^{1+n},\;
+e^{\top}z\ge\theta,
+\label{eq:milpcop-guo}
+\end{equation}
+with big-$M$ coefficients
+$\nu_j=1+\sum_{k\neq j}\max(0,\bar S_{jk})$ and $\theta=2$ (since
+$\diag(S)\ge0$ is enforced).
+
+\emph{Certificate:} $\gamma^{*}=0\Leftrightarrow\bar S\in
+\mathrm{COP}_{1+n}$.  If $\gamma^{*}>0$, the witness $\bar u\ge0$
+satisfies $\bar u^{\top}\bar S\bar u<0$; add cut
+$\bar u^{\top}S\bar u\ge0$ to the master.
+
+\paragraph{Iteration.}
+Repeat master$\to$separation$\to$cut until $\gamma^{*}=0$ or
+time/iteration limit.  The master objective is non-increasing.
+
+\paragraph{Limitation.}
+The witness $\bar u$ in~\eqref{eq:milpcop-guo} is constrained only by
+$u\ge0$ --- it need not satisfy the energy balance, SOC transitions, or
+any other structure of the Burer lift.  In practice this produces
+\emph{wasted cuts}: valid inequalities that do not improve the bound,
+because their witness vector has no relation to the primal feasible
+region.  Guo~et~al.\ report convergence in $\sim\!60$--$1600$
+iterations for $n_c\le57$ but $>3000$ iterations (often without
+convergence) for $n_c\ge113$.
+
+%----------------------------------------------------------------------
+\subsection{Enhanced: Gabl~\&~Anstreicher set-copositive cutting-plane
+(MILPCOP($K$))}
+\label{sec:ga}
+%----------------------------------------------------------------------
+
+The key modification: replace $\mathrm{COP}_{1+n}$ with the
+\emph{set-copositive cone} $\mathrm{COP}(K)$, where
+$K=\{y\ge0:\mathcal{A}y=0\}$ encodes the first-order equality
+structure of the Burer lift.  This restricts the separation oracle to
+witnesses that respect the problem structure.
+
+\subsubsection{Constraint partition: what goes into $K$ vs.\ CPOPT}
+\label{sec:partition}
+
+The CPOPT constraints fall into two classes:
+\begin{enumerate}[label=\textbf{(\Alph*)},leftmargin=2.4em]
+\item \textbf{First-order (linear in $y$):}  $\bar a_l^{\top}y=0$.
+  These are homogenised versions of the original linear equalities
+  $A_ix_i=b_i$ (per-player) and
+  $\sum_i\Acom_i\xcom_i=0$ (coupling), plus normalisation $y_0=1$.
+  \emph{These define the ground cone~$K$.}
+\item \textbf{Lifted (quadratic in $y$, linear in $Y$):}
+  RLT identities $\inner{\bar a\bar a^{\top}}{Y}=0$, binary diagonals
+  $Y_{mm}-Y_{0m}=0$, squared coupling
+  $\inner{\bar a^{\mathrm{cpl}}_r(\bar a^{\mathrm{cpl}}_r)^{\top}}{Y}=0$.
+  These are CPOPT constraints but do \emph{not} enter~$K$.
+\end{enumerate}
+
+\begin{remark}[Why lifted constraints stay out of $K$]
+\label{rem:lifted-not-K}
+For rank-one $Y=yy^{\top}$ with $y\in K$, every Class~B constraint
+is automatically satisfied: RLT from $\bar a^{\top}y=0$, binary
+diagonal from $y_m\in\{0,1\}$ (encoded by $y_m+\sigma_m=1$ in~$K$
+plus the rank-one property), squared coupling from the linear coupling.
+Class~B constraints are redundant on rank-one solutions; they tighten
+the relaxation only when $Y\neq yy^{\top}$.  Adding them to~$K$ would
+shrink~$K$, enlarge $\mathrm{COP}(K)$, and \emph{weaken} the outer
+approximation.
+\end{remark}
+
+\paragraph{The CPOPT constraint list.}
+\begin{center}\small
+\begin{tabular}{@{}l l l@{}}
+\toprule
+Constraint & Class & Count\\
+\midrule
+Per-player linear $\bar A_iy=0$ & A ($\to K$) & $\sum_i p_i$\\
+Coupling $\bar A^{\mathrm{cpl}}y=0$ & A ($\to K$) & $R=3T$\\
+Normalisation $y_0=1$ & A ($\to K$) & $1$\\[2pt]
+Per-player RLT $\inner{\bar a_{i,j}\bar a_{i,j}^{\top}}{Y}=0$
+  & B (CPOPT only) & $\sum_i p_i$\\
+Binary diagonal $Y_{mm}-Y_{0m}=0$ & B (CPOPT only) & $\sum_i|B_i|$\\
+Squared coupling
+  $\inner{\bar a^{\mathrm{cpl}}_r(\bar a^{\mathrm{cpl}}_r)^{\top}}{Y}=0$
+  & B (CPOPT only) & $R=3T$\\
+\bottomrule
+\end{tabular}
+\end{center}
+Total: $m=2(\sum_ip_i+R)+\sum_i|B_i|+1$.
+
+\subsubsection{The ground cone $K$}
+\label{sec:ground-cone}
+
+Collect the Class~A rows into
+$\mathcal{A}\in\R^{p\times(1+n)}$:
+\begin{equation}
+K:=\bigl\{y\in\R^{1+n}_+:\mathcal{A}\,y=0\bigr\}.
+\label{eq:ground-cone}
+\end{equation}
+$\mathcal{A}$ stacks:
+\begin{enumerate}[leftmargin=1.6em]
+\item \emph{Per-player first-order equalities} $\bar A_i$:
+  energy balance, SOC transitions, device coupling, state selection,
+  power-consumption coupling, demand fixing, bound slacks
+  ($x+\sigma=\bar x$), binary complements ($z+\sigma^{z}=1$)
+  --- \textbf{block-diagonal};
+\item \emph{Coupling} $\bar A^{\mathrm{cpl}}$: the $R=3T$
+  community-balance rows --- \textbf{only inter-block rows};
+\item \emph{Normalisation} $e_0^{\top}y=1$.
+\end{enumerate}
+Row count: $p=\sum_i p_i+R+1$.  Extremely sparse (item~1
+block-diagonal, item~2 at most $|\N|$ nonzeros per row).
+
+\subsubsection{The set-copositive COPOPT}
+
+Replace $\mathrm{COP}_{1+n}$ in~\eqref{eq:copopt} by
+$\mathrm{COP}(K)=\{M\in\mathcal{S}^{1+n}:y^{\top}My\ge0\;\forall y\in K\}$:
+\begin{equation}
+\mathrm{COPOPT}(K):\quad
+\max_{v\in\R^m}\;b^{\top}v
+\quad\text{s.t.}\quad
+S:=C-\textstyle\sum_{l=1}^{m}v_lB_l\in\mathrm{COP}(K).
+\label{eq:copopt-K}
+\end{equation}
+Since $\mathrm{COP}_{1+n}\subset\mathrm{COP}(K)$, the feasible set
+is \emph{larger}, but Gabl~\&~Anstreicher Lemma~1 ensures
+$\mathrm{val}(\mathrm{COPOPT}(K))=\mathrm{val}(\mathrm{COPOPT})$
+whenever the CPOPT has a rank-one optimum (guaranteed by Burer's
+theorem and boundedness).
+
+\paragraph{Strong duality.}
+By Cifuentes--Dey--Xu (2025, Thm.~3), boundedness of $\feas_i$ implies
+$\mathrm{val}(\mathrm{CPOPT})=\mathrm{val}(\mathrm{COPOPT})=\vmip(S)$.
+
+\paragraph{Dual variable interpretation.}
+$v=(v_1,\dots,v_m)$ maps to:
+$v_l$ for per-player constraint $\leftrightarrow\nu_{i,j}$;
+$v_l$ for coupling $\leftrightarrow\mu_r$ (community price);
+$v_l$ for RLT $\leftrightarrow$ (RLT dual);
+$v_l$ for squared coupling $\leftrightarrow\lambda_r$;
+$v_l$ for binary diagonal $\leftrightarrow\delta_m$.
+
+\subsubsection{MILPCOP($K$) separation oracle}
+\label{sec:separation}
+
+Given candidate $\bar S$ from the master, test
+$\bar S\in\mathrm{COP}(K)$:
+\begin{equation}
+\boxed{
+\mathrm{MILPCOP}(K):\quad
+\begin{aligned}
+\max_{\gamma,u,z,\lambda}\quad&\gamma\\
+\text{s.t.}\quad
+&\bar S\,u+\mathcal{A}^{\top}\lambda
+  \le-\gamma\,e+\nu\circ(e-z),\\
+&\mathcal{A}\,u=0,\\
+&0\le\gamma\le\alpha\,e^{\top}u,\\
+&0\le u\le z,\\
+&z\in\{0,1\}^{1+n},
+\end{aligned}}
+\label{eq:milpcop-K}
+\end{equation}
+where $\lambda\in\R^{p}$ are dual multipliers for
+$\mathcal{A}u=0$, $\nu_j=1+\sum_{k\neq j}\max(0,\bar S_{jk})$,
+$\alpha>0$.
+
+\emph{Certificate:} $\gamma^{*}=0\Leftrightarrow
+\bar S\in\mathrm{COP}(K)$ (Gabl~\&~Anstreicher, Lemma~2).
+If $\gamma^{*}>0$, the witness $\bar u\in K$ satisfies
+$\bar u^{\top}\bar S\bar u<0$; add cut $\bar u^{\top}S\bar u\ge0$.
+
+\subsubsection{What changes from Guo~et~al.\ to Gabl~\&~Anstreicher}
+
+\begin{center}\small
+\begin{tabular}{@{}p{0.22\textwidth} p{0.34\textwidth} p{0.34\textwidth}@{}}
+\toprule
+& Guo et al.\ (\S\ref{sec:guo}) & Gabl \& Anstreicher (\S\ref{sec:ga})\\
+\midrule
+Cone & $\mathrm{COP}_{1+n}$ & $\mathrm{COP}(K)$, $K=\{y\ge0:\mathcal{A}y=0\}$\\
+Separation MILP & \eqref{eq:milpcop-guo}: $u\ge0$ only
+  & \eqref{eq:milpcop-K}: $u\ge0$ \emph{and} $\mathcal{A}u=0$\\
+Extra variables & --- & $\lambda\in\R^{p}$ (dual of $\mathcal{A}u=0$)\\
+Cut witness & Any $u\ge0$ with $u^{\top}\bar Su<0$
+  & Only $u\in K$ with $u^{\top}\bar Su<0$\\
+Cut relevance & May violate energy bal., SOC, etc.\
+  & Respects all first-order structure\\
+Iteration count & $\sim\!1000$+ (Guo, Table~6--7)
+  & Fewer (structure-aware cuts)\\
+Optimality & $S^{*}\in\mathrm{COP}_{1+n}$
+  & $S^{*}\in\mathrm{COP}(K)$ (same opt.\ value by Lemma~1)\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{remark}[Relationship to note~revised]
+In the note~revised framework
+(Section~\ref{sec:dual}), the squared coupling is dualised with
+multiplier~$\lambda$, and cross-block vanishing gives the reduced LPG.
+In the Gabl~\&~Anstreicher framework, the squared coupling is a Class~B
+CPOPT constraint, and cross-block vanishing is a structural property of
+the optimal $S^{*}$ but is not needed algorithmically.  The two are
+equivalent by strong duality; we implement the latter for the superior
+separation oracle.
+\end{remark}
+
+%----------------------------------------------------------------------
+\subsection{Master problem initialisation}
+\label{sec:master-init}
+%----------------------------------------------------------------------
+
+The master replaces $S\in\mathrm{COP}(K)$ by an outer approximation
+$\mathcal{C}\supseteq\mathrm{COP}(K)$:
+\begin{enumerate}[leftmargin=1.6em]
+\item \emph{Diagonal nonnegativity}: $S_{jj}\ge0\;\forall j$.
+\item \emph{$2\times2$ SDD constraints} (SOCP): for all $j<k$,
+  \begin{equation}
+  \bar S_{jk}^{2}\le S_{jj}\,S_{kk},\quad \bar S_{jk}\ge S_{jk}.
+  \label{eq:sdd}
+  \end{equation}
+\item \emph{DNN decomposition} (optional): $V+N=S$, $N\ge0$,
+  $V_{jj}\ge0$, $V_{jj}V_{kk}\ge V_{jk}^{2}$.
+\end{enumerate}
+
+%----------------------------------------------------------------------
+\subsection{The full algorithm (pseudocode)}
+\label{sec:full-algo}
+%----------------------------------------------------------------------
+
+\begin{equation}
+\boxed{
+\begin{aligned}
+&\textbf{Algorithm: Set-Copositive Outer Approximation for the Community COP}\\
+&\text{---}\\
+&\textbf{Input:}\; (C,\{B_l,b_l\},\mathcal{A});\;
+  \varepsilon_{\gamma}>0;\;K_{\max},T_{\max}.\\
+&\textbf{Output:}\; v^{*},\;S^{*},\;\chi.\\[4pt]
+&1.\;\textbf{Initialise.}\;
+  \mathcal{C}\leftarrow\{\diag(S)\ge0\}\cap\eqref{eq:sdd}.\\
+&2.\;\textbf{For } k=0,1,2,\dots:\\
+&\quad 2a.\;\text{Solve master }
+  \mathrm{COPOPT}(K)|_{S\in\mathcal{C}}
+  \;\to\;(v^{k},S^{k}).\\
+&\quad 2b.\;\text{Compute } \nu_j\leftarrow
+  1+\textstyle\sum_{l\neq j}\max(0,S^{k}_{jl}).\\
+&\quad 2c.\;\text{Solve }\mathrm{MILPCOP}(K)
+  \text{ for }\bar S=S^{k}
+  \;\to\;(\gamma^{k},u^{k},z^{k},\lambda^{k}).\\
+&\quad 2d.\;\textbf{If } \gamma^{k}\le\varepsilon_{\gamma}:\;
+  v^{*}\!\leftarrow v^{k};\;S^{*}\!\leftarrow S^{k};\;
+  \textbf{go to 3.}\\
+&\quad 2e.\;\text{Add cut }(u^{k})^{\top}S\,u^{k}\ge0
+  \text{ to }\mathcal{C}.\\
+&\quad 2f.\;\textbf{If } k\ge K_{\max}\text{ or time}\ge T_{\max}:\;
+  \text{return }v^{k}\text{ as }\varepsilon\text{-optimal.}\\
+&3.\;\textbf{Extract allocation.}\\
+&\quad \mu^{*}_r\leftarrow v^{*}_l\text{ for coupling row }r
+  \quad\text{(community prices)}.\\
+&\quad \nu^{*}_{i,j}\leftarrow v^{*}_l\text{ for per-player row }j
+  \text{ of player }i.\\
+&\quad \chi_i\leftarrow\textstyle\sum_j\nu^{*}_{i,j}\,b_{i,j}
+  \quad\forall i\in\N
+  \quad\text{(Owen allocation)}.
+\end{aligned}}
+\label{eq:algorithm}
+\end{equation}
+
+\subsection{Allocation extraction}
+\label{sec:allocation}
+
+At termination, the Owen allocation is:
+\begin{equation}
+\chi_i=\inner{\nu_i^{*}}{g_i}=
+\textstyle\sum_j\nu^{*}_{i,j}\,b_{i,j},
+\qquad i\in\N,
+\label{eq:allocation-extract}
+\end{equation}
+where $\nu_i^{*}$ are the duals of the per-player constraints
+(Class~A, item~1 of $\mathcal{A}$) and $g_i=(b_{i,j})$ the
+right-hand sides.  The community prices $\mu^{*}$ (duals of the
+coupling rows) give the internal energy prices.
+
+If the algorithm terminates at an $\varepsilon$-optimal iterate,
+$\chi$ is an $\varepsilon$-core allocation
+(Theorem~\ref{thm:main}(ii)).
+
+\subsection{Exploiting sparsity}
+\label{sec:sparsity}
+
+MILPCOP($K$)~\eqref{eq:milpcop-K} has $1+n$ binary variables $z$, but
+$\mathcal{A}u=0$ with block-diagonal $\mathcal{A}$ forces strong
+structural restrictions:
+
+\begin{itemize}[leftmargin=1.2em]
+\item \emph{Per-player nullspace.}  Within block~$i$,
+  $\bar A_iu_i=0$ with $u_i\ge0$ restricts $u_i$ to the nullspace of
+  $\bar A_i$ intersected with the nonneg orthant.  For a demand-only
+  player ($\textsc{d}_k$), $\bar A_i$ nearly pins all variables, so
+  the nullspace dimension is very small.
+\item \emph{Coupling links are few.}  Only $3T$ coupling rows span
+  blocks (vs.\ $n\sim2500$ columns).  The effective degrees of freedom
+  are the per-player nullspace dimensions plus the coupling slack.
+\item \emph{Preprocessing.}  Before solving MILPCOP($K$), compute the
+  nullspace dimension of $\bar A_i$ for each block; fix $z_j=0$ for
+  indices $j$ that cannot participate in any nullspace vector.
+\end{itemize}
+
+\subsection{Progressive scaling strategy}
+\label{sec:scaling}
+
+\begin{enumerate}[leftmargin=1.6em]
+\item \emph{Phase~1 (validation):} 2--3 players, $T=4$--$8$.
+  $n_c\le100$.  Verify against known $\vmip$ values.
+\item \emph{Phase~2 (6-player):} Full model, $T=24$.
+  $n_c\sim2500$.  Exploit sparsity; accept $\varepsilon$-core.
+\item \emph{Phase~3 (scale-up):} 15--30 players, $T=24$.
+  Block-wise preprocessing; parallel separation.
+\end{enumerate}
+
+\end{document}

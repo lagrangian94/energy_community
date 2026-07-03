@@ -1,0 +1,133 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+======================================================================
+Building CPOPT: FULL 6-player instance (T=24)
+======================================================================
+[CPOPTBuilder] Building SCIP model ...
+wrote problem to file /tmp/lem_cop.mps
+[CPOPTBuilder] Exported MPS to /tmp/lem_cop.mps
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+Read MPS format model from file /tmp/lem_cop.mps
+Reading time = 0.00 seconds
+LocalEnergyMarket: 1250 rows, 1272 columns, 5133 nonzeros
+[CPOPTBuilder] Gurobi model: 1272 vars, 1250 constrs
+[CPOPTBuilder] Solving MIP with Gurobi ...
+Set parameter OutputFlag to value 1
+Gurobi Optimizer version 12.0.1 build v12.0.1rc0 (linux64 - "Ubuntu 24.04.1 LTS")
+
+CPU model: AMD Ryzen 9 5900X 12-Core Processor, instruction set [SSE2|AVX|AVX2]
+Thread count: 12 physical cores, 24 logical processors, using up to 24 threads
+
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+Optimize a model with 1250 rows, 1272 columns and 5133 nonzeros
+Model fingerprint: 0xa56f342c
+Variable types: 936 continuous, 336 integer (336 binary)
+Coefficient statistics:
+  Matrix range     [1e-02, 2e+01]
+  Objective range  [5e-02, 1e+02]
+  Bounds range     [2e-01, 2e+01]
+  RHS range        [1e-01, 1e+01]
+Found heuristic solution: objective -7.1682667
+Presolve removed 573 rows and 559 columns
+Presolve time: 0.01s
+Presolved: 677 rows, 713 columns, 2441 nonzeros
+Found heuristic solution: objective -1380.206055
+Variable types: 387 continuous, 326 integer (314 binary)
+
+Root relaxation: objective -2.350233e+03, 473 iterations, 0.00 seconds (0.00 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -2350.2325    0   23 -1380.2061 -2350.2325  70.3%     -    0s
+H    0     0                    -2347.200343 -2350.2325  0.13%     -    0s
+*    0     0               0    -2349.659775 -2349.6598  0.00%     -    0s
+
+Cutting planes:
+  Gomory: 7
+  Implied bound: 4
+  MIR: 14
+  Flow cover: 25
+  Relax-and-lift: 5
+
+Explored 1 nodes (523 simplex iterations) in 0.02 seconds (0.02 work units)
+Thread count was 24 (of 24 available processors)
+
+Solution count 4: -2349.66 -2347.2 -1380.21 -7.16827 
+No other solutions better than -2349.66
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective -2.349659774774e+03, best bound -2.349659774774e+03, gap 0.0000%
+[CPOPTBuilder] Gurobi obj = -2349.659775, v^MIP = 2349.659775
+[CPOPTBuilder] Original: 1272 vars (336 binary), 1250 constrs
+[CPOPTBuilder] CPP-ineq form: n_orig=1272, nc=1273 (no slacks lifted)
+[CPOPTBuilder] CPP-ineq: 675 equalities, 1319 linear inequalities, 408 diagonal bounds
+[CPOPTBuilder] Coupling constraints: 72
+[CPOPTBuilder] Homogenised A: (675, 1273)
+[CPOPTBuilder] Homogenised inequalities: 1319
+[CPOPTBuilder] Objective w_profit: 379 nonzeros, range=[-97.630000, 97.630000]
+[CPOPTBuilder] CPOPT constraints: 1686
+  Class A (first-order): 675
+  Class B RLT: 675
+  Class B binary diag: 336
+[CPOPTBuilder] CPOPT inequalities: 1727 (linear 1319, diagonal bounds 408)
+
+nc=1273, n_orig=1272, n_slacked=1272
+Binaries: 336
+Equality rows: 675
+v^MIP = 2349.6598
+[debug] MOSEK solver log -> copositive/mosek_6player_cppineq.log (tail -f to watch live)
+
+======================================================================
+DNN relaxation of CPOPT via MOSEK Fusion
+  nc=1273, CPOPT constraints=1686, cone=DNN (PSD + nonneg)
+======================================================================
+
+[debug] problem dimensions:
+[debug]   nc (matrix side)      = 1273
+[debug]   PSD variable entries  = 1,620,529  (ON)
+[debug]   nonneg constraint     = ON
+[debug]   equality  rows B_l=b_l = 1686
+[debug]   inequality rows B_l<=b = 1727
+[debug]   C nnz                  = 758
+[debug]   time limit             = 600s
+Adding 1686 constraints  B_l . Y = b_l ...
+[debug]   ... 500/1686 equalities added (2.7s)
+[debug]   ... 1000/1686 equalities added (5.4s)
+[debug]   ... 1500/1686 equalities added (8.2s)
+Adding 1727 inequalities  B_l . Y <= b_l ...
+Model built in 19.5s. Solving ...
+Problem
+  Name                   : DNN_relaxation  
+  Objective sense        : minimize        
+  Type                   : CONIC (conic optimization problem)
+  Constraints            : 1623943         
+  Affine conic cons.     : 0               
+  Disjunctive cons.      : 0               
+  Cones                  : 0               
+  Scalar variables       : 1               
+  Matrix variables       : 1 (scalarized: 810901)
+  Integer variables      : 0               
+
+Optimizer started.
+Presolve started.
+Linear dependency checker started.
+Linear dependency checker terminated.
+Eliminator started.
+Freed constraints in eliminator : 0
+Eliminator terminated.
+Eliminator - tries                  : 1                 time                   : 0.00            
+Lin. dep.  - tries                  : 1                 time                   : 0.30            
+Lin. dep.  - primal attempts        : 1                 successes              : 1               
+Lin. dep.  - dual attempts          : 0                 successes              : 0               
+Lin. dep.  - primal deps.           : 0                 dual deps.             : 0               
+Presolve terminated. Time: 0.47    
