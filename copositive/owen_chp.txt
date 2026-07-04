@@ -1,0 +1,399 @@
+
+\subsection{Profit Allocation for MECG with Lagrangian Relaxation}
+\tableofcontents[currentsubsection]
+\begin{frame}
+\frametitle{Relation to our approach}
+\begin{proposition}
+    Owen solution $\sigma_j$ allocation yields \emph{weak}-$\epsilon$-core $\epsilon_{LR}$ which is bounded by following inequality:
+    \begin{align*}
+        \epsilon_{LR} = \frac{v_{LR}(N;\lambda)-v(N)}{n} \leq O\left (\frac{|T|}{n}\right)
+    \end{align*}
+    which is decreasing in the community size $n$
+\end{proposition}
+\emph{Proof sketch}
+\begin{enumerate}
+    \item $x\in Conv(\mathcal{X})=\prod_{j=1}^{n} Conv(\mathcal{X}_{j})$ by decomposable structure
+    \item Using \emph{Shapley-Folkman lemma}, 
+    $v_{LR}(N;\lambda)-v(N) \leq (3|T|)\cdot max_{j}\delta_{j}$, where $\delta_{j}$ is the \emph{Starr inner radius} of $\mathcal{X}_{j}$, which is irrelevant to the community size $n$
+\end{enumerate}
+
+\textcolor{Mahogany}{Policy implication: weak-core sense에선 $\omega_{LR}$을 커뮤니티 존속에 필요한 subsidy로 해석. 그 보조금은 duality gap이고, 만약 그걸 \textcolor{Mahogany}{균등}하게 커뮤니티 크기로 나눠서 개별 보조금으로 지급하는 rule을 사용 시, 커뮤니티가 커질수록 개별 보조금은 0으로 수렴한다.}\\
+ 핵심 성질: $\delta$는 (duality gap) time horizon과 개별 플레이어의 최대 non-convexity에만 bound됨
+\end{frame}
+
+\begin{frame}
+\frametitle{Owen vs. Price-based Allocation}
+    Owen allocation: $\sigma_{j}^{*}$ $\longleftrightarrow$ CHP allocation $\chi^{CHP}$: $\pi^{chp}\cdot x^{MIP}$ (actual MIP dispatch)
+    \begin{itemize}
+        \item Owen allocatoin은 회계적으로 불가능한 allocation. 그래서 이걸 $\sigma_{j}^{*}-\epsilon_{LR}(=\frac{v_{LR}-v}{n})$로 \textbf{균등}하게 차감하면 현실적으로 가능한 allocation으로 만들 수 있음.
+        \item CHP allocation always satisfies budget-balancedness
+        \item[-] $\sigma_{j}-\chi_{j}^{CHP}=:\Delta_{j}$: lost money from 'nonconvexity'
+        \item[ ] i.e., $\chi_{j}^{CHP}=\sigma_{j}-\Delta_{j}$ (비균등)
+        \item[-] $\sum_{j\in S}\chi_{j}^{CHP} \geq v(S)-\epsilon |S|\;\forall S$ 임.
+        \item[-] CHP allocation은 Owen allocation에서 $\Delta_{j}$만큼 \textbf{불균등}하게 차감해서 준 rule로 볼 수 있음.
+        \item[ ] 일반적으로 전해조같은 nonconvexity를 가지고 있는 프로슈머가 더 손해를 봄.
+    \end{itemize}
+    일종의 Fairness discussion.
+\end{frame}
+
+\subsection{Core Existence}
+\tableofcontents[currentsubsection]
+%% ================================================================
+%% NEW FRAMES — append after the "Owen vs. Price-based Allocation" frame.
+%% Theme/colors/newcommands inherited from the existing deck.
+%% English for definitions/propositions; Korean for intuition.
+%% ================================================================
+ 
+%% --- Macros used below (from the note's preamble). Safe to keep here,
+%%     or move to your deck's preamble; \providecommand avoids clashes. ---
+\providecommand{\CP}{\mathcal{C}^{*}}
+\providecommand{\COP}{\mathcal{C}}
+\providecommand{\R}{\mathbb{R}}
+\providecommand{\inner}[2]{\langle #1, #2 \rangle}
+\providecommand{\Tr}{\operatorname{Tr}}
+\providecommand{\conv}{\operatorname{conv}}
+\providecommand{\vmip}{v^{\mathrm{MIP}}}
+\providecommand{\vchp}{v^{\mathrm{CHP}}}
+\providecommand{\vlr}{v^{\mathrm{LR}}}
+\providecommand{\xcom}{x^{\mathrm{cpl}}}
+\providecommand{\xrest}{x^{\mathrm{rest}}}
+\providecommand{\Acom}{A^{\mathrm{cpl}}}
+\providecommand{\Azero}{A_{0}}
+\providecommand{\feas}{\mathcal{X}}
+\providecommand{\liftset}{\mathcal{F}}
+\providecommand{\xcommon}{x_0}
+ 
+%% ----------------------------------------------------------------
+%% S0: Equality form and the lifted (x, X) space — binary-centric
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{Equality form and the lifted space $(x_{i}, X_{ii})$}
+\footnotesize
+\medskip
+\textbf{Step 1 --- equality form in the $x$-space.} 각 binary $z\in\{0,1\}$를 slack $\sigma\ge0$로 등식화:
+\begin{align*}
+z\in\{0,1\}
+\ \Longleftrightarrow\
+\underbrace{z-z^{2}=0}_{\text{quadratic}},\ z\le1
+\ \Longleftrightarrow\
+\underbrace{z-z^{2}=0}_{\text{quadratic}},\ \underbrace{z+\sigma=1,\ z,\sigma\ge0}_{\text{linear}}.
+\end{align*}
+나머지 부등식도 nonnegative slack으로 등식화하면, \emph{선형} 부분이 $x$-공간의 집합을 정의:
+\begin{align*}
+\feaseq_{i}:=\big\{x_{i}\ge0:\ A_{i}x_{i}=b_{i}\big\}
+\qquad (A_{i}x_{i}=b_{i}\text{ 는 slack identity } z+\sigma=1\text{ 포함}).
+\end{align*}
+남은 비선형성은 binary identity $z-z^{2}=0$ 뿐이다.
+ 
+\medskip
+\textbf{Step 2 --- lift to the $X$-space.} $X_{ii}$가 $x_{i}x_{i}^{\top}$를 대신하게 하고, 각 등식 행을 제곱해 올린다.
+binary identity는 \emph{대각} 조건으로 환원:
+\begin{align*}
+z_{i,m}-z_{i,m}^{2}=0\ \xrightarrow{\ \text{lift}\ }\ Z_{i}=z_{i},
+\qquad Z_{i,m}:=(X_{ii})_{mm}\quad(m\in B_{i}),
+\end{align*}
+즉 $X_{ii}$의 binary 대각 성분 $Z_{i}$가 binary 변수 $z_{i}$와 같아진다 ($z_{i,m}^{2}\!\to\!(X_{ii})_{mm}$).
+ 
+\medskip
+\begin{itemize}
+    \item[$\Rightarrow$] 두 조건을 묶으면 per-player lifted set은 \emph{순수 affine} (conic 제약 없음):
+    $\liftset_{i}=\{(x_{i},X_{ii}):x_{i}\in\feaseq_{i},\ \operatorname{diag}(A_{i}X_{ii}A_{i}^{\top})=b_{i}\circ b_{i},\ Z_{i}=z_{i}\}$.
+    \item[-] 행렬 블록 $Y_{i}=\bigl(\begin{smallmatrix}1 & x_{i}^{\top}\\ x_{i} & X_{ii}\end{smallmatrix}\bigr)$는 $(x_{i},X_{ii})$의 단순 조립.
+\end{itemize}
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S1: The MIP community game has a core (conditional existence)
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{Does the mixed-integer game have a core?}
+\footnotesize
+CHP는 $\Gamma^{CHP}$의 core를 보장하지만 $\Gamma^{MIP}$에 대해선 integrality gap만큼 위반될 수 있었음.\\
+RQ: $\Gamma^{MIP}$의 코어는 존재하는가?
+\medskip
+\begin{block}{\footnotesize Copositive lift of the coalition value ($\vmip$-exact)}
+\vspace{-0.6em}
+\begin{align*}
+(\mathrm{CPP}(S)):\quad \vmip(S)=\max_{Y_{S}}\ \Big\{\inner{W_{S}}{Y_{S}}:\ &
+\underbrace{(x_{i},X_{ii})\in\liftset_{i}\ \forall i\in S}_{\text{per-player (affine)}},\
+\underbrace{\textstyle\sum_{i}\Acom_{i}\xcom_{i}=0}_{\text{(c) coupling}},\\[-2pt]
+& \underbrace{\Tr\!\big((\Acom)^{\top}\Acom X_{S}\big)=0}_{\text{(d) squared coupling}},\
+\underbrace{Y_{S}\in\CP}_{\text{(e) joint cone}}\Big\}
+\end{align*}
+\end{block}
+\vspace{-0.2em}
+binary $z\in\{0,1\}\Leftrightarrow z-z^{2}=0$로 lift; Burer's reformulation에 의해 위 등식이 성립.
+($\vmip$에 대해 \textbf{exact}, gap이 닫힌다).
+ 
+\medskip
+\begin{itemize}
+    \item[$\CP$] $=\mathrm{CPP}(\R_{+}^{1+\dim x_{S}})=\conv\{zz^{\top}:z\ge0\}$, dual cone은 copositive cone $\COP$.
+\end{itemize}
+
+\medskip
+CPP$(S)$는 \textcolor{Mahogany}{convex program} (but NP-hard)
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S2: Partial Lagrangian -> LPG -> conditional existence
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{Partial Lagrangian of the lift is a linear production game}
+\footnotesize
+Liu의 방식대로, \emph{두} 제약 --- joint cone (e)와 squared coupling (d) ---
+만 dualize하고, per-player affine set $\liftset_{i}$와 linear balance (c)는 그대로 둔다.
+\begin{align*}
+\vlr_{S}(M,\lambda)=\max_{\substack{(x_{i},X_{ii})\in\liftset_{i}\ \forall i\in S\\ \sum_{i\in S}\Acom_{i}\xcom_{i}=0}}\
+\inner{W_{S}}{Y_{S}}+\inner{M}{Y_{S}}-\lambda\,\Tr\!\big((\Acom)^{\top}\Acom X_{S}\big)
+: M\in\COP,\ \lambda\in\R.
+\end{align*}
+ 
+\begin{proposition}[Reduced sub-game is a classical LPG]
+At any dual-feasible $(M,\lambda)$, the off-diagonal blocks $X_{ij}$ have zero objective coefficient
+and lie in no constraint, so they are eliminated. The reduced value
+\begin{align*}
+\vlr_{S}(M,\lambda)=\max\Big\{\textstyle\sum_{i\in S}\inner{\widetilde W_{i}}{Y_{i}}:\
+\textstyle\sum_{i\in S}\Acom_{i}\xcom_{i}=0,\ (x_{i},X_{ii})\in\liftset_{i}\Big\}
+\end{align*}
+is a linear production game.
+\end{proposition}
+ 
+\begin{itemize}
+    \item[\#1] LPG는 nonempty core를 가지며, 그 core는 grand-coalition LP dual의 \textbf{Owen solution} $\alpha^{\mathrm{Owen}}_{i}=\inner{\nu_{i}^{*}}{g_{i}}$로 한 번에 읽힌다 (column generation 불필요).
+    \item[\#2] Fixed multiplier Lagrangian은 $\vmip$의 coalition-wise upper bound (weak duality): $\vlr_{S}(M,\lambda)\ge\vmip(S)$.
+\end{itemize}
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S3: The core exists (the headline)
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{The core exists under dual attainment}
+\footnotesize
+LPG의 Owen solution을 lifted grand-coalition program의 dual optimum $(M^{*},\lambda^{*})$에서 읽으면,
+Liu에 의해 그것이 $\Gamma^{MIP}$의 \textbf{core element}가 된다.
+ 
+\medskip
+\begin{theorem}[Core of the mixed-integer community game]
+Let $\chi:=\alpha^{\mathrm{Owen}}$ be the Owen solution of the reduced LPG at $(M^{*},\lambda^{*})$. Then
+\begin{align*}
+\sum_{i\in S}\chi_{i}\ \ge\ \vmip(S)\quad\forall S\subseteq N,
+\qquad\text{and}\qquad
+\sum_{i\in N}\chi_{i}\ =\ \vmip(N).
+\end{align*}
+\end{theorem}
+\vspace{-0.2em}
+\emph{Stability}는 weak duality (\#2)와 LPG core (\#1)의 chaining: $\sum_{i\in S}\chi_{i}\ge\vlr_{S}(M^{*},\lambda^{*})\ge\vmip(S)$.
+\emph{Efficiency}는 $\sum_{i\in N}\chi_{i}=\vlr_{N}(M^{*},\lambda^{*})=\vmip(N)$, 즉 conic strong duality.
+ 
+\medskip
+\begin{itemize}
+    \item[(i)] \textbf{Zero duality gap} (strong duality): feasible region이 bounded이므로
+    \emph{dual Slater point}가 존재하여 $\min_{M,\lambda}\vlr_{N}(M,\lambda)=\vmip(N)$. (primal interior 불필요.)
+    \item[(ii)] \textbf{Dual attainment}: 그 최솟값이 $(M^{*},\lambda^{*})$에서 달성. 이것이 efficiency를 위한 가정이며,
+    이 가정 하에서 \textcolor{Mahogany}{core는 항상 존재}한다.
+\end{itemize}
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S4: Sufficient condition — homogeneity — and how restrictive
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{Sufficient condition: homogeneous coupling}
+\footnotesize
+위 결과의 충분조건은 모든 inter-player coupling이 \textbf{homogeneous} (RHS $=0$)라는 것이다:
+\begin{align*}
+\sum_{i\in S}\Acom_{i}\xcom_{i}+\Azero\,\xcommon=0.
+\end{align*}
+이것이 reduced Lagrangian을 LPG로 유지시키는 핵심 성질이다. 우리 모델에서 고려하는 coupling은
+세 종류이며(\autocite{Cornelusse2019}), 이런 형태를 따른다
+ 
+\medskip
+\begin{itemize}
+    \item[1.] \textbf{Community balance} (carrier $k\in\{E,G,H\}$, period $t$):
+    $\displaystyle\sum_{i\in S}\big(i^{com,k}_{it}-e^{com,k}_{it}\big)=0$.
+    내부 import/export가 상쇄 --- 보존 법칙이라 RHS $=0$. dual이 community price.
+    \item[2.] \textbf{Symmetric reserve adequacy} (period $t$):
+    $\displaystyle r^{sym}-\sum_{i\in S}\sum_{k} r^{k,\pm}_{it}\le0$.
+    공유 reserve $r^{sym}$를 prosumer headroom의 합으로 충당; reserve를 aggregate로 pooling.
+    \item[3.] \textbf{Peak power definition} (period $t$):
+    $\displaystyle\sum_{i\in S}\tfrac{1}{\Delta T}\big(i^{E,mkt}_{it}-e^{E,mkt}_{it}\big)-p\le0$.
+    공유 peak $p$는 community net flow의 최댓값; netting으로 개별 peak 합보다 작아짐.
+\end{itemize}
+
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S4b: Prior work — what homogeneous coupling each used
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{선행연구 모델}
+\footnotesize
+내부 시장이 청산된다는 것 자체가 생산과 소비가 상쇄된다는 뜻이고, 그 상쇄가 곧 RHS $=0$이다.
+대표적 community-market 모델들의 inter-player coupling은 대부분 homogeneous하다.
+ 
+\medskip
+\begin{center}\scriptsize
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{0.30\textwidth}p{0.50\textwidth}c@{}}
+\toprule
+Model & Inter-player coupling & RHS \\
+\midrule
+Microgrid internal market \newline\autocite{Cornelusse2019}
+& Community balance $\sum_{u}(i^{com}_{ut}-e^{com}_{ut})=0$; reserve adequacy; peak definition & $0$ \\
+Energy collectives \newline\autocite{MoretPinson2019}
+& Prosumer balance $p_{j}+q_{j}+\alpha_{j}-\beta_{j}=0$; community trading $\sum_{j}q_{j}=0$ & $0$ \\
+Multi-energy market \newline\autocite{Mitridati2021}
+& Electricity \& heat exchange balances $f^{E}\mathbf{1}=0$, $f^{H}\mathbf{1}=0$ & $0$ \\
+Heterogeneous-risk \newline\autocite{Baroche2021}
+& Community clearing (Moret--Pinson form) + risk-trade balance & $0$ \\
+TSO--DSO flexibility \newline\autocite{Khatami2022}
+& Nodal balance + fixed interface flow $T^{p}_{n}$ across systems & $0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+아닌것들도 존재
+
+\end{frame}
+
+\begin{frame}
+\frametitle{vs. SDP relaxation}
+\footnotesize
+여러 논문에서 CPP 대신 SDP relaxation으로 bound (DNN). Wholesale market에서 DNN으로 pricing하는 논문도 존재.
+\medskip
+\begin{block}{\footnotesize DNN relaxation}
+\vspace{-0.6em}
+\begin{align*}
+(\mathrm{SDP}(S)):\quad \vmip(S)=\max_{Y_{S}}\ \Big\{\inner{W_{S}}{Y_{S}}:\ &
+\underbrace{(x_{i},X_{ii})\in\liftset_{i}\ \forall i\in S}_{\text{per-player (affine)}},\
+\underbrace{\textstyle\sum_{i}\Acom_{i}\xcom_{i}=0}_{\text{(c) coupling}},\\[-2pt]
+& \underbrace{\Tr\!\big((\Acom)^{\top}\Acom X_{S}\big)=0}_{\text{(d) squared coupling}},\
+\underbrace{Y_{S}\in \mathcal{S}^{+},Y_{S}\geq 0}_{\text{(e) DNN relax}}\Big\}
+\end{align*}
+\end{block}
+\vspace{-0.2em} 
+\medskip
+똑같은 logic으로, 위 SDP relaxation으로 Weak-eps-core를 만들 수 있음.
+
+\medskip
+\begin{block}{\footnotesize Budget bound}
+    In general, the cost-of-stability $\omega$ of different methods has following relations:
+    \begin{align*}
+        \omega_{COP} \leq \omega_{CHP} \leq \omega_{DNN} \leq \omega_{LP} 
+    \end{align*}
+\end{block}
+\end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S5: What survives for inhomogeneous coupling
+%% ----------------------------------------------------------------
+% \begin{frame}
+% \frametitle{Inhomogeneous coupling: what survives}
+% \footnotesize
+% 진짜 nonzero aggregate target (커뮤니티 전체가 맞춰야 할 외부 의무)이 있을 땐 두 가지 선택지\\
+% 어느 쪽도 homogeneous case의 깔끔한 exact core는 아니다.
+ 
+% \medskip
+% \begin{block}{\footnotesize (i) Keep exactness, lose the LPG}
+% \footnotesize
+% inhomogeneous row를 CPP에 직접 넣으면 lift는 여전히 $\vmip$에 exact. 그러나 reduced Lagrangian이
+% linear production game이 아니게 되어 Owen 없음.
+% \end{block}
+ 
+% \begin{block}{\footnotesize (ii) Keep the LPG, accept an $\epsilon$-core}
+% \footnotesize
+% dual payment의 uniform (diagonal) 부분만으로 Owen allocation을 구성하고 cross-term을 버리면,
+% \vspace{-0.3em}
+% \begin{align*}
+% \sum_{i\in S}\chi_{i}-\vlr_{S}(M,\lambda)=2\lambda\!\!\sum_{\substack{i<j\\ i,j\in S}}\! d_{i}^{\top}d_{j}=:E_{S},
+% \qquad \epsilon=\max_{S}|E_{S}|.
+% \end{align*}
+% \vspace{-0.8em}
+ 
+% 부호가 같으면 ($E_{S}\ge0$) stable하나 over-distribute; 부호가 섞이면 stability 자체가 깨질 수 있음.
+% $\lVert d\rVert\to0$ (homogeneous에 근접)이면 $E_{S}\to0$, exact core 복원.
+% \end{block}
+ 
+% \medskip
+% \autocite{GuoEtAl}가 uniform price로 가격을 매기고 non-uniform 항을 system operator가 흡수하는 것과 유산
+% \end{frame}
+ 
+%% ----------------------------------------------------------------
+%% S6: Computation is open — existence vs. practical method
+%% ----------------------------------------------------------------
+\begin{frame}
+\frametitle{Computation: existence proof vs.\ practical method}
+\footnotesize
+이론적으론 dual attainment 하에 core 존재가 보장된다. 그러나 $\chi=\alpha^{\mathrm{Owen}}$을
+\emph{실제로} 구하려면 dual을 풀어야 하고, 그것은 copositive cone $\COP$ 위의 최적화다.
+ 
+\medskip
+\begin{itemize}
+    \item COP는 copositive optimization으로 푼다 --- 직접 푸는 solver는 없고,
+    \textbf{cutting-plane / outer-approximation} (Anstreicher certificate, MILP separation)에 의존.
+    \item[-] 기존 \emph{row-generation} (Bondareva--Shapley 류 core 직접 계산) 대비 무엇이 더 빠른지는
+    \textcolor{Mahogany}{실험해봐야 알 정도}.
+    \item[-] 기존 row-gen은 bigM이 더 많지만, COP cutting plane은 차원이 훨씬 훨씬 큼.
+\end{itemize}
+ 
+\medskip
+\begin{block}{\footnotesize 현재 진행 상황}
+\footnotesize
+따라서 실험을 먼저 진행한다. COP의 역할은 둘 중 미정:
+\begin{enumerate}
+    \item[(a)] core의 \emph{존재성}을 이론적으로 입증하는 도구로만 사용, 또는
+    \item[(b)] 실제 allocation 계산에도 적용.
+\end{enumerate}
+(a)와 (b) 중 어디로 갈지는 row-generation 대비 계산 성능 실험 결과에 달려 있으며, 현재 실험 진행 중.
+\end{block}
+\end{frame}
+ 
+% \begin{frame}
+% \frametitle{d}
+
+% integer-linear program formulation일 때,
+
+% Operations Research Game이랑 LPG의 관계
+
+% Energy community가 두개를 합칠순없는건가? 그럼 각각을 푸는 방법론을 결합할 순 없나?
+
+% OR game이 Lagrangian relaxation을 쓰려고 constraints를 파티션하는데, 저걸 LPG 구조도 같이 넣어서 lagrangian relaxation을?
+
+% 근데 여기서 나오는 LRB가 CHP랑 같은거아니야?
+% least-core보단 weak epsilon-core (cost of stability)에 더 가까운듯.
+    
+% \end{frame}
+\begin{frame}
+\frametitle{...}
+\begin{enumerate}
+    \item Introduction + Literature Review
+    \item[*] Pricing discrete energy markets, combinatorial optimization games 문헌 추가
+    \item Preliminaires
+    \item[-] Weak-eps-core, OCAP, LPG
+    \item Model Description
+    \item[*] Linear setting 빼고 바로 direct하게 Mixed-integer model 제시
+    \item Lagrangian Relaxation Based Profit Allocation
+    \item[] Prop: Balancedness of Subgame, Owen allocation for MECG
+    \item[] Owen vs CHP allocation 비교
+    \item[-] Core Existence for MECG
+    \item[] Prop: Sufficient conditions for core existence
+    \item[] Prop: Owen vs. SDP Relxation vs. LP Relaxation 대소관계
+    \item Numerical Experiments
+    \item Conclusion
+\end{enumerate}
+
+    
+\end{frame}
+
+\begin{frame}
+\frametitle{Additional Contribution}
+\begin{itemize}
+    \item Energy community의 coupling constraints가 homogeneous linear system을 가진다는 조건 하에서, coupling system을 dualize할 경우
+    \item[-] LRB의 subgame이 LPG 구졸르 가지게 되어 항상 balanced임.
+    \item[-] Weak-eps-core로 해석할 경우 보조금이 커뮤니티 사이즈에 대해 감소함. 만약 Owen대신 CHP 분배를 선택할 경우 이 성질은 사라지지만 player별 차등적인 분배가 가능 (fairness)
+    \item Core도 사실 존재할 수 있음. 동일한 lagrangian relaxation 접근으로,
+    \item[-] CPP reform의 특정 제약식들을 dualize해서 subgame을 LPG로 만들고, strong duality를 사용해서 core의 존재성을 보임.
+    \item[-] COP의 SDP relaxation을 가지고 Owen type 분배를 만들 수 있음; 그러나 기존 Owen 분배가 더 tight함
+\end{itemize}
+    
+\end{frame}

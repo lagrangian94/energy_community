@@ -1,0 +1,21 @@
+% Owen vs CHP allocation (profit convention). Generated; reserve/peak on.
+\begin{table}[t]
+\centering
+\caption{Owen vs.\ CHP profit allocation for the $6$-prosumer community ($T=24$). $\sigma_j$ is the Owen value (convexity dual); the weak-$\varepsilon$-core allocation subtracts the uniform share $\varepsilon=|gap|/n=0.095$, while CHP subtracts the non-uniform $\Delta_j=\sigma_j-\chi_j^{CHP}$. Duality gap $=v^{CHP}-v^{MIP}=0.573$; $\sum_j\Delta_j=gap$.}
+\label{tab:owen_vs_chp}
+\begin{tabular}{llrrrrr}
+\toprule
+Player & Assets & $\sigma_j$ & $\sigma_j-\varepsilon$ & $\chi_j^{CHP}$ & $\Delta_j$ & $\Delta_j-\varepsilon$ \\
+\midrule
+u1 & Wind+ESS$_E$ & 1355.691 & 1355.595 & 1355.428 & 0.263 & 0.168 \\
+u2 & Electrolyzer+ESS$_G$ & 83.754 & 83.659 & 83.445 & 0.309 & 0.214 \\
+u3 & HP+ESS$_H$ & 490.436 & 490.340 & 490.436 & 0.000 & -0.095 \\
+u4 & Elec demand & 164.815 & 164.720 & 164.815 & 0.000 & -0.095 \\
+u5 & H$_2$ demand & 118.520 & 118.425 & 118.520 & 0.000 & -0.095 \\
+u6 & Heat demand & 134.722 & 134.626 & 134.722 & 0.000 & -0.095 \\
+\midrule
+$\sum_j$ & & 2347.938 & 2347.366 & 2347.366 & 0.573 & -0.000 \\
+ & & ($=v^{CHP}$) & ($=v^{MIP}$) & ($=v^{MIP}$) & ($=gap$) & \\
+\bottomrule
+\end{tabular}
+\end{table}

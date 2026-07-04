@@ -436,6 +436,13 @@ class LocalEnergyMarket:
         self.dwr = dwr
         self.binary_values = binary_values
         self.mipsolver = mipsolver
+        # Reserve / peak coupling toggles (adding_cons.txt). Default off, so the
+        # model is byte-identical to the pre-extension version -- and the
+        # copositive nc/constraint counts are unchanged -- unless deliberately
+        # switched on via the params (enable_reserve/enable_peak, set in
+        # data_generator from the reserve_*_ratio / peak_penalty_ratio toggles).
+        self.enable_reserve = bool(self.params.get('enable_reserve', False))
+        self.enable_peak = bool(self.params.get('enable_peak', False))
         # Initialize model.data dictionary to store variables and constraints
         self.model.data = {"vars": {}, "cons": {}}
         
@@ -490,6 +497,12 @@ class LocalEnergyMarket:
 
         # Initialize export capacity constraints
         self.export_capacity_cons = {}
+
+        # Reserve / peak constraint containers (populated only when enabled;
+        # initialized here so _store_model_data always finds them).
+        self.reserve_headroom_cons = {}
+        self.reserve_cons = {}
+        self.peak_penalty_cons = {}
 
         # Initialize variables
         self._create_variables()
@@ -557,7 +570,19 @@ class LocalEnergyMarket:
           A multistage stochastic optimization approach. Energy Economics, 136, 107764.
         """
         self.z_ru_H = {}   # Ramp-up decision
-        
+
+        # Reserve (up/down) headroom variables -- private to each prosumer
+        # (they enter A_j, not the shared block). Aggregate r_plus/r_minus plus
+        # per-asset splits; populated only when reserve is enabled.
+        self.r_plus = {}       # aggregate upward reserve  r_jt^+
+        self.r_minus = {}      # aggregate downward reserve r_jt^-
+        self.r_plus_sto = {}
+        self.r_minus_sto = {}
+        self.r_plus_els = {}
+        self.r_minus_els = {}
+        self.r_plus_hp = {}
+        self.r_minus_hp = {}
+
         # Create variables for each player and time period
         for u in self.players:
             for t in self.time_periods:
@@ -711,9 +736,35 @@ class LocalEnergyMarket:
                                                         lb=0, ub=storage_power_H, obj=c_sto_H*(1/nu_dis_H))
                     self.b_ch_H[u,t] = self.model.addVar(vtype="C", name=f"b_ch_H_{u}_{t}", 
                                                        lb=0, ub=storage_power_H, obj=c_sto_H*nu_ch_H)
-                    self.s_H[u,t] = self.model.addVar(vtype="C", name=f"s_H_{u}_{t}", 
+                    self.s_H[u,t] = self.model.addVar(vtype="C", name=f"s_H_{u}_{t}",
                                                     lb=0, ub=storage_capacity_H)
-    
+
+        # ---- Reserve headroom variables (private, adding_cons.txt sec.2.2) ----
+        # Electrolyzer / heat-pump reserve headroom couples to commitment
+        # binaries, so those per-asset variables exist only in MIP model types;
+        # storage headroom is linear and available in every model type.
+        if self.enable_reserve:
+            has_binaries = self.model_type in ('mip', 'mip_fix_binaries')
+            reserve_players = set(self.U_E_sto)
+            if has_binaries:
+                reserve_players |= set(self.players_with_electrolyzers)
+                reserve_players |= set(self.players_with_heatpumps)
+            for u in self.players:
+                if u not in reserve_players:
+                    continue
+                for t in self.time_periods:
+                    self.r_plus[u,t] = self.model.addVar(vtype="C", name=f"r_plus_{u}_{t}", lb=0)
+                    self.r_minus[u,t] = self.model.addVar(vtype="C", name=f"r_minus_{u}_{t}", lb=0)
+                    if u in self.U_E_sto:
+                        self.r_plus_sto[u,t] = self.model.addVar(vtype="C", name=f"r_plus_sto_{u}_{t}", lb=0)
+                        self.r_minus_sto[u,t] = self.model.addVar(vtype="C", name=f"r_minus_sto_{u}_{t}", lb=0)
+                    if has_binaries and u in self.players_with_electrolyzers:
+                        self.r_plus_els[u,t] = self.model.addVar(vtype="C", name=f"r_plus_els_{u}_{t}", lb=0)
+                        self.r_minus_els[u,t] = self.model.addVar(vtype="C", name=f"r_minus_els_{u}_{t}", lb=0)
+                    if has_binaries and u in self.players_with_heatpumps:
+                        self.r_plus_hp[u,t] = self.model.addVar(vtype="C", name=f"r_plus_hp_{u}_{t}", lb=0)
+                        self.r_minus_hp[u,t] = self.model.addVar(vtype="C", name=f"r_minus_hp_{u}_{t}", lb=0)
+
     def _create_constraints(self):
         """Create constraints based on slides 9-15"""
         
@@ -739,18 +790,133 @@ class LocalEnergyMarket:
 
         # Restrict total export capacity
         # self._add_export_capacity_constraints()
-        # Impose peak penalty on total import power
-        # self._add_peak_penalty_constraints()
+
+        # ---- Reserve / peak coupling (adding_cons.txt) ----
+        # Per-prosumer reserve headroom is PRIVATE (enters every subproblem X_j),
+        # so it is added regardless of dwr. The community coupling rows and the
+        # shared community variables (r_up, r_dn, p) belong to the MASTER only,
+        # so they sit behind the same `if not self.dwr` guard as the community
+        # balance blocks.
+        if self.enable_reserve:
+            self._add_reserve_headroom_cons()
+        if not self.dwr:
+            if self.enable_peak:
+                self._add_peak_penalty_constraints()
+            if self.enable_reserve:
+                self._add_reserve_constraints()
+
     def _add_peak_penalty_constraints(self):
-        #Electricity
+        # Community peak penalty on net grid import (adding_cons.txt sec.3):
+        #   sum_{j in S} (i_E_mkt - e_E_mkt) <= p,   p = chi_peak_E, obj = +delta_peak.
         self.peak_penalty_cons = {"elec": {}}
         self.chi_peak_E = self.model.addVar(vtype="C", name="chi_peak_E", lb=0, obj=self.params.get(f'pi_E_peak', 0))
         self.model.data["vars"]["chi_peak_E"] = self.chi_peak_E
         for t in self.time_periods:
-            cons = self.model.addCons(
-                quicksum(self.i_E_gri[(u,t)] for u in set(self.U_E_fl + self.U_E_nfl)) - self.chi_peak_E <= 0.0
-            )
+            net_import = quicksum(self.i_E_gri.get((u,t),0) - self.e_E_gri.get((u,t),0) for u in self.players)
+            cons = self.model.addCons(net_import - self.chi_peak_E <= 0.0,
+                                      name=f"peak_penalty_cons_{t}")
             self.peak_penalty_cons["elec"][f"peak_penalty_cons_{t}"] = cons
+        return
+
+    def _add_reserve_headroom_cons(self):
+        """Per-prosumer up/down reserve headroom (adding_cons.txt sec.2.2).
+
+        Private constraints (part of each player's X_j): every asset's reserve
+        offer is bounded by its own power/energy headroom, then aggregated into
+        r_plus[u,t] / r_minus[u,t]. Electrolyzer/heat-pump rows reference the
+        commitment binaries and so are added only in MIP model types.
+        """
+        self.reserve_headroom_cons = {}
+        has_binaries = self.model_type in ('mip', 'mip_fix_binaries')
+
+        # Electric storage headroom (power + energy), available in all model types.
+        for u in self.U_E_sto:
+            storage_power = self.params.get(f'storage_power_E_{u}', -np.inf)
+            storage_capacity = self.params.get(f'storage_capacity_E_{u}', -np.inf)
+            nu_ch = self.params.get('nu_ch_E', np.inf)
+            nu_dis = self.params.get('nu_dis_E', np.inf)
+            for t in self.time_periods:
+                self.reserve_headroom_cons[f"res_sto_up_pow_{u}_{t}"] = self.model.addCons(
+                    (self.b_dis_E[u,t] - self.b_ch_E[u,t]) + self.r_plus_sto[u,t] <= storage_power,
+                    name=f"res_sto_up_pow_{u}_{t}")
+                self.reserve_headroom_cons[f"res_sto_dn_pow_{u}_{t}"] = self.model.addCons(
+                    (self.b_ch_E[u,t] - self.b_dis_E[u,t]) + self.r_minus_sto[u,t] <= storage_power,
+                    name=f"res_sto_dn_pow_{u}_{t}")
+                self.reserve_headroom_cons[f"res_sto_up_en_{u}_{t}"] = self.model.addCons(
+                    self.r_plus_sto[u,t] <= nu_dis * self.s_E[u,t],
+                    name=f"res_sto_up_en_{u}_{t}")
+                self.reserve_headroom_cons[f"res_sto_dn_en_{u}_{t}"] = self.model.addCons(
+                    self.r_minus_sto[u,t] <= (1.0/nu_ch) * (storage_capacity - self.s_E[u,t]),
+                    name=f"res_sto_dn_en_{u}_{t}")
+
+        if has_binaries:
+            # Electrolyzer headroom (load: up = shed toward min, down = add toward max).
+            for u in self.players_with_electrolyzers:
+                els_cap = self.params.get(f'els_cap_{u}', self.params.get(f'els_cap', -np.inf))
+                c_sb = self.params.get(f'c_sb_G', -np.inf)
+                c_min = self.params.get(f'c_min_G', -np.inf)
+                c_max = self.params.get(f'c_max_G', -np.inf)
+                for t in self.time_periods:
+                    self.reserve_headroom_cons[f"res_els_up_{u}_{t}"] = self.model.addCons(
+                        self.fl_d[u,'elec',t] - self.r_plus_els[u,t]
+                        - c_min*els_cap*self.z_on_G[u,t] - c_sb*els_cap*self.z_sb_G[u,t] >= 0.0,
+                        name=f"res_els_up_{u}_{t}")
+                    self.reserve_headroom_cons[f"res_els_dn_{u}_{t}"] = self.model.addCons(
+                        self.fl_d[u,'elec',t] + self.r_minus_els[u,t]
+                        - c_max*els_cap*self.z_on_G[u,t] - c_sb*els_cap*self.z_sb_G[u,t] <= 0.0,
+                        name=f"res_els_dn_{u}_{t}")
+            # Heat-pump headroom (on heat output p[u,'hp',t], gated by z_on_H).
+            for u in self.players_with_heatpumps:
+                hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
+                c_min = self.params.get(f'c_min_H', -np.inf)
+                c_max = self.params.get(f'c_max_H', -np.inf)
+                for t in self.time_periods:
+                    self.reserve_headroom_cons[f"res_hp_up_{u}_{t}"] = self.model.addCons(
+                        self.p.get((u,'hp',t),0) - self.r_plus_hp[u,t]
+                        - c_min*hp_cap*self.z_on_H[u,t] >= 0.0,
+                        name=f"res_hp_up_{u}_{t}")
+                    self.reserve_headroom_cons[f"res_hp_dn_{u}_{t}"] = self.model.addCons(
+                        self.p.get((u,'hp',t),0) + self.r_minus_hp[u,t]
+                        - c_max*hp_cap*self.z_on_H[u,t] <= 0.0,
+                        name=f"res_hp_dn_{u}_{t}")
+
+        # Aggregate each prosumer's asset offers into r_plus[u,t] / r_minus[u,t].
+        for (u,t) in list(self.r_plus.keys()):
+            up_terms, dn_terms = [], []
+            if (u,t) in self.r_plus_sto:
+                up_terms.append(self.r_plus_sto[u,t]); dn_terms.append(self.r_minus_sto[u,t])
+            if (u,t) in self.r_plus_els:
+                up_terms.append(self.r_plus_els[u,t]); dn_terms.append(self.r_minus_els[u,t])
+            if (u,t) in self.r_plus_hp:
+                up_terms.append(self.r_plus_hp[u,t]); dn_terms.append(self.r_minus_hp[u,t])
+            self.reserve_headroom_cons[f"res_agg_up_{u}_{t}"] = self.model.addCons(
+                self.r_plus[u,t] - quicksum(up_terms) == 0.0, name=f"res_agg_up_{u}_{t}")
+            self.reserve_headroom_cons[f"res_agg_dn_{u}_{t}"] = self.model.addCons(
+                self.r_minus[u,t] - quicksum(dn_terms) == 0.0, name=f"res_agg_dn_{u}_{t}")
+        return
+
+    def _add_reserve_constraints(self):
+        """Community reserve coupling + shared community variables r_up, r_dn.
+
+        Homogeneous coupling rows (adding_cons.txt sec.2.3): each sold reserve
+        product cannot exceed what the coalition can deliver in every hour.
+        Shared variables carry the reserve revenue in the objective (max-profit
+        +pi*r maps to obj=-pi*r under the model's cost-minimization convention).
+        """
+        self.reserve_cons = {"up": {}, "dn": {}}
+        pi_up = self.params.get('pi_up', 0)
+        pi_dn = self.params.get('pi_dn', 0)
+        self.r_up = self.model.addVar(vtype="C", name="r_up", lb=0, obj=-1*pi_up)
+        self.r_dn = self.model.addVar(vtype="C", name="r_dn", lb=0, obj=-1*pi_dn)
+        self.model.data["vars"]["r_up"] = self.r_up
+        self.model.data["vars"]["r_dn"] = self.r_dn
+        for t in self.time_periods:
+            self.reserve_cons["up"][f"reserve_up_coupling_{t}"] = self.model.addCons(
+                self.r_up - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
+                name=f"reserve_up_coupling_{t}")
+            self.reserve_cons["dn"][f"reserve_dn_coupling_{t}"] = self.model.addCons(
+                self.r_dn - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
+                name=f"reserve_dn_coupling_{t}")
         return
 
     def _fix_binaries(self):
@@ -864,6 +1030,17 @@ class LocalEnergyMarket:
         self.model.data["vars"]["z_on_H"] = self.z_on_H
         self.model.data["vars"]["z_sd_H"] = self.z_sd_H
 
+        # Reserve headroom variables (empty dicts when reserve is disabled).
+        self.model.data["vars"]["r_plus"] = self.r_plus
+        self.model.data["vars"]["r_minus"] = self.r_minus
+        self.model.data["vars"]["r_plus_sto"] = self.r_plus_sto
+        self.model.data["vars"]["r_minus_sto"] = self.r_minus_sto
+        self.model.data["vars"]["r_plus_els"] = self.r_plus_els
+        self.model.data["vars"]["r_minus_els"] = self.r_minus_els
+        self.model.data["vars"]["r_plus_hp"] = self.r_plus_hp
+        self.model.data["vars"]["r_minus_hp"] = self.r_minus_hp
+        # (r_up, r_dn, chi_peak_E are registered as scalars inside their methods.)
+
         # self.model.data["vars"]["z_ru_H"] = self.z_ru_H
                 
         # Store all constraints (we need to collect them during creation)
@@ -884,6 +1061,10 @@ class LocalEnergyMarket:
         self.model.data["cons"]["elec_nfl_demand"] = self.elec_nfl_demand_cons
         self.model.data["cons"]["hydro_nfl_demand"] = self.hydro_nfl_demand_cons
         self.model.data["cons"]["heat_nfl_demand"] = self.heat_nfl_demand_cons
+        # Reserve / peak coupling constraints (empty dicts when disabled).
+        self.model.data["cons"]["reserve_headroom"] = self.reserve_headroom_cons
+        self.model.data["cons"]["reserve"] = self.reserve_cons
+        self.model.data["cons"]["peak_penalty"] = self.peak_penalty_cons
     def _add_electricity_constraints(self):
         """Add electricity-related constraints from slides 9-10"""
         

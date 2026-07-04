@@ -168,7 +168,31 @@ class ColumnGenerationSolver:
                 'heat': chp_heat,
                 'hydrogen': chp_hydro
             }
-            
+
+            # ---- Reserve / peak coupling prices (adding_cons.txt) ----
+            # Same dual-price settlement as the energy carriers: the shadow price of
+            # each homogeneous coupling row is the per-t capacity/coincidence price.
+            # abs() as for the balance rows (<=0 dual on a <= row -> positive price).
+            # Budget-balanced at the LP optimum: sum_t p_up[t]=pi_up, sum_t p_peak[t]=delta_peak,
+            # so sum_u (player settlements) equals the community reserve revenue / peak penalty.
+            # Only present when the rows exist (reserve/peak enabled); plotting ignores them.
+            cons = self.master.model.data['cons']
+            if cons.get('reserve_up'):
+                chp_resup, chp_resdn = {}, {}
+                for t in self.time_periods:
+                    up_c = self.master.model.getTransformedCons(cons['reserve_up'][t])
+                    dn_c = self.master.model.getTransformedCons(cons['reserve_dn'][t])
+                    chp_resup[t] = np.abs(self.master.model.getDualsolLinear(up_c))
+                    chp_resdn[t] = np.abs(self.master.model.getDualsolLinear(dn_c))
+                solution['convex_hull_prices']['reserve_up'] = chp_resup
+                solution['convex_hull_prices']['reserve_dn'] = chp_resdn
+            if cons.get('peak'):
+                chp_peak = {}
+                for t in self.time_periods:
+                    pk_c = self.master.model.getTransformedCons(cons['peak'][t])
+                    chp_peak[t] = np.abs(self.master.model.getDualsolLinear(pk_c))
+                solution['convex_hull_prices']['peak'] = chp_peak
+
             return status, solution, obj_val, solution_by_player
         else:
             print(f"\nColumn generation failed with status: {status}")
@@ -352,6 +376,8 @@ class ColumnGenerationSolver:
                 'storage_cost': 0.0,
                 'startup_cost': 0.0,
                 'utility': 0.0,
+                'reserve_revenue': 0.0,   # reserve capacity payment (adding_cons.txt)
+                'peak_cost': 0.0,         # peak coincidence charge
                 'net_profit': 0.0
             }
 
@@ -475,21 +501,143 @@ class ColumnGenerationSolver:
                     demand = results['nfl_d'][u, 'heat', t]
                     if demand > 0:
                         profit['utility'] += demand * self.parameters.get(f'u_H_{u}_{t}', 0)
+
+                # 7. Reserve capacity payment (adding_cons.txt): each provider is
+                #    paid the reserve price x its offered up/down headroom (MIP qty).
+                if 'reserve_up' in chp:
+                    r_plus = results.get('r_plus', {}).get((u, t), 0.0)
+                    r_minus = results.get('r_minus', {}).get((u, t), 0.0)
+                    profit['reserve_revenue'] += r_plus * chp['reserve_up'][t]
+                    profit['reserve_revenue'] += r_minus * chp['reserve_dn'][t]
+
+                # 8. Peak coincidence charge: net grid import at t x peak price.
+                #    Net importers at the binding hour pay; net exporters are credited.
+                if 'peak' in chp:
+                    i_gri = results.get('i_E_gri', {}).get((u, t), 0.0)
+                    e_gri = results.get('e_E_gri', {}).get((u, t), 0.0)
+                    profit['peak_cost'] += (i_gri - e_gri) * chp['peak'][t]
             # Calculate net profit
             profit['net_profit'] = (
-                profit['grid_revenue'] + 
-                profit['community_revenue'] - 
-                profit['grid_cost'] - 
-                profit['community_cost'] - 
-                profit['production_cost'] - 
-                profit['storage_cost'] - 
+                profit['grid_revenue'] +
+                profit['community_revenue'] -
+                profit['grid_cost'] -
+                profit['community_cost'] -
+                profit['production_cost'] -
+                profit['storage_cost'] -
                 profit['startup_cost'] +
-                profit['utility']
+                profit['utility'] +
+                profit['reserve_revenue'] -
+                profit['peak_cost']
             )
 
             player_profits[u] = profit
-        
+
         return player_profits
+
+    def compute_owen_allocation(self, v_mip: float) -> Dict:
+        """
+        Owen (1975) linear-production-game allocation from the Dantzig-Wolfe master.
+
+        The shadow price sigma_u of player u's convexity constraint (sum_k lambda_{u,k}=1)
+        is u's Owen value. Because EVERY coupling row (balance + reserve + peak) is
+        homogeneous (RHS 0), the LP dual objective reduces to sum_u 1*sigma_u, so by strong
+        duality  sum_u sigma_u = v^CHP  (the master objective) exactly — reserve/peak are
+        already baked into sigma_u, no separate term is needed.
+
+        Since v^CHP generally differs from v^MIP, the raw Owen point is NOT efficient for
+        the integer game (budget balance is broken by the duality gap). Spreading the gap
+        equally over the N players restores efficiency and yields a weak eps-core cost
+        allocation (Liu-Qi-Xu 2016 style):
+
+            gap    = v^CHP - v^MIP
+            owen_u = sigma_u - gap / N            =>   sum_u owen_u = v^MIP,   eps = |gap|/N
+
+        Args:
+            v_mip: optimal objective of the grand-coalition MIP (same cost-min sign
+                   convention as the CHP master objective).
+
+        Returns dict with sigma (raw Owen point), owen (gap-corrected), and diagnostics.
+        Must be called after solve() (master duals must be available).
+        """
+        m = self.master.model
+        sigma = {}
+        for u in self.players:
+            conv_cons = m.getTransformedCons(m.data['cons']['convexity'][u])
+            sigma[u] = m.getDualsolLinear(conv_cons)
+
+        v_chp = m.getObjVal()
+        N = len(self.players)
+        gap = v_chp - v_mip
+        owen = {u: sigma[u] - gap / N for u in self.players}
+
+        sum_sigma = sum(sigma.values())
+        result = {
+            'sigma': sigma,               # raw Owen point (sums to v^CHP)
+            'owen': owen,                 # gap-corrected (sums to v^MIP)
+            'v_chp': v_chp,
+            'v_mip': v_mip,
+            'gap': gap,
+            'eps': abs(gap) / N,
+            'sum_sigma': sum_sigma,       # ~= v^CHP  (LP strong-duality check)
+            'sum_owen': sum(owen.values())  # ~= v^MIP (efficiency check)
+        }
+
+        print("\n" + "="*80)
+        print("OWEN ALLOCATION (LP production-game value + gap correction)")
+        print("="*80)
+        print(f"  v^CHP = {v_chp:.6f}   sum_u sigma_u = {sum_sigma:.6f}   (diff = {abs(v_chp-sum_sigma):.3e})")
+        print(f"  v^MIP = {v_mip:.6f}   duality gap = {gap:.6f}   eps = |gap|/N = {result['eps']:.6f}")
+        print(f"  sum_u owen_u = {result['sum_owen']:.6f}   (diff from v^MIP = {abs(result['sum_owen']-v_mip):.3e})")
+        print(f"  {'Player':>8} {'sigma_u (Owen)':>16} {'owen_u (eps-core)':>18}")
+        for u in self.players:
+            print(f"  {u:>8} {sigma[u]:>16.4f} {owen[u]:>18.4f}")
+        return result
+
+    def compare_owen_vs_chp(self, owen_result: Dict, chp_profits: Dict) -> Dict:
+        """
+        Owen vs. price-based (CHP) allocation comparison (owen_chp.txt).
+
+        Both are corrections of the raw Owen point sigma_j (which over-distributes,
+        summing to v^CHP):
+          - Owen eps-core:  sigma_j - eps           (UNIFORM gap split, eps=|gap|/N)
+          - CHP:            sigma_j - Delta_j        (NON-UNIFORM: Delta_j=sigma_j-chi_j^CHP)
+        Reported in PROFIT (payoff) convention. sum_j Delta_j = gap = eps*N. A player
+        with Delta_j > eps is charged MORE than the fair uniform share by the CHP rule
+        (the "nonconvexity loser", typically the electrolyzer); Delta_j < eps means less.
+
+        Args:
+            owen_result: dict from compute_owen_allocation().
+            chp_profits: dict from _calculate_player_profits_with_chp() (per-player
+                         'net_profit' at CHP prices on the MIP dispatch).
+        """
+        sigma_cost = owen_result['sigma']
+        eps = owen_result['eps']
+        gap_value = -owen_result['gap']   # value-convention duality gap (>=0), = sum_j Delta_j
+
+        rows, sum_owen_p, sum_chp_p, sum_delta = {}, 0.0, 0.0, 0.0
+        for u in self.players:
+            owen_sigma_p = -sigma_cost[u]                 # Owen payoff (raw)
+            owen_eps_p = owen_sigma_p - eps               # uniform-corrected (weak eps-core)
+            chp_p = chp_profits[u]['net_profit']          # CHP payoff (budget-balanced)
+            delta = owen_sigma_p - chp_p                  # nonconvexity loss (doc Delta_j)
+            rows[u] = {'owen_sigma': owen_sigma_p, 'owen_eps_core': owen_eps_p,
+                       'chp': chp_p, 'delta': delta, 'delta_minus_eps': delta - eps}
+            sum_owen_p += owen_sigma_p; sum_chp_p += chp_p; sum_delta += delta
+
+        print("\n" + "="*80)
+        print("OWEN vs CHP ALLOCATION  (profit convention; Delta_j = sigma_j - chi_j^CHP)")
+        print("="*80)
+        print(f"  eps = |gap|/N = {eps:.4f}   sum_j Delta_j = {sum_delta:.4f}   (= gap = {gap_value:.4f})")
+        print(f"  sum Owen(sigma) = {sum_owen_p:.4f} (=v^CHP)   sum CHP = {sum_chp_p:.4f} (=v^MIP up to reserve/peak residual)")
+        print(f"  {'Player':>7} {'Owen sigma':>12} {'Owen-eps':>12} {'CHP':>12} {'Delta_j':>10} {'Delta-eps':>10}")
+        for u in self.players:
+            r = rows[u]
+            flag = "  <- loses more" if r['delta_minus_eps'] > 1e-6 else ""
+            print(f"  {u:>7} {r['owen_sigma']:>12.4f} {r['owen_eps_core']:>12.4f} "
+                  f"{r['chp']:>12.4f} {r['delta']:>10.4f} {r['delta_minus_eps']:>10.4f}{flag}")
+        return {'eps': eps, 'gap': gap_value, 'sum_delta': sum_delta,
+                'sum_owen': sum_owen_p, 'sum_chp': sum_chp_p, 'rows': rows}
+
 def main():
     """
     Main test function for column generation

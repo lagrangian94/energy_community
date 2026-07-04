@@ -96,6 +96,21 @@ class PlayerSubproblem:
                     if scip_name in self._highs_col_map:
                         self._com_col_indices[(var_type, t)] = self._highs_col_map[scip_name]
 
+        # Build reserve/peak coupling variable column indices (adding_cons.txt).
+        # These are the *private* per-player variables that carry the coupling-row
+        # duals into the subproblem objective: r_plus/r_minus for reserve, and the
+        # grid-exchange vars i_E_gri/e_E_gri for the peak penalty. Empty dicts when
+        # reserve/peak is disabled (the LEM never created those vars), so the
+        # HiGHS objective update below is a no-op in the default (flags-off) path.
+        self._coupling_col_indices = {'r_plus': {}, 'r_minus': {}, 'i_E_gri': {}, 'e_E_gri': {}}
+        for var_type in ('r_plus', 'r_minus', 'i_E_gri', 'e_E_gri'):
+            lem_dict = getattr(self.lem, var_type, {})
+            for t in self.time_periods:
+                if (u, t) in lem_dict:
+                    scip_name = lem_dict[(u, t)].name
+                    if scip_name in self._highs_col_map:
+                        self._coupling_col_indices[var_type][t] = self._highs_col_map[scip_name]
+
         # Build base cost vector from SCIP model's objective coefficients
         # We need to solve the pricing once with zero duals using SCIP to get the objective set
         # Instead, compute base costs directly from parameters (matching solve_pricing logic)
@@ -186,10 +201,19 @@ class PlayerSubproblem:
 
         self._highs_base_costs = costs
 
-    def _solve_pricing_highs(self, dual_elec, dual_heat, dual_hydro, dual_convexity, farkas=False):
+    def _solve_pricing_highs(self, dual_elec, dual_heat, dual_hydro, dual_convexity, farkas=False,
+                             dual_resup=None, dual_resdn=None, dual_peak=None):
         """
         Solve pricing subproblem using HiGHS with efficient objective updates.
         Only community variable costs change per iteration; base costs are precomputed.
+
+        dual_resup/dual_resdn/dual_peak: reserve/peak coupling-row duals (raw
+        getDualsol/Dualfarkas values). Applied on the private coupling vars with the
+        SAME sign as the SCIP path in solve_pricing (RC = c - sum_row pi_row*a_col):
+          reserve up  col coeff -r_plus  =>  + pi_up  * r_plus
+          reserve dn  col coeff -r_minus =>  + pi_dn  * r_minus
+          peak        col coeff (i-e)    =>  - pi_peak*(i_E_gri - e_E_gri)
+        None (default) => reserve/peak disabled, no update (flags-off invariant).
         """
         from highspy import HighsModelStatus
 
@@ -265,6 +289,23 @@ class PlayerSubproblem:
                     idx = self._com_col_indices[key]
                     h.changeColCost(idx, self._highs_base_costs[idx] + dual_hydro[t])
 
+        # Reserve / peak coupling duals on the private coupling vars. In regular
+        # mode the base cost stays; in farkas mode all base costs were zeroed
+        # above, so the coupling cost is purely the dual term.
+        def _coupling_base(idx):
+            return 0.0 if farkas else self._highs_base_costs[idx]
+        if dual_resup is not None:
+            for t, idx in self._coupling_col_indices['r_plus'].items():
+                h.changeColCost(idx, _coupling_base(idx) + dual_resup[t])
+        if dual_resdn is not None:
+            for t, idx in self._coupling_col_indices['r_minus'].items():
+                h.changeColCost(idx, _coupling_base(idx) + dual_resdn[t])
+        if dual_peak is not None:
+            for t, idx in self._coupling_col_indices['i_E_gri'].items():
+                h.changeColCost(idx, _coupling_base(idx) - dual_peak[t])
+            for t, idx in self._coupling_col_indices['e_E_gri'].items():
+                h.changeColCost(idx, _coupling_base(idx) + dual_peak[t])
+
         # Solve
         h.run()
         model_status = h.getModelStatus()
@@ -284,21 +325,31 @@ class PlayerSubproblem:
                       dual_heat: Dict[int, float],
                       dual_hydro: Dict[int, float],
                       dual_convexity: float,
-                      farkas: bool=False) -> Tuple[float, Dict]:
+                      farkas: bool=False,
+                      dual_resup: Dict[int, float]=None,
+                      dual_resdn: Dict[int, float]=None,
+                      dual_peak: Dict[int, float]=None) -> Tuple[float, Dict]:
         """
         Solve pricing problem with modified objective based on dual prices
-        
+
         Args:
             dual_elec: Dual prices for electricity community balance constraints
             dual_heat: Dual prices for heat community balance constraints
             dual_hydro: Dual prices for hydrogen community balance constraints
             dual_convexity: Dual price for convexity constraint (sum lambda = 1)
+            dual_resup/dual_resdn: Dual prices for reserve up/down coupling rows
+                (None when reserve disabled). Column coeff in these rows is
+                -r_plus/-r_minus, so the reduced-cost formula RC = c - sum(pi*a)
+                adds +pi*r_plus / +pi*r_minus to the subproblem objective.
+            dual_peak: Dual prices for the peak coupling rows (None when disabled).
+                Column coeff is (i_E_gri - e_E_gri), so RC subtracts pi*(i-e).
 
         Returns:
             tuple: (reduced_cost, solution_dict)
         """
         if self.mipsolver == 'highs':
-            return self._solve_pricing_highs(dual_elec, dual_heat, dual_hydro, dual_convexity, farkas)
+            return self._solve_pricing_highs(dual_elec, dual_heat, dual_hydro, dual_convexity,
+                                             farkas, dual_resup, dual_resdn, dual_peak)
 
         # Free transform to allow objective modification
         self.model.freeTransform()
@@ -380,7 +431,25 @@ class PlayerSubproblem:
             new_obj -= quicksum(dual_hydro[t] * self.lem.i_G_com[u, t] for t in self.time_periods)
         if (u, 0) in self.lem.e_G_com:
             new_obj += quicksum(dual_hydro[t] * self.lem.e_G_com[u, t] for t in self.time_periods)
-        
+
+        # Reserve / peak coupling duals (applied in both regular and farkas mode,
+        # like the community terms — they are dual contributions, not base costs).
+        # RC = c - sum_rows pi_row * a_col:
+        #   reserve up  row: a_col = -r_plus[u,t]  =>  -pi*(-r_plus) = +pi*r_plus
+        #   reserve dn  row: a_col = -r_minus[u,t] =>  +pi*r_minus
+        #   peak        row: a_col = (i_E_gri - e_E_gri) => -pi*(i_E_gri - e_E_gri)
+        if dual_resup is not None and (u, self.time_periods[0]) in self.lem.r_plus:
+            new_obj += quicksum(dual_resup[t] * self.lem.r_plus[u, t]
+                                for t in self.time_periods if (u, t) in self.lem.r_plus)
+        if dual_resdn is not None and (u, self.time_periods[0]) in self.lem.r_minus:
+            new_obj += quicksum(dual_resdn[t] * self.lem.r_minus[u, t]
+                                for t in self.time_periods if (u, t) in self.lem.r_minus)
+        if dual_peak is not None:
+            if (u, self.time_periods[0]) in self.lem.i_E_gri:
+                new_obj -= quicksum(dual_peak[t] * self.lem.i_E_gri[u, t] for t in self.time_periods)
+            if (u, self.time_periods[0]) in self.lem.e_E_gri:
+                new_obj += quicksum(dual_peak[t] * self.lem.e_E_gri[u, t] for t in self.time_periods)
+
         # Set modified objective
         try:
             self.model.setObjective(new_obj, "minimize")
@@ -418,17 +487,36 @@ class MasterProblem:
         self.model = Model("RMP_LocalEnergyMarket")
         self.model.data = {}
         self.params = params
+
+        # Reserve / peak coupling toggles (adding_cons.txt). Default off, so the
+        # RMP is byte-identical to the pre-extension version unless switched on
+        # via data_generator (enable_reserve/enable_peak). The shared community
+        # variables r_up, r_dn (obj -pi) and p=chi_peak_E (obj +pi_peak) are
+        # first-class RMP variables (NOT priced columns); the private per-player
+        # reserve headroom rides inside each column's solution dict.
+        self.enable_reserve = bool(params.get('enable_reserve', False))
+        self.enable_peak = bool(params.get('enable_peak', False))
+        self.pi_up = params.get('pi_up', 0.0)
+        self.pi_dn = params.get('pi_dn', 0.0)
+        self.pi_peak = params.get('pi_E_peak', 0.0)
+        self.r_up = None
+        self.r_dn = None
+        self.chi_peak_E = None
         # Storage for variables and constraints
         self.model.data['vars'] = {
             player:{} for player in players
         }  # {(player, col_idx): {'var': var, 'solution': dict}}
-        
+
         # Data dictionary for storing constraints (similar to LocalEnergyMarket)
         self.model.data['cons'] = {
             'community_elec_balance': {},
             'community_heat_balance': {},
             'community_hydro_balance': {},
             'convexity': {},
+            # New homogeneous coupling rows (populated only when enabled).
+            'reserve_up': {},
+            'reserve_dn': {},
+            'peak': {},
         }
     
     def _create_master_constraints(self):
@@ -503,6 +591,54 @@ class MasterProblem:
 
         print(f"  Added {len(self.time_periods)} community balance constraints (with artificial vars)")
         # print(f"  Artificial variable penalty: {BIG_M}")
+
+        # ---- Reserve / peak coupling rows (adding_cons.txt sec.4) ----
+        # These are extra LINKING rows in the RMP, consistent with the
+        # homogeneous (RHS=0) Dantzig-Wolfe reformulation: the shared community
+        # variables r_up, r_dn, p are the common-technology block x_0 (first-class
+        # RMP vars), while the per-player headroom r_plus/r_minus rides inside the
+        # priced columns. Coefficient table (per t):
+        #   reserve up  (<=0): r_up:+1,  member lambda: -r_plus[u,t]
+        #   reserve dn  (<=0): r_dn:+1,  member lambda: -r_minus[u,t]
+        #   peak        (<=0): p:-1,     member lambda: (i_E_gri - e_E_gri)[u,t]
+        if self.enable_reserve:
+            # Shared reserve products (revenue -> negative obj under min-cost).
+            self.r_up = self.model.addVar(vtype="C", name="r_up", lb=0.0, obj=-1.0*self.pi_up)
+            self.r_dn = self.model.addVar(vtype="C", name="r_dn", lb=0.0, obj=-1.0*self.pi_dn)
+            for t in self.time_periods:
+                up_expr = 1.0 * self.r_up
+                dn_expr = 1.0 * self.r_dn
+                for u in self.players:
+                    var = self.model.data["vars"][u][0]["var"]
+                    solution = self.model.data["vars"][u][0]["solution"]
+                    r_plus_val = solution.get('r_plus', {}).get((u, t), 0.0)
+                    r_minus_val = solution.get('r_minus', {}).get((u, t), 0.0)
+                    up_expr += var * (-r_plus_val)
+                    dn_expr += var * (-r_minus_val)
+                cons_up = self.model.addCons(up_expr <= 0.0,
+                                             name=f"reserve_up_coupling_{t}", modifiable=True)
+                cons_dn = self.model.addCons(dn_expr <= 0.0,
+                                             name=f"reserve_dn_coupling_{t}", modifiable=True)
+                self.model.data['cons']['reserve_up'][t] = cons_up
+                self.model.data['cons']['reserve_dn'][t] = cons_dn
+            print(f"  Added {len(self.time_periods)}x2 reserve coupling constraints")
+
+        if self.enable_peak:
+            # Shared peak variable p = chi_peak_E (penalty -> positive obj cost).
+            self.chi_peak_E = self.model.addVar(vtype="C", name="chi_peak_E", lb=0.0, obj=self.pi_peak)
+            for t in self.time_periods:
+                peak_expr = -1.0 * self.chi_peak_E
+                for u in self.players:
+                    var = self.model.data["vars"][u][0]["var"]
+                    solution = self.model.data["vars"][u][0]["solution"]
+                    i_E_gri_val = solution.get('i_E_gri', {}).get((u, t), 0.0)
+                    e_E_gri_val = solution.get('e_E_gri', {}).get((u, t), 0.0)
+                    peak_expr += var * (i_E_gri_val - e_E_gri_val)
+                cons_peak = self.model.addCons(peak_expr <= 0.0,
+                                               name=f"peak_coupling_{t}", modifiable=True)
+                self.model.data['cons']['peak'][t] = cons_peak
+            print(f"  Added {len(self.time_periods)} peak coupling constraints")
+
         print("=== Master Constraints Created ===\n")
     def _add_initial_columns(self, subproblems: Dict[str, 'PlayerSubproblem'], init_sol: Dict = None):
         """

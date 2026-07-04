@@ -229,3 +229,59 @@ coalition-invariance of the homogeneous common-block row $A_0^\top\mu\ge c_0$.
    since a referee may ask whether the extra product is load-bearing for the
    paper's claims (it is not — the symmetric version yields the same LPG/core
    result with one fewer variable).
+
+---
+
+## 7. Per-prosumer settlement of reserve & peak (CHP allocation)
+
+The core allocation of §5 is the LP-dual payoff $\chi_j=(\mu^*)^\top b_j$; since the
+reserve/peak coupling rows are homogeneous ($b_j=0$), they contribute to $\chi_j$ only
+*indirectly* through $\mu^*$. In practice we also report a **settlement allocation** that
+splits the reserve revenue and the peak penalty across prosumers by the same uniform
+dual-price rule used for the community energy prices. Let
+
+$$
+p_t^{up}:=\bigl|\lambda_t^{C\text{-}Res\uparrow}\bigr|,\quad
+p_t^{dn}:=\bigl|\lambda_t^{C\text{-}Res\downarrow}\bigr|,\quad
+p_t^{peak}:=\bigl|\lambda_t^{C\text{-}Peak}\bigr|\ \ge 0
+$$
+
+be the (per-period) shadow prices of the three coupling rows — the reserve *capacity*
+prices and the peak *coincidence* price. Each is nonzero only in the hour(s) where the
+corresponding row binds (the scarcest reserve hour, the peak hour).
+
+**Reserve — paid to providers by offered headroom:**
+$$
+\text{ReservePay}_j \;=\; \sum_{t}\Bigl(p_t^{up}\,r_{jt}^{+} + p_t^{dn}\,r_{jt}^{-}\Bigr).
+$$
+
+**Peak — charged by coincident net import:**
+$$
+\text{PeakCharge}_j \;=\; \sum_{t} p_t^{peak}\bigl(i_{jt}^{E,mkt}-e_{jt}^{E,mkt}\bigr).
+$$
+
+A prosumer net-exporting at the peak hour receives a *credit* (negative charge).
+
+**Budget balance.** By LP complementary slackness on the shared variables $r^{up},r^{dn},p$
+(each $>0$ has zero reduced cost, and $r^{up}=\sum_j r_{jt}^{+}$ etc. at the binding hour),
+$$
+\sum_t p_t^{up}=\pi^{up},\quad \sum_t p_t^{dn}=\pi^{dn},\quad \sum_t p_t^{peak}=\delta^{peak},
+$$
+so the settlement is *exactly* budget-balanced:
+$$
+\sum_j \text{ReservePay}_j = \pi^{up} r^{up}+\pi^{dn} r^{dn}
+\quad(\text{grid reserve revenue in}),\qquad
+\sum_j \text{PeakCharge}_j = \delta^{peak} p
+\quad(\text{peak penalty out}).
+$$
+Reserve revenue flows to the flexibility providers (storage / on-line electrolyzer &
+heat pump) in proportion to their binding-hour headroom; the peak penalty falls on the
+prosumers importing at the coincident peak. The identities hold verbatim when prices and
+quantities come from the *same* program; combining CHP (convex-hull) prices with the MIP
+dispatch leaves the usual convex-hull-pricing uplift/residual (the standard non-convex
+make-whole gap), which is where integrality re-enters (cf. §6.3).
+
+*Implementation:* `chp.py` — `ColumnGenerationSolver.solve()` extracts
+$p^{up},p^{dn},p^{peak}$ into `convex_hull_prices`; `_calculate_player_profits_with_chp`
+adds `reserve_revenue` and `peak_cost` per prosumer. Verified budget-balanced to
+machine precision on the 6-prosumer, $T=24$ instance (self-consistent CHP primal).

@@ -246,7 +246,21 @@ class SeparationProblem(LocalEnergyMarket):
                     M = self.params.get('storage_power_heat', M_default)
                     self.model.addCons(self.b_dis_H[u,t] <= M * z_u,
                                       name=f"bigm_b_dis_H_{u}_{t}")
-                
+
+                # Reserve headroom (private): an unselected player must offer zero
+                # reserve so it cannot contribute to the community coupling rows
+                # (C-Res up/down). Gating the aggregates r_plus/r_minus suffices —
+                # each equals the sum of its non-negative per-asset splits, so
+                # r_plus[u,t] <= M*z_u forces every split to 0 when z_u=0. The
+                # shared community singletons (r_up, r_dn, p) need no gating.
+                if self.enable_reserve:
+                    if (u, t) in self.r_plus:
+                        self.model.addCons(self.r_plus[u,t] <= M_default * z_u,
+                                          name=f"bigm_r_plus_{u}_{t}")
+                    if (u, t) in self.r_minus:
+                        self.model.addCons(self.r_minus[u,t] <= M_default * z_u,
+                                          name=f"bigm_r_minus_{u}_{t}")
+
                 # Electrolyzer binary commitment variables
                 if (u, t) in self.z_su_G:
                     self.model.addCons(self.z_su_G[u,t] <= z_u,
@@ -526,12 +540,18 @@ class CoreComputation:
         
         return cost
     
-    def initialize_master_problem(self, initial_coalitions: List[List[str]]) -> None:
+    def initialize_master_problem(self, initial_coalitions: List[List[str]],
+                                  cost_of_stability: bool = False) -> None:
         """
         Initialize the master problem with initial set of coalitions
-        
+
         Args:
             initial_coalitions: Initial set of coalitions (typically singletons)
+            cost_of_stability: if True, the epsilon slack v is placed on the GRAND
+                coalition only (external subsidy, efficiency row Σp = c(N) - v) and
+                every proper-coalition constraint is left strict. Then v* = cost of
+                stability. Default False = uniform epsilon on every coalition
+                (strong ε-core / least-core, original behaviour).
         """
         print("\n" + "="*70)
         print("Initializing Master Problem")
@@ -559,39 +579,58 @@ class CoreComputation:
         grand_coalition_cost = self.compute_coalition_cost(self.players)
         print(f"\nGrand coalition cost c(N): {grand_coalition_cost:.4f}")
         
-        efficiency_cons = self.master_model.addCons(
-            quicksum(self.payoff_vars[i] for i in self.players) == grand_coalition_cost,
-            name="efficiency"
-        )
-        
+        if cost_of_stability:
+            # Cost-of-stability: the epsilon slack v is an external subsidy sitting
+            # on the grand coalition ONLY. In cost form the subsidy lowers the total
+            # cost that must be allocated to members:  Σ_i p_i == c(N) - v.
+            efficiency_cons = self.master_model.addCons(
+                quicksum(self.payoff_vars[i] for i in self.players) == grand_coalition_cost - self.slack_var,
+                name="efficiency"
+            )
+        else:
+            efficiency_cons = self.master_model.addCons(
+                quicksum(self.payoff_vars[i] for i in self.players) == grand_coalition_cost,
+                name="efficiency"
+            )
+
         # Add initial coalition constraints
         print(f"\nAdding {len(initial_coalitions)} initial coalition constraints:")
         for coalition in initial_coalitions:
-            self._add_coalition_constraint(coalition)
+            self._add_coalition_constraint(coalition, cost_of_stability=cost_of_stability)
         
         print("="*70 + "\n")
     
-    def _add_coalition_constraint(self, coalition: List[str]) -> None:
+    def _add_coalition_constraint(self, coalition: List[str],
+                                  cost_of_stability: bool = False) -> None:
         """
         Add a coalition stability constraint to the master problem
-        
-        Constraint: Σ_{i∈S} p[i] <= c(S) + v
-        
+
+        Constraint: Σ_{i∈S} p[i] <= c(S) + v   (uniform-epsilon mode)
+                    Σ_{i∈S} p[i] <= c(S)        (cost-of-stability mode, strict)
+
         Args:
             coalition: List of player IDs in the coalition
+            cost_of_stability: if True, no epsilon on the coalition (the subsidy
+                lives only on the grand-coalition efficiency row).
         """
         coalition_cost = self.compute_coalition_cost(coalition)
-        
+
         coalition_str = "_".join(sorted(coalition))
-        
+
         # Need to free transformed problem before adding constraints
         self.master_model.freeTransform()
-        
+
         try:
-            cons = self.master_model.addCons(
-                quicksum(self.payoff_vars[i] for i in coalition) <= coalition_cost + self.slack_var,
-                name=f"stability_{coalition_str}"
-            )
+            if cost_of_stability:
+                cons = self.master_model.addCons(
+                    quicksum(self.payoff_vars[i] for i in coalition) <= coalition_cost,
+                    name=f"stability_{coalition_str}"
+                )
+            else:
+                cons = self.master_model.addCons(
+                    quicksum(self.payoff_vars[i] for i in coalition) <= coalition_cost + self.slack_var,
+                    name=f"stability_{coalition_str}"
+                )
         except Exception as e:
             print(f"Error adding coalition constraint: {e}")
             print(f"Coalition: {coalition}")
@@ -697,7 +736,8 @@ class CoreComputation:
     def compute_core(self,
                      max_iterations: int = 100,
                      tolerance: float = 1e-6,
-                     time_limit: float = 36000) -> Optional[Dict[str, float]]:
+                     time_limit: float = 36000,
+                     cost_of_stability: bool = True) -> Optional[Dict[str, float]]:
         """
         Main row generation algorithm to compute core allocation
 
@@ -705,9 +745,19 @@ class CoreComputation:
             max_iterations: Maximum number of iterations
             tolerance: Convergence tolerance
             time_limit: Time limit in seconds (default: 3600 = 1 hour)
+            cost_of_stability: DEFAULT True. Runs the cost-of-stability formulation
+                (epsilon subsidy on the grand coalition only; proper coalitions
+                strict). On convergence v* = cost of stability is stored in
+                self.cost_of_stability_value and self.weak_eps = v*/n, and the
+                method RETURNS the budget-balanced weak-(v*/n)-core allocation
+                q = p + v*/n (raw LP point p kept on self.cos_raw_payoffs); the
+                returned success flag means "core is non-empty" (v* ≈ 0). When
+                v*≈0 this q is exactly the core point, so it is a drop-in for the
+                previous behaviour. Set False for the old uniform-epsilon
+                strong-ε-core / least-core (early-exits on empty core).
 
         Returns:
-            Dict[str, float]: Core allocation if exists, None otherwise
+            (Dict[str, float], bool): allocation and success/core-nonempty flag.
         """
         import time
 
@@ -720,7 +770,7 @@ class CoreComputation:
 
         # Step 1: Initialize with singleton coalitions
         initial_coalitions = [[player] for player in self.players]
-        self.initialize_master_problem(initial_coalitions)
+        self.initialize_master_problem(initial_coalitions, cost_of_stability=cost_of_stability)
 
         iteration = 0
 
@@ -746,7 +796,10 @@ class CoreComputation:
             payoffs, slack = self.solve_master_problem()
             
             # Step 3: Check if core is empty
-            if slack > tolerance:
+            # In cost-of-stability mode a positive slack is exactly the subsidy we
+            # are trying to measure (not an emptiness certificate), so we must NOT
+            # early-exit here — keep generating rows until separation is clean.
+            if not cost_of_stability and slack > tolerance:
                 print(f"\n{'='*70}")
                 print(f"CORE IS EMPTY")
                 print(f"Slack variable v = {slack:.6f} > {tolerance}")
@@ -758,6 +811,33 @@ class CoreComputation:
             
             # Step 5: Check convergence
             if len(coalition) == 0 or violation <= tolerance:
+                if cost_of_stability:
+                    # v* = cost of stability (external subsidy needed to make the
+                    # core non-empty). Core is non-empty iff v* ≈ 0.
+                    self.cost_of_stability_value = slack
+                    self.weak_eps = slack / len(self.players)
+                    core_nonempty = slack <= tolerance
+                    # Raw LP point p (Σp = c(N) - v*) is NOT budget-balanced when the
+                    # core is empty; redistribute the subsidy equally to return a
+                    # budget-balanced weak-(v*/n)-core allocation q = p + v*/n. When
+                    # v*≈0 this equals the true core point (drop-in for the old
+                    # behaviour). Raw p kept on self.cos_raw_payoffs.
+                    self.cos_raw_payoffs = dict(payoffs)
+                    q = self.weak_eps_core_allocation(payoffs, slack)
+                    print(f"\n{'='*70}")
+                    print(f"COST-OF-STABILITY ROW GENERATION CONVERGED")
+                    print(f"Converged after {iteration} iterations")
+                    print(f"Cost of stability   v* = {slack:.6f}")
+                    print(f"Weak-eps-core eps = v*/n = {self.weak_eps:.6f}")
+                    print(f"Core non-empty (v*≈0): {core_nonempty}")
+                    print(f"\nBudget-balanced weak-eps-core allocation (Σ q_i = c(N)):")
+                    total_payoff = 0
+                    for i in self.players:
+                        print(f"  Player {i}: {q[i]:.4f}")
+                        total_payoff += q[i]
+                    print(f"  Total: {total_payoff:.4f}")
+                    print(f"{'='*70}\n")
+                    return q, core_nonempty
                 print(f"\n{'='*70}")
                 print(f"CORE ALLOCATION FOUND!")
                 print(f"Converged after {iteration} iterations")
@@ -773,39 +853,64 @@ class CoreComputation:
             
             # Step 6: Add violated coalition constraint
             print(f"\nAdding violated coalition {coalition} to master problem")
-            self._add_coalition_constraint(coalition)
+            self._add_coalition_constraint(coalition, cost_of_stability=cost_of_stability)
         
         print(f"\n{'='*70}")
         print(f"WARNING: Maximum iterations ({max_iterations}) reached")
         print(f"{'='*70}\n")
         return payoffs, False
-    def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False) -> float:
+
+    def weak_eps_core_allocation(self, cos_payoffs: Dict[str, float],
+                                 epsilon: Optional[float] = None) -> Dict[str, float]:
+        """
+        Turn a cost-of-stability allocation into a budget-balanced weak-ε-core point.
+
+        A CoS solution satisfies  Σ_{i∈S} p_i ≤ c(S) for every proper S  and
+        Σ_i p_i = c(N) - v*  (the members are collectively subsidised by v*).
+        Redistributing the subsidy equally, q_i = p_i + v*/n, restores budget
+        balance (Σ_i q_i = c(N)) while giving, for every coalition S,
+            Σ_{i∈S} q_i = Σ_{i∈S} p_i + |S|·v*/n ≤ c(S) + |S|·(v*/n),
+        i.e. q lies in the weak-(v*/n)-core with ε = v*/n.
+
+        Args:
+            cos_payoffs: allocation returned by compute_core(cost_of_stability=True)
+                         (or compute_core_brute_force(cost_of_stability=True)).
+            epsilon: the cost of stability v*. Defaults to self.cost_of_stability_value.
+
+        Returns:
+            Dict[str, float]: budget-balanced weak-(v*/n)-core allocation.
+        """
+        if epsilon is None:
+            epsilon = getattr(self, 'cost_of_stability_value', 0.0)
+        shift = epsilon / len(self.players)
+        return {i: cos_payoffs[i] + shift for i in self.players}
+
+    def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False):
             """
-            Measure the maximum stability violation for a given payoff allocation
-            
-            This function checks if the given payoff vector satisfies core stability
-            by finding the coalition with the maximum violation.
-            
+            Measure the WEAK-ε-core violation of a given (fixed) payoff allocation.
+
+            Consistent with the cost-of-stability / weak-ε-core framework used across
+            the codebase: the reported violation is the PER-CAPITA excess
+
+                ε(x) = max_{∅≠S⊊N}  ( Σ_{i∈S} x_i − c(S) ) / |S|
+
+            (cost form; x_i are costs, negative = profit). ε(x) > 0 ⇒ NOT in the
+            core; ε(x) ≤ 0 ⇒ in the core. The unit matches the game's v*/n
+            (v* = cost of stability from compute_core), so IP/LP/CHP/PCA allocations
+            are directly comparable to the best achievable weak-ε = v*/n.
+
             Args:
-                payoffs: Payoff allocation dictionary {player_id: payoff}
-                        Example: {'u1': -5.0, 'u2': 0.0, 'u3': -0.2}
-                brute_force: If True, compute all coalition costs and solve LP with all constraints.
-                        If False, use separation problem (faster for large N).
+                payoffs: Payoff allocation dictionary {player_id: payoff}.
+                brute_force: If True, solve the exact |S|-weighted LP over all 2^n
+                        coalitions (small n only). If False (default), find ε(x) by
+                        Dinkelbach iteration on the raw-excess separation problem
+                        (a handful of separation solves; scalable to large N).
             Returns:
-                float: Maximum violation amount
-                    - violation > 0: Payoff allocation is NOT in the core
-                                    (some coalition can improve by deviation)
-                    - violation ≤ 0: Payoff allocation IS in the core
-                                    (no coalition has incentive to deviate)
-            
+                tuple (coalition, weak_eps_violation, is_imputation)
+
             Example:
-                >>> core_comp = CoreComputation(players, time_periods, parameters)
-                >>> payoffs = {'u1': -5.15, 'u2': 0.0, 'u3': -0.13}
-                >>> violation = core_comp.measure_stability_violation(payoffs)
-                >>> if violation <= 0:
-                ...     print("Payoff is in the core!")
-                ... else:
-                ...     print(f"Payoff violates core by {violation:.4f}")
+                >>> coalition, eps, isimp = core_comp.measure_stability_violation(payoffs)
+                >>> print("in core" if eps <= 1e-6 else f"weak-eps violation {eps:.4f}")
             """
             ## First, check whether the cost allocation is the imputation (at least no worse than the individually played cost)
             is_imputation = self.check_imputation(payoffs)
@@ -814,10 +919,44 @@ class CoreComputation:
                 print("Cost allocation is not an imputation")
                 # return [], violation
             if not brute_force:
-                coalition, violation = self.find_violated_coalition(payoffs)
+                coalition, violation = self._measure_weak_eps_separation(payoffs)
             else:
                 coalition, violation = self._measure_violation_brute_force(payoffs)
             return coalition, violation, is_imputation
+
+    def _measure_weak_eps_separation(self, payoffs: Dict[str, float],
+                                     tolerance: float = 1e-6, max_iter: int = 50):
+        """
+        Weak-ε-core violation ε(x)=max_S (Σx_S−c(S))/|S| via Dinkelbach iteration.
+
+        |S| in the denominator makes the objective fractional; Dinkelbach solves a
+        sequence of parametric problems max_S (excess_S − λ·|S|), each of which is
+        EXACTLY the existing raw-excess separation with every payoff shifted down by
+        λ:  find_violated_coalition({i: x_i − λ}). λ increases monotonically to ε(x).
+
+        Short-circuit: if the raw max excess ≤ tol the allocation is already in the
+        exact core, hence ε(x) ≤ 0 too — report it without iterating (weak-ε only
+        differs from strong-ε when there is a genuine positive violation).
+        """
+        # λ = 0: raw (strong) max excess
+        coalition, raw_excess = self.find_violated_coalition(payoffs)
+        if raw_excess <= tolerance or len(coalition) == 0:
+            return coalition, raw_excess          # in core: weak-ε ≤ 0 as well
+        lam = raw_excess / len(coalition)
+        best_coalition = coalition
+        for _ in range(max_iter):
+            shifted = {i: payoffs[i] - lam for i in self.players}
+            S, _f_lam = self.find_violated_coalition(shifted)
+            if len(S) == 0:                       # F(λ) ≤ 0 ⇒ λ is the max ratio
+                break
+            ratio = (sum(payoffs[i] for i in S) - self.compute_coalition_cost(S)) / len(S)
+            best_coalition = S
+            if ratio <= lam + tolerance:
+                lam = ratio
+                break
+            lam = ratio
+        print(f"  Weak-ε (per-capita) violation = {lam:.6f} on coalition {best_coalition}")
+        return best_coalition, lam
     def check_imputation(self, payoffs: Dict[str, float]) -> bool:
         """
         Check whether the cost allocation is the imputation (at least no worse than the individually played cost)
@@ -826,9 +965,15 @@ class CoreComputation:
             if payoffs[player] - self.coalition_costs[tuple([player])] >= 1e-6:
                 return False
         return True
-    def compute_core_brute_force(self) -> Tuple[Dict[str, float], bool]:
+    def compute_core_brute_force(self, cost_of_stability: bool = False) -> Tuple[Dict[str, float], bool]:
         """
-        Compute core allocation by solving LP with all coalition constraints
+        Compute core allocation by solving LP with all coalition constraints.
+
+        cost_of_stability=True switches to the CoS formulation (subsidy v on the
+        grand coalition only; every proper coalition strict). Then v* is stored in
+        self.cost_of_stability_value / self.weak_eps and the returned flag means
+        "core non-empty" (v* ≈ 0). This is the exact (all-coalition) reference for
+        the row-generation compute_core(cost_of_stability=True).
         """
         print("\n" + "="*70)
         print("COMPUTING CORE ALLOCATION BY BRUTE FORCE")
@@ -850,14 +995,23 @@ class CoreComputation:
         for coalition_tuple, cost in self.coalition_costs.items():
             coalition = list(coalition_tuple)
                         
-            # Constraint: Σ_{i∈S} payoffs[i] <= c(S) + v
+            # Constraint: Σ_{i∈S} payoffs[i] <= c(S) (+ v depending on mode)
             lhs = sum(payoff_dict[i] for i in coalition)
             if len(coalition) != len(self.players):
-                lp_model.addCons(lhs <= cost + v, 
-                                name=f"stability_{'_'.join(sorted(coalition))}")
+                if cost_of_stability:
+                    # strict stability; subsidy sits only on the grand coalition
+                    lp_model.addCons(lhs <= cost,
+                                    name=f"stability_{'_'.join(sorted(coalition))}")
+                else:
+                    lp_model.addCons(lhs <= cost + v,
+                                    name=f"stability_{'_'.join(sorted(coalition))}")
             else:
-                lp_model.addCons(lhs == cost, 
-                                name=f"stability_{'_'.join(sorted(coalition))}")
+                if cost_of_stability:
+                    lp_model.addCons(lhs == cost - v,
+                                    name=f"stability_{'_'.join(sorted(coalition))}")
+                else:
+                    lp_model.addCons(lhs == cost,
+                                    name=f"stability_{'_'.join(sorted(coalition))}")
             num_constraints += 1
         
         print(f"✓ Added {num_constraints} stability constraints")
@@ -876,8 +1030,19 @@ class CoreComputation:
             payoff_dict[player] = lp_model.getVal(payoff_dict[player])
         
         print(f"\n✓ Optimal solution found")
+        if cost_of_stability:
+            self.cost_of_stability_value = violation
+            self.weak_eps = violation / len(self.players)
+            core_nonempty = violation <= 1e-6
+            # return the budget-balanced weak-(v*/n)-core point (raw p on self)
+            self.cos_raw_payoffs = dict(payoff_dict)
+            q = self.weak_eps_core_allocation(payoff_dict, violation)
+            print(f"  Cost of stability  v* = {violation:.6f}")
+            print(f"  Weak-eps-core eps = v*/n = {self.weak_eps:.6f}")
+            print(f"  → Core {'NON-EMPTY' if core_nonempty else 'EMPTY'} (v*≈0: {core_nonempty})")
+            return q, core_nonempty
         print(f"  Maximum violation (slack v): {violation:.6f}")
-        
+
         if violation <= 1e-6:
             print(f"  → Payoff IS in the core (stable)")
             return payoff_dict, True
@@ -886,20 +1051,22 @@ class CoreComputation:
             return payoff_dict, False
     def _measure_violation_brute_force(self, payoffs: Dict[str, float]) -> float:
         """
-        Measure violation by solving LP with all coalition constraints
-        
-        This method:
+        Exact WEAK-ε-core violation by LP over all coalitions.
+
         1. Computes all coalition costs (if not already computed)
         2. Solves: min v
-                  s.t. Σ_{i∈S} payoffs[i] ≤ c(S) + v  for all S
+                  s.t. Σ_{i∈S} payoffs[i] ≤ c(S) + |S|·v   for all S
                        v ≥ 0
-        3. Returns optimal v (maximum violation)
-        
+           whose optimum is  v = max(0, max_S (Σx_S − c(S))/|S|) = weak-ε(x).
+           (The |S| weight on the slack is what turns the strong-ε excess into the
+           per-capita weak-ε, matching self.weak_eps = v*/n from compute_core.)
+        3. Returns (binding coalition, weak-ε).
+
         Args:
             payoffs: Payoff allocation dictionary
-            
+
         Returns:
-            float: Maximum violation (optimal slack variable v)
+            float: weak-ε violation (optimal slack variable v)
         """
         print("\n" + "="*70)
         print("BRUTE FORCE VIOLATION MEASUREMENT")
@@ -925,9 +1092,9 @@ class CoreComputation:
         for coalition_tuple, cost in self.coalition_costs.items():
             coalition = list(coalition_tuple)
                         
-            # Constraint: Σ_{i∈S} payoffs[i] ≤ c(S) + v
+            # Constraint: Σ_{i∈S} payoffs[i] ≤ c(S) + |S|·v   (per-capita / weak-ε)
             lhs = sum(payoffs[i] for i in coalition)
-            lp_model.addCons(lhs <= cost + v, 
+            lp_model.addCons(lhs <= cost + len(coalition) * v,
                            name=f"stability_{'_'.join(sorted(coalition))}")
             num_constraints += 1
         
@@ -943,10 +1110,10 @@ class CoreComputation:
             return float('inf')
         
         violation = lp_model.getVal(v)
-        
+
         print(f"\n✓ Optimal solution found")
-        print(f"  Maximum violation (slack v): {violation:.6f}")
-        
+        print(f"  Weak-ε (per-capita) violation: {violation:.6f}")
+
         if violation <= 1e-6:
             print(f"  → Payoff IS in the core (stable)")
         else:

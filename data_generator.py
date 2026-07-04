@@ -73,6 +73,10 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = sensitivity_analysis['eff_type']
         segments = sensitivity_analysis['segments']
         peak_penalty_ratio = sensitivity_analysis['peak_penalty_ratio']
+        # Reserve (up/down) price ratios -- new, absent from legacy sensitivity
+        # dicts, so read defensively. 0.0 => reserve inert (see adding_cons.txt).
+        reserve_up_ratio = sensitivity_analysis.get('reserve_up_ratio', 0.0)
+        reserve_dn_ratio = sensitivity_analysis.get('reserve_dn_ratio', 0.0)
         wind_el_ratio = sensitivity_analysis['wind_el_ratio']
         solar_el_ratio = sensitivity_analysis['solar_el_ratio']
         storage_power_ratio_E = sensitivity_analysis['storage_power_ratio_E']
@@ -103,6 +107,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = 1
         segments = 6
         peak_penalty_ratio = 0.0
+        reserve_up_ratio = 0.0
+        reserve_dn_ratio = 0.0
         wind_el_ratio = 1.0# [1.0, 2.0]
         solar_el_ratio = 1.0
         storage_power_ratio_E = 0.25
@@ -232,8 +238,21 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
 
     parameters[f"pi_E_peak"] = np.mean(elec_prices["import"])*peak_penalty_ratio
-    
-    
+
+    # Reserve (up/down) prices -- electricity-side, no carrier index
+    # (adding_cons.txt sec.2.1). Derived as a fraction of the mean import price so
+    # the values are self-justifying (sec.6.2). Scalar bids; extend to a per-t
+    # series only if a time-varying reserve price is later required.
+    parameters["pi_up"] = np.mean(elec_prices["import"]) * reserve_up_ratio
+    parameters["pi_dn"] = np.mean(elec_prices["import"]) * reserve_dn_ratio
+
+    # Enable flags -- gate construction of the reserve/peak coupling in the model.
+    # Default off (all ratios 0) so existing scenarios and the copositive nc are
+    # byte-identical unless the coupling is deliberately switched on.
+    parameters["enable_reserve"] = (reserve_up_ratio > 0.0) or (reserve_dn_ratio > 0.0)
+    parameters["enable_peak"] = (peak_penalty_ratio > 0.0)
+
+
     # DEMANDS
     elec_generator = ElectricityLoadGenerator(num_households=num_households)
     heat_generator = HeatLoadGenerator(num_households=num_households)

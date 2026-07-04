@@ -36,6 +36,11 @@ class LEMPricer(Pricer):
             self.pi_bar_heat = {t: 0.0 for t in time_periods}
             self.pi_bar_hydro = {t: 0.0 for t in time_periods}
             self.pi_bar_conv = {player: 0.0 for player in players}
+            # Stability centers for the reserve/peak coupling duals (adding_cons.txt).
+            # Always allocated (harmless when reserve/peak disabled — never read).
+            self.pi_bar_resup = {t: 0.0 for t in time_periods}
+            self.pi_bar_resdn = {t: 0.0 for t in time_periods}
+            self.pi_bar_peak = {t: 0.0 for t in time_periods}
             # Best Lagrangean bound found so far
             self.L_bar = -np.inf
             # Incumbent (upper bound) — will be set from outside or from init_sol
@@ -87,7 +92,34 @@ class LEMPricer(Pricer):
                 dual_convexity[player] = self.model.getDualfarkasLinear(t_conv_cons)
             else:
                 dual_convexity[player] = self.model.getDualsolLinear(t_conv_cons)
-                
+
+        # Reserve / peak coupling duals (adding_cons.txt). These rows exist in the
+        # RMP only when reserve/peak is enabled, so the dicts are non-empty exactly
+        # then; otherwise the duals stay None and every downstream use is skipped,
+        # preserving the flags-off invariant byte-for-byte. Duals are passed RAW
+        # (no sign flip) — solve_pricing applies them with the RC = c - sum pi*a
+        # convention, identical to the community-balance handling.
+        dual_resup = dual_resdn = dual_peak = None
+        if self.model.data['cons']['reserve_up']:
+            dual_resup, dual_resdn = {}, {}
+            for t in self.time_periods:
+                up_cons = self.model.getTransformedCons(self.model.data['cons']['reserve_up'][t])
+                dn_cons = self.model.getTransformedCons(self.model.data['cons']['reserve_dn'][t])
+                if farkas:
+                    dual_resup[t] = self.model.getDualfarkasLinear(up_cons)
+                    dual_resdn[t] = self.model.getDualfarkasLinear(dn_cons)
+                else:
+                    dual_resup[t] = self.model.getDualsolLinear(up_cons)
+                    dual_resdn[t] = self.model.getDualsolLinear(dn_cons)
+        if self.model.data['cons']['peak']:
+            dual_peak = {}
+            for t in self.time_periods:
+                pk_cons = self.model.getTransformedCons(self.model.data['cons']['peak'][t])
+                if farkas:
+                    dual_peak[t] = self.model.getDualfarkasLinear(pk_cons)
+                else:
+                    dual_peak[t] = self.model.getDualsolLinear(pk_cons)
+
         # DEBUG: Print dual prices for first few iterations
         # if not farkas and self.iteration <= 3:
         #     print(f"\n  [Iter {self.iteration}] Dual Prices Sample:")
@@ -99,7 +131,8 @@ class LEMPricer(Pricer):
                     
         # === Smoothing branch (non-farkas only) ===
         if not farkas and self.smoothing:
-            return self._price_smoothed(dual_elec, dual_heat, dual_hydro, dual_convexity, lp_obj)
+            return self._price_smoothed(dual_elec, dual_heat, dual_hydro, dual_convexity, lp_obj,
+                                        dual_resup, dual_resdn, dual_peak)
 
         # Solve pricing problems for each player
         columns_added = 0
@@ -109,8 +142,9 @@ class LEMPricer(Pricer):
         for player in self.players:
             reduced_cost, solution, obj_val = self.subproblems[player].solve_pricing(
                 dual_elec, dual_heat, dual_hydro, dual_convexity[player],
-                farkas=farkas)
-            debug_sol[player] = solution  
+                farkas=farkas,
+                dual_resup=dual_resup, dual_resdn=dual_resdn, dual_peak=dual_peak)
+            debug_sol[player] = solution
             obj_val_list.append(obj_val)
             # Add column if reduced cost is negative
             if reduced_cost < -1e-8:
@@ -226,10 +260,45 @@ class LEMPricer(Pricer):
                 new_var,
                 coeff_hydro
             )
+
+        # ---- Reserve / peak coupling rows (adding_cons.txt sec.4) ----
+        # Homogeneous linking rows added to the RMP exactly like community balance.
+        # Column coefficients (this player's contribution at t) match the spec table:
+        #   reserve up : -r_plus[u,t]      reserve dn : -r_minus[u,t]
+        #   peak       : (i_E_gri - e_E_gri)[u,t]
+        # Guarded by row existence so nothing is stamped when reserve/peak is off.
+        if self.model.data['cons']['reserve_up']:
+            for t in self.time_periods:
+                r_plus_val = solution.get('r_plus', {}).get((player, t), 0.0)
+                r_minus_val = solution.get('r_minus', {}).get((player, t), 0.0)
+                self.model.addConsCoeff(
+                    self.model.getTransformedCons(self.model.data['cons']['reserve_up'][t]),
+                    new_var, -r_plus_val)
+                self.model.addConsCoeff(
+                    self.model.getTransformedCons(self.model.data['cons']['reserve_dn'][t]),
+                    new_var, -r_minus_val)
+        if self.model.data['cons']['peak']:
+            for t in self.time_periods:
+                i_gri = solution.get('i_E_gri', {}).get((player, t), 0.0)
+                e_gri = solution.get('e_E_gri', {}).get((player, t), 0.0)
+                self.model.addConsCoeff(
+                    self.model.getTransformedCons(self.model.data['cons']['peak'][t]),
+                    new_var, i_gri - e_gri)
+
     def _update_lagrangian_bound(self, obj_val_list: List[float], farkas: bool):
         """
         Update Lagrangian bound
         이 문제에서 linking constraint의 right-hand-side는 전부 zero이기 때문에, subproblem들의 objective value만 합하면 됨.
+
+        Reserve/peak note (adding_cons.txt): the coupling rows are ALSO homogeneous
+        (RHS 0), and their shared common-block variables r_up, r_dn, p live in the
+        RMP as first-class (non-priced) variables. The Lagrangian dual gains a term
+        min_{x0>=0}[ c0^T x0 - mu^T A0 x0 ]; because r_up/r_dn/p sit in the RMP, at
+        every LP optimum where the pricer is invoked their reduced costs are >= 0,
+        so that inner min is exactly 0. Hence L(mu) = sum_j obj_val_j is STILL the
+        correct bound with reserve/peak on — no extra term is added here. (Adding
+        the *primal* shared-var cost -pi_up*r_up... would be wrong: it is a
+        different quantity and would corrupt the bound.)
         """
         if farkas:
             return
@@ -243,9 +312,15 @@ class LEMPricer(Pricer):
     # Smoothing 관련 메서드 (Wentges 1997 / Pessoa et al. 2010)
     # ===================================================================
 
-    def _price_smoothed(self, pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv, lp_obj):
+    def _price_smoothed(self, pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv, lp_obj,
+                        dual_resup=None, dual_resdn=None, dual_peak=None):
         """
         Smoothed pricing: Steps 2-8 from cg_smoothing.md
+
+        Reserve/peak coupling duals (adding_cons.txt) are smoothed on the SAME
+        stability center as the balance duals: pi^ST = alpha*pi^RM + (1-alpha)*pi_bar,
+        with their own centers pi_bar_resup/resdn/peak advanced whenever L(pi^ST)
+        improves. None => disabled (skipped, flags-off invariant preserved).
         """
         # Step 2: α 계산
         Z_RM = lp_obj
@@ -256,6 +331,13 @@ class LEMPricer(Pricer):
         pi_ST_heat = {t: alpha * pi_RM_heat[t] + (1 - alpha) * self.pi_bar_heat[t] for t in self.time_periods}
         pi_ST_hydro = {t: alpha * pi_RM_hydro[t] + (1 - alpha) * self.pi_bar_hydro[t] for t in self.time_periods}
         pi_ST_conv = {p: alpha * pi_RM_conv[p] + (1 - alpha) * self.pi_bar_conv[p] for p in self.players}
+        # Reserve / peak smoothed duals (None when disabled).
+        pi_ST_resup = pi_ST_resdn = pi_ST_peak = None
+        if dual_resup is not None:
+            pi_ST_resup = {t: alpha * dual_resup[t] + (1 - alpha) * self.pi_bar_resup[t] for t in self.time_periods}
+            pi_ST_resdn = {t: alpha * dual_resdn[t] + (1 - alpha) * self.pi_bar_resdn[t] for t in self.time_periods}
+        if dual_peak is not None:
+            pi_ST_peak = {t: alpha * dual_peak[t] + (1 - alpha) * self.pi_bar_peak[t] for t in self.time_periods}
 
         # Step 6 (moved up): L(π^ST) 계산 및 π̄ 업데이트
         # π^ST로 pricing하여 Lagrangean bound를 먼저 계산
@@ -263,7 +345,8 @@ class LEMPricer(Pricer):
         st_obj_vals = {}
         for player in self.players:
             rc_st, sol, obj_val = self.subproblems[player].solve_pricing(
-                pi_ST_elec, pi_ST_heat, pi_ST_hydro, pi_ST_conv[player])
+                pi_ST_elec, pi_ST_heat, pi_ST_hydro, pi_ST_conv[player],
+                dual_resup=pi_ST_resup, dual_resdn=pi_ST_resdn, dual_peak=pi_ST_peak)
             st_solutions[player] = sol
             st_obj_vals[player] = obj_val
 
@@ -274,6 +357,11 @@ class LEMPricer(Pricer):
             self.pi_bar_heat = dict(pi_ST_heat)
             self.pi_bar_hydro = dict(pi_ST_hydro)
             self.pi_bar_conv = dict(pi_ST_conv)
+            if pi_ST_resup is not None:
+                self.pi_bar_resup = dict(pi_ST_resup)
+                self.pi_bar_resdn = dict(pi_ST_resdn)
+            if pi_ST_peak is not None:
+                self.pi_bar_peak = dict(pi_ST_peak)
 
         # Also update the standard Lagrangian bound for consistency
         self.lb = max(self.lb, L_pi_ST)
@@ -291,7 +379,8 @@ class LEMPricer(Pricer):
         for player in self.players:
             if st_solutions[player] is not None:
                 rc_rm = self._recalculate_reduced_cost_wrt_pi_RM(
-                    player, st_solutions[player], pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
+                    player, st_solutions[player], pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player],
+                    dual_resup, dual_resdn, dual_peak)
                 if rc_rm < -1e-8:
                     self._add_column(player, st_solutions[player])
                     columns_added += 1
@@ -303,7 +392,8 @@ class LEMPricer(Pricer):
             rm_obj_vals = {}
             for player in self.players:
                 rc_rm, sol, obj_val = self.subproblems[player].solve_pricing(
-                    pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player])
+                    pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player],
+                    dual_resup=dual_resup, dual_resdn=dual_resdn, dual_peak=dual_peak)
                 if rc_rm < -1e-7:
                     self._add_column(player, sol)
                     columns_added += 1
@@ -359,14 +449,17 @@ class LEMPricer(Pricer):
         else:
             return base_alpha
 
-    def _recalculate_reduced_cost_wrt_pi_RM(self, player, solution, pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv):
+    def _recalculate_reduced_cost_wrt_pi_RM(self, player, solution, pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv,
+                                            pi_RM_resup=None, pi_RM_resdn=None, pi_RM_peak=None):
         """
         Subproblem을 다시 풀지 않고, 이미 찾은 solution의 변수값으로 π^RM 기준 reduced cost를 직접 계산.
 
-        RC = original_cost - Σ_t π^RM_elec[t] * (i_E_com - e_E_com)
-                           - Σ_t π^RM_heat[t] * (i_H_com - e_H_com)
-                           - Σ_t π^RM_hydro[t] * (i_G_com - e_G_com)
-                           - π^RM_conv
+        RC = original_cost - Σ_row π^RM_row * a_row(col) - π^RM_conv,
+        where a_row(col) is this column's coefficient in that linking row:
+          balance    : (i_com - e_com)
+          reserve up : -r_plus[u,t]      reserve dn : -r_minus[u,t]
+          peak       : (i_E_gri - e_E_gri)[u,t]
+        (dual_contribution = Σ_row π * a; identical convention to solve_pricing.)
         """
         # Original cost (same as calculate_column_cost)
         cost = calculate_column_cost(player, solution, self.subproblems[player].parameters, self.time_periods)
@@ -386,6 +479,17 @@ class LEMPricer(Pricer):
             i_G = solution.get('i_G_com', {}).get((player, t), 0.0)
             e_G = solution.get('e_G_com', {}).get((player, t), 0.0)
             dual_contribution += pi_RM_hydro[t] * (i_G - e_G)
+            # Reserve up/down (column coeff -r_plus / -r_minus)
+            if pi_RM_resup is not None:
+                r_plus = solution.get('r_plus', {}).get((player, t), 0.0)
+                r_minus = solution.get('r_minus', {}).get((player, t), 0.0)
+                dual_contribution += pi_RM_resup[t] * (-r_plus)
+                dual_contribution += pi_RM_resdn[t] * (-r_minus)
+            # Peak (column coeff i_E_gri - e_E_gri)
+            if pi_RM_peak is not None:
+                i_gri = solution.get('i_E_gri', {}).get((player, t), 0.0)
+                e_gri = solution.get('e_E_gri', {}).get((player, t), 0.0)
+                dual_contribution += pi_RM_peak[t] * (i_gri - e_gri)
 
         reduced_cost = cost - dual_contribution - pi_RM_conv
         return reduced_cost
