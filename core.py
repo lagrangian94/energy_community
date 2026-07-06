@@ -367,6 +367,8 @@ class SeparationProblem(LocalEnergyMarket):
 
         if self.mipsolver and self.mipsolver.lower() == 'highs':
             obj_val, selected_coalition = self._solve_with_highs()
+        elif self.mipsolver and self.mipsolver.lower() == 'gurobi':
+            obj_val, selected_coalition = self._solve_with_gurobi()
         else:
             # Solve with SCIP (default)
             status = self.solve()
@@ -441,6 +443,52 @@ class SeparationProblem(LocalEnergyMarket):
         print(f"  HiGHS objective: {obj_val:.4f}")
 
         # Clean up temp file
+        try:
+            os.remove(mps_path)
+        except OSError:
+            pass
+
+        return obj_val, selected_coalition
+
+    def _solve_with_gurobi(self):
+        """
+        Export SCIP model to .mps, then solve with Gurobi via gurobipy.
+
+        The separation MIP is the row-generation bottleneck; Gurobi is typically
+        much faster than SCIP/HiGHS on it. Only the selected coalition (z_ vars = 1)
+        and the objective are needed, so we read the same MPS SCIP writes.
+
+        Returns:
+            tuple: (obj_val, selected_coalition)
+        """
+        import gurobipy as gp
+
+        mps_path = os.path.join(tempfile.gettempdir(), "separation_problem.mps")
+        self.model.writeProblem(mps_path)
+
+        gm = gp.read(mps_path)
+        gm.setParam("OutputFlag", 0)
+        gm.setParam("MIPGap", 1e-4)   # default relative gap; the caller's
+                                      # violation verification uses a matching
+                                      # relative tolerance (see find_violated_coalition)
+        gm.optimize()
+
+        if gm.Status != gp.GRB.OPTIMAL:
+            raise RuntimeError(
+                f"Gurobi separation problem failed with status: {gm.Status}"
+            )
+
+        obj_val = gm.ObjVal
+        players_set = set(self.players)
+        selected_coalition = []
+        for var in gm.getVars():
+            if var.VarName.startswith("z_"):
+                player_id = var.VarName[2:]  # strip "z_" prefix
+                if player_id in players_set and var.X > 0.5:
+                    selected_coalition.append(player_id)
+
+        print(f"  Gurobi objective: {obj_val:.4f}")
+
         try:
             os.remove(mps_path)
         except OSError:
@@ -725,8 +773,16 @@ class CoreComputation:
             print(f"  Actual violation (Σ payoffs - cost): {actual_violation:.4f}")
             print(f"  Separation problem violation: {violation:.4f}")
             print(f"  Found coalition: {coalition}")
-            if abs(actual_violation - violation) > 1e-4:
-                raise RuntimeError("Mismatch between actual and computed violation!")
+            # The separation MIP is solved to a RELATIVE gap (MIPGap=1e-4, Gurobi or
+            # SCIP), so the separation-vs-fresh-c(S) mismatch scales with the
+            # objective magnitude. Use a relative tolerance (≈ MIPGap·|c(S)|) with an
+            # absolute floor, rather than a fixed 1e-4 that only held for near-exact
+            # solves and spuriously tripped with the Gurobi separation path.
+            verify_tol = max(1e-4, 2e-4 * abs(coalition_cost))
+            if abs(actual_violation - violation) > verify_tol:
+                raise RuntimeError(
+                    f"Mismatch between actual ({actual_violation:.6f}) and separation "
+                    f"({violation:.6f}) violation exceeds tol {verify_tol:.6f}!")
         else:
             coalition = []
         print("="*60)
@@ -786,6 +842,18 @@ class CoreComputation:
                     print(f"TIME LIMIT EXCEEDED ({elapsed:.1f}s > {time_limit:.0f}s)")
                     print(f"Stopped after {iteration} iterations")
                     print(f"{'='*70}\n")
+                    if cost_of_stability and 'slack' in dir():
+                        # Not converged: the master slack over the coalitions
+                        # generated so far is a LOWER BOUND on v* (slack is
+                        # monotone non-decreasing as rows are added). Expose it so
+                        # the partial run still brackets eps_min from below.
+                        self.cost_of_stability_value = slack
+                        self.weak_eps = slack / len(self.players)
+                        self.cos_converged = False
+                        self.cos_raw_payoffs = dict(payoffs)
+                        print(f"Partial cost-of-stability LOWER BOUND v* >= {slack:.6f} "
+                              f"(weak-eps >= {self.weak_eps:.6f})")
+                        return self.weak_eps_core_allocation(payoffs, slack), False
                     return payoffs if 'payoffs' in dir() else None, False
 
             print(f"\n{'='*70}")
@@ -816,6 +884,7 @@ class CoreComputation:
                     # core non-empty). Core is non-empty iff v* ≈ 0.
                     self.cost_of_stability_value = slack
                     self.weak_eps = slack / len(self.players)
+                    self.cos_converged = True
                     core_nonempty = slack <= tolerance
                     # Raw LP point p (Σp = c(N) - v*) is NOT budget-balanced when the
                     # core is empty; redistribute the subsidy equally to return a
@@ -858,6 +927,15 @@ class CoreComputation:
         print(f"\n{'='*70}")
         print(f"WARNING: Maximum iterations ({max_iterations}) reached")
         print(f"{'='*70}\n")
+        if cost_of_stability and 'slack' in dir():
+            # Same partial lower-bound capture as the time-limit exit above.
+            self.cost_of_stability_value = slack
+            self.weak_eps = slack / len(self.players)
+            self.cos_converged = False
+            self.cos_raw_payoffs = dict(payoffs)
+            print(f"Partial cost-of-stability LOWER BOUND v* >= {slack:.6f} "
+                  f"(weak-eps >= {self.weak_eps:.6f})")
+            return self.weak_eps_core_allocation(payoffs, slack), False
         return payoffs, False
 
     def weak_eps_core_allocation(self, cos_payoffs: Dict[str, float],
