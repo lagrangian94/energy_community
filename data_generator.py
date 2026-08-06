@@ -22,6 +22,37 @@ def epsilon_log(n_consumers, scale=0.1):
     return scale * np.log(n_consumers)
 
 
+# Literature ranges for the electrolyzer ratios that set upward reserve headroom
+# (reserve.txt sec.2.2): Saretta et al. 2023 (Table III) and Johnsen et al. 2025.
+# min load 10-16% of capacity, standby draw 2.5-5%.
+RESERVE_CALIBRATION_RANGES = {
+    'c_min_G': (0.10, 0.16, 'electrolyzer min load / els_cap'),
+    'c_sb_G':  (0.025, 0.05, 'electrolyzer standby draw / els_cap'),
+}
+
+
+def log_reserve_calibration(parameters):
+    """Cross-check the ratios that drive reserve headroom against the literature.
+
+    reserve.txt sec.2.2 asks for this comparison to be logged rather than
+    silently applied: c_min_G and c_sb_G directly determine how much upward
+    reserve the electrolyzer can offer, so a value outside the Saretta/Johnsen
+    range changes the reserve results without changing anything visible in the
+    energy-only baseline. Reported only when the reserve channel is on.
+    """
+    if not parameters.get('enable_reserve'):
+        return
+    print(f"[reserve] pi_res = {parameters['pi_res']:.4g} EUR/MW.h "
+          f"(24h hold => {24*parameters['pi_res']:.4g} EUR/MW/day)")
+    for key, (lo, hi, what) in RESERVE_CALIBRATION_RANGES.items():
+        val = parameters.get(key)
+        if val is None:
+            continue
+        flag = "OK" if lo <= val <= hi else "OUT OF RANGE"
+        print(f"[reserve] {key} = {val:.4g} ({what}); "
+              f"literature {lo:.3g}-{hi:.3g} -> {flag}")
+
+
 def update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices):
     parameters['pi_E_gri'] = {}
     parameters['pi_G_gri'] = {}
@@ -73,10 +104,14 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = sensitivity_analysis['eff_type']
         segments = sensitivity_analysis['segments']
         peak_penalty_ratio = sensitivity_analysis['peak_penalty_ratio']
-        # Reserve (up/down) price ratios -- new, absent from legacy sensitivity
-        # dicts, so read defensively. 0.0 => reserve inert (see adding_cons.txt).
-        reserve_up_ratio = sensitivity_analysis.get('reserve_up_ratio', 0.0)
-        reserve_dn_ratio = sensitivity_analysis.get('reserve_dn_ratio', 0.0)
+        # Reserve / peak prices in ABSOLUTE units (reserve.txt sec.2.1):
+        #   reserve_price [EUR/MW.h], peak_penalty [EUR/MW over the horizon].
+        # Absent from legacy sensitivity dicts, so read defensively; 0.0 => the
+        # channel is inert. peak_penalty_ratio is kept as a fallback for the
+        # pre-reserve.txt scenarios that expressed the penalty as a fraction of
+        # the mean import price.
+        reserve_price = sensitivity_analysis.get('reserve_price', 0.0)
+        peak_penalty = sensitivity_analysis.get('peak_penalty', None)
         wind_el_ratio = sensitivity_analysis['wind_el_ratio']
         solar_el_ratio = sensitivity_analysis['solar_el_ratio']
         storage_power_ratio_E = sensitivity_analysis['storage_power_ratio_E']
@@ -107,8 +142,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         eff_type = 1
         segments = 6
         peak_penalty_ratio = 0.0
-        reserve_up_ratio = 0.0
-        reserve_dn_ratio = 0.0
+        reserve_price = 0.0
+        peak_penalty = None
         wind_el_ratio = 1.0# [1.0, 2.0]
         solar_el_ratio = 1.0
         storage_power_ratio_E = 0.25
@@ -237,20 +272,30 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     heat_prices = HeatPriceGenerator().get_profiles(month=month, import_factor=import_factor, customer_type='residential', use_seasonal=False)
     parameters = update_market_price(parameters, time_periods, elec_prices, h2_prices, heat_prices)
 
-    parameters[f"pi_E_peak"] = np.mean(elec_prices["import"])*peak_penalty_ratio
+    # Peak penalty delta_peak [EUR/MW over the horizon]. reserve.txt sec.2.1
+    # recommends 150-200 (= 0.15-0.20 EUR/kW, Cornelusse et al. 2019, the only
+    # direct precedent for a community peak charge). An absolute `peak_penalty`
+    # takes precedence; otherwise fall back to the legacy price-ratio form.
+    if peak_penalty is not None:
+        parameters["pi_E_peak"] = float(peak_penalty)
+    else:
+        parameters["pi_E_peak"] = np.mean(elec_prices["import"])*peak_penalty_ratio
 
-    # Reserve (up/down) prices -- electricity-side, no carrier index
-    # (adding_cons.txt sec.2.1). Derived as a fraction of the mean import price so
-    # the values are self-justifying (sec.6.2). Scalar bids; extend to a per-t
-    # series only if a time-varying reserve price is later required.
-    parameters["pi_up"] = np.mean(elec_prices["import"]) * reserve_up_ratio
-    parameters["pi_dn"] = np.mean(elec_prices["import"]) * reserve_dn_ratio
+    # Symmetric reserve capacity price pi_res [EUR/MW.h] -- electricity-side, no
+    # carrier index (reserve.txt sec.2.1). ABSOLUTE, not a fraction of the import
+    # price: the product is Nordic FCR-N (symmetric two-sided, matching r_sym),
+    # priced from Energinet DK2 data -- 56 baseline, 11 low regime. DK2 is the
+    # same bidding zone as the wind CF series, so the two are consistent.
+    # Scalar bid; extend to a per-t series only if a time-varying price is needed.
+    parameters["pi_res"] = float(reserve_price)
 
     # Enable flags -- gate construction of the reserve/peak coupling in the model.
-    # Default off (all ratios 0) so existing scenarios and the copositive nc are
+    # Default off (prices 0) so existing scenarios and the copositive nc are
     # byte-identical unless the coupling is deliberately switched on.
-    parameters["enable_reserve"] = (reserve_up_ratio > 0.0) or (reserve_dn_ratio > 0.0)
-    parameters["enable_peak"] = (peak_penalty_ratio > 0.0)
+    parameters["enable_reserve"] = (parameters["pi_res"] > 0.0)
+    parameters["enable_peak"] = (parameters["pi_E_peak"] > 0.0)
+
+    log_reserve_calibration(parameters)
 
 
     # DEMANDS

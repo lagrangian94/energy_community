@@ -55,6 +55,43 @@ class ColumnGenerationSolver:
         
         print("Note: Initial columns will be generated via initial solve")
     
+    def _shared_block_cost(self, init_sol: Dict) -> float:
+        """Objective contribution of the master's shared block (r_sym, p) at a solution.
+
+        The incumbent passed to the pricer is assembled from per-player column costs,
+        which by construction exclude the community variables. Given the members'
+        private quantities, the master would set
+
+            r_sym = min_t min(sum_j r_plus[j,t], sum_j r_minus[j,t])
+            p     = max_t sum_j (i_E_gri[j,t] - e_E_gri[j,t])
+
+        so their objective contribution is recoverable here without needing the
+        scalars themselves (init_sol carries only (u,t)-indexed dicts).
+        Returns 0.0 when both channels are off.
+        """
+        params = self.parameters
+        T = self.time_periods
+        cost = 0.0
+
+        if params.get('enable_reserve'):
+            rp = init_sol.get('r_plus') or {}
+            rm = init_sol.get('r_minus') or {}
+            if rp and rm:
+                up = [sum(rp.get((u, t), 0.0) for u in self.players) for t in T]
+                dn = [sum(rm.get((u, t), 0.0) for u in self.players) for t in T]
+                r_sym = min(min(a, b) for a, b in zip(up, dn))
+                cost -= len(T) * params.get('pi_res', 0.0) * max(0.0, r_sym)
+
+        if params.get('enable_peak'):
+            imp = init_sol.get('i_E_gri') or {}
+            exp = init_sol.get('e_E_gri') or {}
+            if imp or exp:
+                net = [sum(imp.get((u, t), 0.0) - exp.get((u, t), 0.0) for u in self.players)
+                       for t in T]
+                cost += params.get('pi_E_peak', 0.0) * max(0.0, max(net))
+
+        return cost
+
     def solve(self, max_iterations: int = 100, tolerance: float = 1e-6) -> Tuple[str, Dict, float]:
         """
         Solve using column generation to obtain convex hull prices
@@ -101,6 +138,12 @@ class ColumnGenerationSolver:
                 )
                 for p in self.players
             )
+            # calculate_column_cost covers the priced columns only, and rightly so:
+            # r_plus/r_minus are private vars with zero objective cost. The reserve
+            # revenue and the peak penalty live on the MASTER's shared block
+            # (r_sym, p), so without this term the incumbent is off by exactly that
+            # amount and the smoothing schedule is driven by a wrong Z_INC.
+            Z_INC += self._shared_block_cost(self.init_sol)
             pricer.Z_INC = Z_INC
 
         # Include pricer in master problem
@@ -173,8 +216,13 @@ class ColumnGenerationSolver:
             # Same dual-price settlement as the energy carriers: the shadow price of
             # each homogeneous coupling row is the per-t capacity/coincidence price.
             # abs() as for the balance rows (<=0 dual on a <= row -> positive price).
-            # Budget-balanced at the LP optimum: sum_t p_up[t]=pi_up, sum_t p_peak[t]=delta_peak,
-            # so sum_u (player settlements) equals the community reserve revenue / peak penalty.
+            # Budget-balanced at the LP optimum. r_sym is the single symmetric
+            # product shared by both row families, so its zero reduced cost gives
+            #   sum_t (mu_plus[t] + mu_minus[t]) = |T| * pi_res,
+            # and mu is nonzero only on rows binding at r_sym. Hence
+            #   sum_u sum_t (mu_plus[t]*r_plus[u,t] + mu_minus[t]*r_minus[u,t])
+            #     = r_sym * |T| * pi_res = the community reserve revenue.
+            # Likewise sum_t p_peak[t] = delta_peak for the peak penalty.
             # Only present when the rows exist (reserve/peak enabled); plotting ignores them.
             cons = self.master.model.data['cons']
             if cons.get('reserve_up'):

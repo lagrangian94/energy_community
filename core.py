@@ -252,7 +252,7 @@ class SeparationProblem(LocalEnergyMarket):
                 # (C-Res up/down). Gating the aggregates r_plus/r_minus suffices —
                 # each equals the sum of its non-negative per-asset splits, so
                 # r_plus[u,t] <= M*z_u forces every split to 0 when z_u=0. The
-                # shared community singletons (r_up, r_dn, p) need no gating.
+                # shared community singletons (r_sym, p) need no gating.
                 if self.enable_reserve:
                     if (u, t) in self.r_plus:
                         self.model.addCons(self.r_plus[u,t] <= M_default * z_u,

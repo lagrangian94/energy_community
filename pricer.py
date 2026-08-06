@@ -291,14 +291,18 @@ class LEMPricer(Pricer):
         이 문제에서 linking constraint의 right-hand-side는 전부 zero이기 때문에, subproblem들의 objective value만 합하면 됨.
 
         Reserve/peak note (adding_cons.txt): the coupling rows are ALSO homogeneous
-        (RHS 0), and their shared common-block variables r_up, r_dn, p live in the
+        (RHS 0), and their shared common-block variables r_sym, p live in the
         RMP as first-class (non-priced) variables. The Lagrangian dual gains a term
-        min_{x0>=0}[ c0^T x0 - mu^T A0 x0 ]; because r_up/r_dn/p sit in the RMP, at
+        min_{x0>=0}[ c0^T x0 - mu^T A0 x0 ]; because r_sym/p sit in the RMP, at
         every LP optimum where the pricer is invoked their reduced costs are >= 0,
         so that inner min is exactly 0. Hence L(mu) = sum_j obj_val_j is STILL the
         correct bound with reserve/peak on — no extra term is added here. (Adding
-        the *primal* shared-var cost -pi_up*r_up... would be wrong: it is a
+        the *primal* shared-var cost -|T|*pi_res*r_sym would be wrong: it is a
         different quantity and would corrupt the bound.)
+
+        Symmetric product: r_sym appears in BOTH row families with coefficient
+        +1, so its reduced cost is |T|*pi_res - sum_t (mu_plus[t] + mu_minus[t])
+        and the >= 0 argument above is unchanged.
         """
         if farkas:
             return

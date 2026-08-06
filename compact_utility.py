@@ -440,9 +440,24 @@ class LocalEnergyMarket:
         # model is byte-identical to the pre-extension version -- and the
         # copositive nc/constraint counts are unchanged -- unless deliberately
         # switched on via the params (enable_reserve/enable_peak, set in
-        # data_generator from the reserve_*_ratio / peak_penalty_ratio toggles).
+        # data_generator from reserve_price / peak_penalty).
         self.enable_reserve = bool(self.params.get('enable_reserve', False))
         self.enable_peak = bool(self.params.get('enable_peak', False))
+        # Reserve is only modelled for the MILP dispatch. model_type='lp' is the
+        # linear production game of Definition (def:lpg) -- a convex contrast case,
+        # NOT a relaxation of the MILP -- and it never creates the commitment
+        # binaries, so _add_reserve_headroom_cons would silently drop the
+        # electrolyzer and heat-pump headroom and leave storage-only reserve.
+        # That understates r_sym rather than erroring, so refuse the combination.
+        # (The peak channel is fine here: it touches only i_E_gri/e_E_gri.)
+        if self.enable_reserve and self.model_type == 'lp':
+            raise ValueError(
+                "enable_reserve is not supported with model_type='lp'. The linear "
+                "production game has no commitment variables, so electrolyzer and "
+                "heat-pump reserve headroom cannot be expressed and r_sym would be "
+                "silently understated (storage-only). Use model_type='mip' (or "
+                "'mip_fix_binaries'), or set reserve_price=0 to disable the channel."
+            )
         # Initialize model.data dictionary to store variables and constraints
         self.model.data = {"vars": {}, "cons": {}}
         
@@ -794,7 +809,7 @@ class LocalEnergyMarket:
         # ---- Reserve / peak coupling (adding_cons.txt) ----
         # Per-prosumer reserve headroom is PRIVATE (enters every subproblem X_j),
         # so it is added regardless of dwr. The community coupling rows and the
-        # shared community variables (r_up, r_dn, p) belong to the MASTER only,
+        # shared community variables (r_sym, p) belong to the MASTER only,
         # so they sit behind the same `if not self.dwr` guard as the community
         # balance blocks.
         if self.enable_reserve:
@@ -865,20 +880,46 @@ class LocalEnergyMarket:
                         self.fl_d[u,'elec',t] + self.r_minus_els[u,t]
                         - c_max*els_cap*self.z_on_G[u,t] - c_sb*els_cap*self.z_sb_G[u,t] <= 0.0,
                         name=f"res_els_dn_{u}_{t}")
-            # Heat-pump headroom (on heat output p[u,'hp',t], gated by z_on_H).
+            # Heat-pump headroom, on the D_H window (reserve.txt sec.1.1: the HP
+            # has no standby state, so off collapses the window to {0} and
+            # z_on_H gating alone is correct).
+            #
+            # UNITS. The product is an ELECTRICITY reserve, so r_pm_hp is in
+            # electric MW like the storage/electrolyzer terms it is aggregated
+            # with. The window is written on the HEAT output p[u,'hp',t], and
+            # the HP couples them by nu_cop * fl_d = p. Shedding r electric MW
+            # therefore moves heat output by nu_cop * r, which is why nu_cop
+            # multiplies the reserve term here -- without it the HP's
+            # contribution to r_sym would be overstated by a factor nu_cop.
             for u in self.players_with_heatpumps:
                 hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
                 c_min = self.params.get(f'c_min_H', -np.inf)
                 c_max = self.params.get(f'c_max_H', -np.inf)
+                nu_cop = self.params.get(f'nu_cop_{u}', np.inf)
                 for t in self.time_periods:
                     self.reserve_headroom_cons[f"res_hp_up_{u}_{t}"] = self.model.addCons(
-                        self.p.get((u,'hp',t),0) - self.r_plus_hp[u,t]
+                        self.p.get((u,'hp',t),0) - nu_cop*self.r_plus_hp[u,t]
                         - c_min*hp_cap*self.z_on_H[u,t] >= 0.0,
                         name=f"res_hp_up_{u}_{t}")
                     self.reserve_headroom_cons[f"res_hp_dn_{u}_{t}"] = self.model.addCons(
-                        self.p.get((u,'hp',t),0) + self.r_minus_hp[u,t]
+                        self.p.get((u,'hp',t),0) + nu_cop*self.r_minus_hp[u,t]
                         - c_max*hp_cap*self.z_on_H[u,t] <= 0.0,
                         name=f"res_hp_dn_{u}_{t}")
+                    # Optional (reserve.txt sec.1.2 item 1, option b): eq:hp_ramp
+                    # binds dispatch only, so by default the HP may sell more
+                    # reserve than it can ramp to -- the Johnsen assumption that
+                    # ramping is fast relative to the reserve response time.
+                    # Setting reserve_hp_ramp makes the offer ramp-feasible too
+                    # (up = shed load = ramp DOWN the heat output, hence c_RD_H).
+                    if self.params.get('reserve_hp_ramp', False):
+                        c_RD_H = self.params.get('c_RD_H', np.inf)
+                        c_RU_H = self.params.get('c_RU_H', np.inf)
+                        self.reserve_headroom_cons[f"res_hp_up_ramp_{u}_{t}"] = self.model.addCons(
+                            nu_cop*self.r_plus_hp[u,t] <= c_RD_H*hp_cap*self.z_on_H[u,t],
+                            name=f"res_hp_up_ramp_{u}_{t}")
+                        self.reserve_headroom_cons[f"res_hp_dn_ramp_{u}_{t}"] = self.model.addCons(
+                            nu_cop*self.r_minus_hp[u,t] <= c_RU_H*hp_cap*self.z_on_H[u,t],
+                            name=f"res_hp_dn_ramp_{u}_{t}")
 
         # Aggregate each prosumer's asset offers into r_plus[u,t] / r_minus[u,t].
         for (u,t) in list(self.r_plus.keys()):
@@ -896,26 +937,37 @@ class LocalEnergyMarket:
         return
 
     def _add_reserve_constraints(self):
-        """Community reserve coupling + shared community variables r_up, r_dn.
+        """Community reserve coupling + the shared community variable r_sym.
 
-        Homogeneous coupling rows (adding_cons.txt sec.2.3): each sold reserve
-        product cannot exceed what the coalition can deliver in every hour.
-        Shared variables carry the reserve revenue in the objective (max-profit
-        +pi*r maps to obj=-pi*r under the model's cost-minimization convention).
+        SYMMETRIC product (reserve.txt sec.1.1): a single FCR-N-type capacity
+        product r^sym -- ONE scalar, no time index -- must be deliverable in
+        BOTH directions in EVERY hour, so the same variable enters both row
+        families:
+
+            r_sym - sum_j r_plus[j,t]  <= 0    for all t   dual mu_plus[t]
+            r_sym - sum_j r_minus[j,t] <= 0    for all t   dual mu_minus[t]
+
+        At the optimum this yields r_sym* = min_t min(sum_j r+, sum_j r-)
+        without that min ever being written down (writing it would destroy the
+        LP structure the theory depends on). Rows stay homogeneous (b=0) with
+        x_0 = (r_sym, p) >= 0, as the duality argument requires.
+
+        Revenue convention (reserve.txt sec.2.1): capacity-only remuneration is
+        pi_res [EUR/MW.h] and r_sym is held for the whole horizon, so the
+        payment is |T| * pi_res * r_sym (baseline 24 * 56 = 1344 EUR/MW/day).
+        Max-profit +pi*r maps to obj=-pi*r under the model's cost-min convention.
         """
         self.reserve_cons = {"up": {}, "dn": {}}
-        pi_up = self.params.get('pi_up', 0)
-        pi_dn = self.params.get('pi_dn', 0)
-        self.r_up = self.model.addVar(vtype="C", name="r_up", lb=0, obj=-1*pi_up)
-        self.r_dn = self.model.addVar(vtype="C", name="r_dn", lb=0, obj=-1*pi_dn)
-        self.model.data["vars"]["r_up"] = self.r_up
-        self.model.data["vars"]["r_dn"] = self.r_dn
+        pi_res = self.params.get('pi_res', 0)
+        horizon_payment = len(self.time_periods) * pi_res
+        self.r_sym = self.model.addVar(vtype="C", name="r_sym", lb=0, obj=-1*horizon_payment)
+        self.model.data["vars"]["r_sym"] = self.r_sym
         for t in self.time_periods:
             self.reserve_cons["up"][f"reserve_up_coupling_{t}"] = self.model.addCons(
-                self.r_up - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
+                self.r_sym - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
                 name=f"reserve_up_coupling_{t}")
             self.reserve_cons["dn"][f"reserve_dn_coupling_{t}"] = self.model.addCons(
-                self.r_dn - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
+                self.r_sym - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
                 name=f"reserve_dn_coupling_{t}")
         return
 
@@ -1039,7 +1091,7 @@ class LocalEnergyMarket:
         self.model.data["vars"]["r_minus_els"] = self.r_minus_els
         self.model.data["vars"]["r_plus_hp"] = self.r_plus_hp
         self.model.data["vars"]["r_minus_hp"] = self.r_minus_hp
-        # (r_up, r_dn, chi_peak_E are registered as scalars inside their methods.)
+        # (r_sym, chi_peak_E are registered as scalars inside their methods.)
 
         # self.model.data["vars"]["z_ru_H"] = self.z_ru_H
                 
@@ -1802,6 +1854,7 @@ class LocalEnergyMarket:
                 'production_cost': 0.0,
                 'storage_cost': 0.0,
                 'peak_penalty': 0.0,
+                'reserve_revenue': 0.0,
                 'net': 0.0
             },
             'hydrogen': {
@@ -1853,6 +1906,14 @@ class LocalEnergyMarket:
         # Peak penalty cost
         if 'chi_peak_E' in results:
             revenue_analysis['electricity']['peak_penalty'] += results['chi_peak_E'] * pi_E_peak
+        # Symmetric reserve capacity revenue. r_sym carries obj = -|T|*pi_res in the
+        # model (reserve.txt sec.2.1: the product is held for the whole horizon), so
+        # the same |T| factor has to appear here or the breakdown will not reconcile
+        # with the objective.
+        if 'r_sym' in results:
+            pi_res = self.params.get('pi_res', 0.0)
+            revenue_analysis['electricity']['reserve_revenue'] += (
+                len(self.time_periods) * pi_res * results['r_sym'])
         # Non-flexible demand utility
         if 'nfl_d' in results:
             for (u, resource_type, t), val in results['nfl_d'].items():
@@ -1973,9 +2034,10 @@ class LocalEnergyMarket:
             revenue_analysis['electricity']['production_cost'] +
             revenue_analysis['electricity']['nfl_demand_utility'] -
             revenue_analysis['electricity']['storage_cost'] -
-            revenue_analysis['electricity']['peak_penalty']
+            revenue_analysis['electricity']['peak_penalty'] +
+            revenue_analysis['electricity']['reserve_revenue']
         )
-        
+
         # Hydrogen net
         revenue_analysis['hydrogen']['net'] = (
             revenue_analysis['hydrogen']['grid_export_revenue'] -
@@ -2000,7 +2062,8 @@ class LocalEnergyMarket:
         revenue_analysis['total_revenue'] = (
             revenue_analysis['electricity']['grid_export_revenue'] +
             revenue_analysis['hydrogen']['grid_export_revenue'] +
-            revenue_analysis['heat']['grid_export_revenue']
+            revenue_analysis['heat']['grid_export_revenue'] +
+            revenue_analysis['electricity']['reserve_revenue']
         )
         revenue_analysis['total_consumption_utility'] = (
             revenue_analysis['electricity']['nfl_demand_utility'] +
@@ -2018,7 +2081,10 @@ class LocalEnergyMarket:
             revenue_analysis['heat']['grid_import_cost'] +
             revenue_analysis['heat']['production_cost'] +
             revenue_analysis['heat']['storage_cost'] +
-            revenue_analysis['heat']['startup_cost'] -
+            revenue_analysis['heat']['startup_cost'] +
+            # peak_penalty is a COST; it was subtracted here, which flipped its sign
+            # in net_profit (= revenue - total_cost + utility) and overstated profit
+            # by 2 * peak_penalty.
             revenue_analysis['electricity']['peak_penalty']
         )
         

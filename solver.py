@@ -210,8 +210,8 @@ class PlayerSubproblem:
         dual_resup/dual_resdn/dual_peak: reserve/peak coupling-row duals (raw
         getDualsol/Dualfarkas values). Applied on the private coupling vars with the
         SAME sign as the SCIP path in solve_pricing (RC = c - sum_row pi_row*a_col):
-          reserve up  col coeff -r_plus  =>  + pi_up  * r_plus
-          reserve dn  col coeff -r_minus =>  + pi_dn  * r_minus
+          reserve up  col coeff -r_plus  =>  + mu_plus  * r_plus
+          reserve dn  col coeff -r_minus =>  + mu_minus * r_minus
           peak        col coeff (i-e)    =>  - pi_peak*(i_E_gri - e_E_gri)
         None (default) => reserve/peak disabled, no update (flags-off invariant).
         """
@@ -491,16 +491,14 @@ class MasterProblem:
         # Reserve / peak coupling toggles (adding_cons.txt). Default off, so the
         # RMP is byte-identical to the pre-extension version unless switched on
         # via data_generator (enable_reserve/enable_peak). The shared community
-        # variables r_up, r_dn (obj -pi) and p=chi_peak_E (obj +pi_peak) are
+        # variables r_sym (obj -|T|*pi_res) and p=chi_peak_E (obj +pi_peak) are
         # first-class RMP variables (NOT priced columns); the private per-player
         # reserve headroom rides inside each column's solution dict.
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
-        self.pi_up = params.get('pi_up', 0.0)
-        self.pi_dn = params.get('pi_dn', 0.0)
+        self.pi_res = params.get('pi_res', 0.0)
         self.pi_peak = params.get('pi_E_peak', 0.0)
-        self.r_up = None
-        self.r_dn = None
+        self.r_sym = None
         self.chi_peak_E = None
         # Storage for variables and constraints
         self.model.data['vars'] = {
@@ -595,19 +593,22 @@ class MasterProblem:
         # ---- Reserve / peak coupling rows (adding_cons.txt sec.4) ----
         # These are extra LINKING rows in the RMP, consistent with the
         # homogeneous (RHS=0) Dantzig-Wolfe reformulation: the shared community
-        # variables r_up, r_dn, p are the common-technology block x_0 (first-class
+        # variables r_sym, p are the common-technology block x_0 (first-class
         # RMP vars), while the per-player headroom r_plus/r_minus rides inside the
         # priced columns. Coefficient table (per t):
-        #   reserve up  (<=0): r_up:+1,  member lambda: -r_plus[u,t]
-        #   reserve dn  (<=0): r_dn:+1,  member lambda: -r_minus[u,t]
+        #   reserve up  (<=0): r_sym:+1, member lambda: -r_plus[u,t]
+        #   reserve dn  (<=0): r_sym:+1, member lambda: -r_minus[u,t]
         #   peak        (<=0): p:-1,     member lambda: (i_E_gri - e_E_gri)[u,t]
+        # The SAME r_sym enters both row families -- one symmetric product, as in
+        # LocalEnergyMarket._add_reserve_constraints (reserve.txt sec.1.1).
         if self.enable_reserve:
-            # Shared reserve products (revenue -> negative obj under min-cost).
-            self.r_up = self.model.addVar(vtype="C", name="r_up", lb=0.0, obj=-1.0*self.pi_up)
-            self.r_dn = self.model.addVar(vtype="C", name="r_dn", lb=0.0, obj=-1.0*self.pi_dn)
+            # Shared reserve product (revenue -> negative obj under min-cost).
+            # Held over the whole horizon: payment |T| * pi_res * r_sym.
+            horizon_payment = len(self.time_periods) * self.pi_res
+            self.r_sym = self.model.addVar(vtype="C", name="r_sym", lb=0.0, obj=-1.0*horizon_payment)
             for t in self.time_periods:
-                up_expr = 1.0 * self.r_up
-                dn_expr = 1.0 * self.r_dn
+                up_expr = 1.0 * self.r_sym
+                dn_expr = 1.0 * self.r_sym
                 for u in self.players:
                     var = self.model.data["vars"][u][0]["var"]
                     solution = self.model.data["vars"][u][0]["solution"]
