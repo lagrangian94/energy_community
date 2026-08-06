@@ -1,0 +1,365 @@
+"""
+Multi-day weak-ε-core experiment: Owen vs. Row generation (cost-of-stability),
+structured like results_15p/ results_30p/ results_53/ (one row per day).
+
+Runs, IN ORDER (sensitivity 6p scenarios → 15p → 30p), each over 31 days, T=24,
+reserve+peak coupling ON (0.10 / 0.05 / 0.05 × mean import):
+
+  6p sensitivity scenarios (players u1..u6, from results_53 / sensitivity_analysis_claude):
+    baseline, low_h2_margin, full_storage, community_size_350, community_size_1000,
+    export_cap_020  (per-player electricity export cap via variable ub)
+  15p (large_community CONFIGURATION_15), 30p (CONFIGURATION_30)  — baseline only.
+
+TWO-PHASE per run (so the slow/possibly-non-converging row-gen never blocks Owen):
+  Phase 1  Owen for ALL 31 days   → owen.csv + cg_day<D>.json (offline-settlement ingredients)
+  Phase 2  RowGen for ALL 31 days → rowgen.csv   (Gurobi separation; per-day time budget)
+
+RESUMABLE: a (run, phase, day) already present in its CSV is skipped. Safe to kill and
+relaunch; only missing pieces recompute. Row-gen for 30p is expected to hit the per-day
+budget without converging — the partial CoS lower bound is stored (v* ≥ ...).
+
+Usage:
+  python weak_eps_experiment/run_multiday.py                       # everything, both phases
+  python weak_eps_experiment/run_multiday.py --phase owen          # Owen only (fast, all runs)
+  python weak_eps_experiment/run_multiday.py --runs baseline_6p,baseline_15p
+  python weak_eps_experiment/run_multiday.py --days 1,2,3 --force
+"""
+import os, sys, json, time, csv, argparse, glob
+# layout: <repo root>/ieee_owen/weak_eps_experiment/. Shared model modules and
+# data/ live at the repo root; large_community / reserve_metrics live in the
+# paper folder, so both go on sys.path. CWD stays the repo root (data paths
+# and the model's plot output are resolved relative to it).
+_PAPER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(_PAPER)
+sys.path.insert(0, _PAPER)
+sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
+import numpy as np
+from data_generator import setup_lem_parameters
+from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
+                             flatten_for_csv, failed_checks)
+from compact_utility import LocalEnergyMarket
+from chp import ColumnGenerationSolver
+from core import CoreComputation
+import large_community as LC
+
+OUT = os.path.dirname(os.path.abspath(__file__))
+T = list(range(24))
+DAYS = list(range(1, 32))                      # 31 days, matching results_53
+# Reserve/peak scenario in ABSOLUTE units (reserve.txt sec.2.1 / sec.3.1).
+#   RESERVE_PRICE [EUR/MW.h]  0 = channel off, 11 = low regime (Johnsen),
+#                             56 = baseline (Nordic FCR-N, DK2)
+#   PEAK_PENALTY  [EUR/MW]    0 = channel off, 150-200 = Cornelusse range
+RESERVE_PRICE, PEAK_PENALTY = 56.0, 150.0
+# Stand-alone r_sym({j}) baseline for the sec.3.3 pooling gain: one extra small
+# MIP per prosumer per day. Turn off if the added solve time ever matters.
+STANDALONE_BASELINE = True
+SEP_SOLVER = 'gurobi'
+
+# 6-player config (u1..u6) — same as sensitivity_analysis_claude / analysis_mip
+P6 = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+C6 = {
+    "players_with_renewables": ['u1'], "players_with_solar": [], "players_with_wind": ['u1'],
+    "players_with_electrolyzers": ['u2'], "players_with_heatpumps": ['u3'],
+    "players_with_elec_storage": ['u1'], "players_with_hydro_storage": ['u2'],
+    "players_with_heat_storage": ['u3'],
+    "players_with_nfl_elec_demand": ['u4'], "players_with_nfl_hydro_demand": ['u5'],
+    "players_with_nfl_heat_demand": ['u6'],
+    "players_with_fl_elec_demand": ['u2', 'u3'],
+    "players_with_fl_hydro_demand": [], "players_with_fl_heat_demand": [],
+}
+# 6p baseline candidate set (scalars) — from sensitivity_analysis_claude.BASELINE_CANDIDATES
+BASE6 = {
+    'use_korean_price': True, 'use_tou_elec': False, 'import_factor': 1.5, 'month': 1,
+    'hp_cap': 0.8, 'els_cap': 1, 'num_households': 700, 'nu_cop': 3.28,
+    'c_su_G': 50.0, 'c_su_H': 10.0, 'base_h2_price_eur': 5000 / 1500,
+    'e_E_cap_ratio': 1.0, 'e_H_cap_ratio': 1.0, 'e_G_cap_ratio': 1.0,
+    'eff_type': 1, 'segments': 6, 'peak_penalty_ratio': 0.0,
+    'wind_el_ratio': 1.0, 'solar_el_ratio': 1.0,
+    'storage_power_ratio_E': 0.25, 'storage_power_ratio_G': 0.25, 'storage_power_ratio_H': 0.25,
+    'storage_capacity_ratio_E': 3.0, 'storage_capacity_ratio_G': 0.0, 'storage_capacity_ratio_H': 0.0,
+    'initial_soc_ratio_E': 0.2, 'initial_soc_ratio_G': 0.2, 'initial_soc_ratio_H': 0.2,
+}
+
+def scalarize(cand):
+    return {k: (v[0] if isinstance(v, list) else v) for k, v in cand.items()}
+
+# run registry (executed in this order)
+RUNS = [
+    dict(name='baseline_6p',           players=P6, config=C6, base=BASE6, ov={}, ovfn=None, budget=300),
+    dict(name='low_h2_margin_6p',      players=P6, config=C6, base=BASE6,
+         ov={'base_h2_price_eur': 2.0, 'import_factor': 3.0}, ovfn=None, budget=300),
+    dict(name='full_storage_6p',       players=P6, config=C6, base=BASE6,
+         ov={'storage_capacity_ratio_G': 3.0, 'storage_capacity_ratio_H': 3.0}, ovfn=None, budget=300),
+    dict(name='community_size_350_6p', players=P6, config=C6, base=BASE6,
+         ov={'num_households': 350}, ovfn=None, budget=300),
+    dict(name='community_size_1000_6p',players=P6, config=C6, base=BASE6,
+         ov={'num_households': 1000}, ovfn=None, budget=300),
+    dict(name='export_cap_020_6p',     players=P6, config=C6, base=BASE6,
+         ov={'e_E_cap_ratio': 0.2, 'e_G_cap_ratio': 0.2, 'e_H_cap_ratio': 0.2}, ovfn=None, budget=300),
+    dict(name='baseline_15p', players=LC.PLAYERS_15, config=LC.CONFIGURATION_15,
+         base=scalarize(LC.BASELINE_CANDIDATES_15), ov={}, ovfn=LC.apply_15player_overrides, budget=900),
+    dict(name='baseline_30p', players=LC.PLAYERS_30, config=LC.CONFIGURATION_30,
+         base=scalarize(LC.BASELINE_CANDIDATES_30), ov={}, ovfn=LC.apply_30player_overrides, budget=3600),
+
+    # ---- reserve.txt sec.3.1 scenario axes (6p, on top of the baseline instance) ----
+    # Channel toggle, for the sec.3.3 metric 1 decomposition of v(N). baseline_6p
+    # IS the "+both" corner (56/150), so only the other three are needed here.
+    dict(name='channel_balance_6p', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 0.0, 'peak_penalty': 0.0}, ovfn=None, budget=300),
+    dict(name='channel_reserve_6p', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 56.0, 'peak_penalty': 0.0}, ovfn=None, budget=300),
+    dict(name='channel_peak_6p', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 0.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+    # reserve_price sweep 0 / 11 / 56 at peak=150. The 0 and 56 ends are
+    # channel_peak_6p and baseline_6p, so only the low regime is new.
+    dict(name='reserve_low_6p', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 11.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+    # peak_penalty sweep 0 / 150 / 200 at reserve=56. The 0 and 150 ends are
+    # channel_reserve_6p and baseline_6p, so only the top of the Cornelusse range.
+    dict(name='peak_200_6p', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 56.0, 'peak_penalty': 200.0}, ovfn=None, budget=300),
+    # sec.3.3 metric 6: reserve_price x low_h2_margin interaction -- does reserve
+    # revenue substitute for the hydrogen margin and change the commitment pattern?
+    # low_h2_margin_6p already covers this cell at reserve_price = 56.
+    dict(name='low_h2_reserve0_6p', players=P6, config=C6, base=BASE6,
+         ov={'base_h2_price_eur': 2.0, 'import_factor': 3.0,
+             'reserve_price': 0.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+    dict(name='low_h2_reserve11_6p', players=P6, config=C6, base=BASE6,
+         ov={'base_h2_price_eur': 2.0, 'import_factor': 3.0,
+             'reserve_price': 11.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+]
+
+# sec.3.3 metric 1/6 groupings: (label, run at that cell). Consumed by summarize.py.
+CHANNEL_CELLS = {
+    'balance':      'channel_balance_6p',    # reserve 0,  peak 0
+    'reserve_only': 'channel_reserve_6p',    # reserve 56, peak 0
+    'peak_only':    'channel_peak_6p',       # reserve 0,  peak 150
+    'both':         'baseline_6p',           # reserve 56, peak 150
+}
+RESERVE_SWEEP = {0.0: 'channel_peak_6p', 11.0: 'reserve_low_6p', 56.0: 'baseline_6p'}
+PEAK_SWEEP = {0.0: 'channel_reserve_6p', 150.0: 'baseline_6p', 200.0: 'peak_200_6p'}
+LOW_H2_SWEEP = {0.0: 'low_h2_reserve0_6p', 11.0: 'low_h2_reserve11_6p', 56.0: 'low_h2_margin_6p'}
+
+# --------------------------------------------------------------------------- helpers
+def _jsonable(x):
+    if isinstance(x, dict):
+        return {str(k): _jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_jsonable(v) for v in x]
+    if isinstance(x, (np.floating, np.integer)):
+        return float(x)
+    return x
+
+def _qty(results, key, players):
+    d = results.get(key, {}) if isinstance(results, dict) else {}
+    return {u: {int(t): float(d.get((u, t), 0.0)) for t in T} for u in players}
+
+def build_params(run, day):
+    # Module defaults first, then the run's own overrides, so a run can move
+    # along the sec.3.1 reserve_price / peak_penalty axes by putting them in `ov`.
+    sens = dict(run['base'])
+    sens['reserve_price'] = RESERVE_PRICE
+    sens['peak_penalty'] = PEAK_PENALTY
+    sens.update(run['ov'])
+    sens['day'] = day
+    params = setup_lem_parameters(run['players'], run['config'], T, sens)
+    if run['ovfn'] is not None:
+        params = run['ovfn'](params, T)
+    return params
+
+def run_dir(run):
+    d = os.path.join(OUT, run['name'])
+    os.makedirs(d, exist_ok=True)
+    return d
+
+def existing_days(csv_path):
+    if not os.path.exists(csv_path):
+        return set()
+    try:
+        with open(csv_path) as f:
+            return {int(r['day']) for r in csv.DictReader(f) if r.get('day')}
+    except Exception:
+        return set()
+
+def _migrate_header(csv_path, fieldnames):
+    """Rewrite an existing CSV under a widened header, blank-filling new columns.
+
+    append_row only writes a header for a brand-new file, so a CSV written before
+    the reserve/peak schema was added (12 columns) would silently take 30-field
+    rows underneath its old header and shift every column. Detect that and
+    migrate the file first; rows already present keep their values and get empty
+    cells for the new metrics.
+
+    Returns the effective header to append under.
+    """
+    with open(csv_path, newline='') as f:
+        reader = csv.DictReader(f)
+        old = list(reader.fieldnames or [])
+        rows = list(reader)
+    if not old or old == list(fieldnames):
+        return list(fieldnames)
+    # keep any column the old file had that the current schema dropped
+    merged = list(fieldnames) + [c for c in old if c and c not in fieldnames]
+    with open(csv_path, 'w', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=merged)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, '') for k in merged})
+    print(f"  [csv] migrated {os.path.basename(csv_path)} to the current schema "
+          f"({len(old)} -> {len(merged)} columns)")
+    return merged
+
+
+def append_row(csv_path, row, fieldnames):
+    new = not os.path.exists(csv_path)
+    if not new:
+        fieldnames = _migrate_header(csv_path, fieldnames)
+    with open(csv_path, 'a', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        if new:
+            w.writeheader()
+        w.writerow(row)
+
+OWEN_COLS = ['run', 'day', 'n_players', 'num_households', 'base_h2_price_eur', 'import_factor',
+             # sec.3.1 scenario coordinates, so a row identifies its own cell
+             'pi_res', 'pi_peak',
+             'v_mip', 'v_chp', 'gap', 'eps_bound', 'time_mip_s', 'time_cg_s',
+             # reserve.txt sec.3.2 headline outputs (full series stay in the JSON)
+             'r_sym', 'reserve_revenue',
+             'pool_standalone_sum', 'pool_gain_abs', 'pool_gain_ratio',
+             'mech_no_pooling', 'mech_time_only', 'mech_full', 'mech_gain_time',
+             'mech_gain_direction', 'mech_share_direction',
+             'n_binding_up', 'n_binding_dn', 'settlement_imbalance',
+             'peak_value', 'peak_cost', 'sum_individual_peaks', 'coincidence_factor',
+             'peak_netting_saving', 'schema_checks']
+ROWGEN_COLS = ['run', 'day', 'n_players', 'converged', 'vstar_is_lower_bound',
+               'cost_of_stability_vstar', 'weak_eps', 'time_rowgen_s', 'n_coalitions']
+
+# --------------------------------------------------------------------------- Owen phase
+def owen_day(run, day):
+    players = run['players']
+    params = build_params(run, day)
+    t0 = time.time()
+    lem = LocalEnergyMarket(players, T, params, model_type='mip')
+    lem.model.hideOutput()
+    ret = lem.solve_complete_model(analyze_revenue=False)
+    results_ip = ret[1]
+    v_mip = float(lem.model.getObjVal())
+    t_mip = time.time() - t0
+
+    init_priv = {k: v for k, v in results_ip.items() if isinstance(v, dict)}
+    t0 = time.time()
+    cg = ColumnGenerationSolver(players, T, params, model_type='mip',
+                                init_sol=init_priv, smoothing=True)
+    _, solution, v_chp, _ = cg.solve()
+    t_cg = time.time() - t0
+
+    owen_res = cg.compute_owen_allocation(v_mip)
+    gap, eps_bound = owen_res['gap'], owen_res['eps']
+
+    # reserve.txt sec.3.2-3.4 schema: primal from the MIP, duals from the master,
+    # plus one small MIP per prosumer for the stand-alone pooling baseline
+    solo = (solve_standalone_r_sym(players, T, params, model_type='mip')
+            if STANDALONE_BASELINE and params.get('enable_reserve') else None)
+    rp = reserve_peak_metrics(results_ip, params, players, T,
+                              prices=solution.get('convex_hull_prices', {}),
+                              standalone=solo)
+
+    # offline CHP-settlement ingredients per (run, day)
+    doc = {
+        'run': run['name'], 'day': day, 'n_players': len(players), 'T': len(T),
+        'reserve_peak': {'pi_res': params.get('pi_res'),
+                         'pi_E_peak': params.get('pi_E_peak')},
+        'v_mip': v_mip, 'v_chp': v_chp, 'gap': gap, 'eps_bound_gap_over_N': eps_bound,
+        'time_mip_s': t_mip, 'time_cg_s': t_cg,
+        'owen_sigma_cost': owen_res['sigma'], 'owen_alloc_cost': owen_res['owen'],
+        'master_coupling_duals': solution.get('convex_hull_prices', {}),
+        'mip_quantities': {k: _qty(results_ip, k, players)
+                           for k in ('i_E_gri', 'e_E_gri', 'r_plus', 'r_minus')},
+        'reserve_peak_metrics': rp,
+    }
+    with open(os.path.join(run_dir(run), f"cg_day{day}.json"), 'w') as f:
+        json.dump(_jsonable(doc), f, indent=2)
+
+    row = {'run': run['name'], 'day': day, 'n_players': len(players),
+           'num_households': dict(run['base'], **run['ov']).get('num_households', ''),
+           'base_h2_price_eur': (dict(run['base'], **run['ov']).get('base_h2_price_eur', '')),
+           'import_factor': (dict(run['base'], **run['ov']).get('import_factor', '')),
+           'pi_res': params.get('pi_res'), 'pi_peak': params.get('pi_E_peak'),
+           'v_mip': v_mip, 'v_chp': v_chp, 'gap': gap, 'eps_bound': eps_bound,
+           'time_mip_s': round(t_mip, 2), 'time_cg_s': round(t_cg, 2)}
+    row.update(flatten_for_csv(rp))
+    bad = failed_checks(rp)
+    row['schema_checks'] = 'ok' if not bad else ';'.join(bad)
+    print(f"  [Owen] {run['name']} day {day}: v_mip={v_mip:.3f} eps_bound={eps_bound:.5f} "
+          f"r_sym={rp.get('r_sym', 0.0):.4f} peak={rp.get('peak_value', 0.0):.4f} "
+          f"checks={row['schema_checks']} ({t_mip+t_cg:.0f}s)")
+    return row
+
+# --------------------------------------------------------------------------- RowGen phase
+def rowgen_day(run, day, budget):
+    players = run['players']
+    params = build_params(run, day)
+    cc = CoreComputation(players, 'mip', T, params, mipsolver=SEP_SOLVER)
+    t0 = time.time()
+    _, success = cc.compute_core(max_iterations=int(1e8), tolerance=1e-6, time_limit=budget)
+    t_rg = time.time() - t0
+    v_star = getattr(cc, 'cost_of_stability_value', None)
+    weak_eps = getattr(cc, 'weak_eps', None)
+    converged = bool(getattr(cc, 'cos_converged', False))
+    row = {'run': run['name'], 'day': day, 'n_players': len(players),
+           'converged': converged, 'vstar_is_lower_bound': (not converged),
+           'cost_of_stability_vstar': (float(v_star) if v_star is not None else ''),
+           'weak_eps': (float(weak_eps) if weak_eps is not None else ''),
+           'time_rowgen_s': round(t_rg, 2),
+           'n_coalitions': len(cc.coalition_costs)}
+    print(f"  [RowGen] {run['name']} day {day}: converged={converged} "
+          f"weak_eps={weak_eps} ({t_rg:.0f}s, {len(cc.coalition_costs)} coalitions)")
+    return row
+
+# --------------------------------------------------------------------------- driver
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--phase', choices=['owen', 'rowgen', 'both'], default='both')
+    ap.add_argument('--runs', default='', help='comma list of run names (default: all)')
+    ap.add_argument('--days', default='', help='comma list of days (default: 1..31)')
+    ap.add_argument('--force', action='store_true')
+    args = ap.parse_args()
+
+    run_filter = set(args.runs.split(',')) if args.runs else None
+    days = [int(d) for d in args.days.split(',')] if args.days else DAYS
+
+    for run in RUNS:
+        if run_filter and run['name'] not in run_filter:
+            continue
+        rd = run_dir(run)
+        owen_csv = os.path.join(rd, 'owen.csv')
+        rowgen_csv = os.path.join(rd, 'rowgen.csv')
+
+        # Phase 1: Owen for all days
+        if args.phase in ('owen', 'both'):
+            done = set() if args.force else existing_days(owen_csv)
+            todo = [d for d in days if d not in done]
+            print(f"\n=== [Owen phase] {run['name']}: {len(todo)} days ===")
+            for d in todo:
+                try:
+                    append_row(owen_csv, owen_day(run, d), OWEN_COLS)
+                except Exception as e:
+                    print(f"  !! Owen {run['name']} day {d} FAILED: {e}")
+
+        # Phase 2: RowGen for all days
+        if args.phase in ('rowgen', 'both'):
+            done = set() if args.force else existing_days(rowgen_csv)
+            todo = [d for d in days if d not in done]
+            print(f"\n=== [RowGen phase] {run['name']}: {len(todo)} days (budget {run['budget']}s) ===")
+            for d in todo:
+                try:
+                    append_row(rowgen_csv, rowgen_day(run, d, run['budget']), ROWGEN_COLS)
+                except Exception as e:
+                    print(f"  !! RowGen {run['name']} day {d} FAILED: {e}")
+
+    print("\nDONE.")
+
+if __name__ == "__main__":
+    main()

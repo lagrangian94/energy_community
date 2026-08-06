@@ -1,0 +1,183 @@
+# Reserve & Peak: 구현 사양 (Claude Code용)
+
+대상: `ieee_draft_v2.tex`의 DP_S. Product는 **symmetric FCR-type capacity
+product 하나** ($r^{sym}$), capacity-only 보상, standby/off에서 reserve 불가.
+단위는 전 모델 공통으로 **MW / MWh / EUR** (현재 `els_cap=1` = 1 MW 기준).
+
+---
+
+## 1. 제약식 검증 결과
+
+### 1.1 확인 완료 — 그대로 구현하면 되는 것
+
+**Coupling (eq:dp_res).**
+```
+r_sym <= sum_j r_plus[j,t]      for all t     dual mu_plus[t]
+r_sym <= sum_j r_minus[j,t]     for all t     dual mu_minus[t]
+```
+- $r^{sym}$은 **스칼라 1개** (시간 인덱스 없음). 시간 인덱스를 붙이면 안 됨.
+- Row 수 $2|T|$, $b_j=0$ (homogeneous), $x_0=(r^{sym},p)\ge0$ — 이론부가
+  의존하는 성질이므로 부등호 방향·부호 유지.
+- 최적해에서 $r^{sym*}=\min_t\min(\sum_j r^+_{jt},\ \sum_j r^-_{jt})$가
+  자동으로 성립. 이 min을 코드에 직접 쓰지 말 것 (LP 구조가 깨짐).
+
+**Aggregation (eq:res_agg).** `r_pm[j,t] = r_pm_sto + r_pm_els + r_pm_hp >= 0`.
+자산 없는 prosumer는 해당 항 0.
+
+**Storage headroom (eq:res_sto).** 4개 부등식 모두 확인 완료:
+```
+b_dis[j,t] - b_ch[j,t] + r_plus_sto[j,t]  <= b_dis_max[j]
+r_plus_sto[j,t]  <= nu_dis[j] * s[j,t]                    # 1h 방전 지속성
+b_ch[j,t] - b_dis[j,t] + r_minus_sto[j,t] <= b_ch_max[j]
+r_minus_sto[j,t] <= (s_max[j] - s[j,t]) / nu_ch[j]        # 1h 충전 여유
+```
+효율 방향 검증: 상향은 저장에서 $r/\nu^{dis}$를 꺼내야 하므로
+$r\le\nu^{dis}s$, 하향은 $\nu^{ch}r$만큼 채워지므로
+$r\le(\overline s-s)/\nu^{ch}$. 둘 다 맞음.
+
+**Electrolyzer headroom (eq:els_res) — 버그 수정 반영됨.**
+```
+d_tilde[j,t] - r_plus_els[j,t]  >= d_G_min * z_on[j,t]
+d_tilde[j,t] + r_minus_els[j,t] <= d_G_max * z_on[j,t]
+```
+- 반드시 `z_on`으로 gating (이전 버전의 `D_window`는 standby를 infeasible로
+  만들었음). Standby/off에서 $\tilde d=0$이므로 $r^{\pm,els}=0$ 자동 강제.
+- `d_tilde` (= productive part, standby draw 제외)를 쓸 것. `d_G_sc` 아님.
+
+**Heat pump headroom (eq:hp_res).** `D_H` window 사용이 맞음 (HP는 standby
+상태가 없어 off에서 $\{0\}$으로 붕괴).
+
+**Peak (eq:dp_peak).** `sum_j (i_E_mkt[j,t] - e_E_mkt[j,t]) <= p`, 목적함수에
+`- delta_peak * p`. Reserve 발동은 peak에 반영하지 않음 (capacity-only와 일관).
+
+### 1.2 구현 시 주의 — 논문에는 없지만 코드에서 결정해야 하는 것
+
+1. **HP reserve와 ramp의 불일치.** eq:hp_ramp는 dispatch에만 걸리고
+   $r^{\pm,hp}$는 ramp 제약을 받지 않음. 즉 HP가 ramp 한계보다 큰 reserve를
+   팔 수 있음. 옵션: (a) 그대로 두고 "ramp가 reserve 응답시간 대비 충분히
+   빠르다" 가정 (Johnsen과 동일), (b) `r_plus_hp <= R_D * z_on`,
+   `r_minus_hp <= R_U * z_on` 추가. **기본은 (a), 플래그로 (b) 토글 권장.**
+2. **PWL segment와 reserve.** 발동 시 운전점이 선택된 segment 밖으로 나갈 수
+   있으나, capacity-only이므로 모델링하지 않음. Segment 재선택은 Johnsen의
+   activation-aware 모델 영역. 코드에서도 무시.
+3. **$r^{sym}$ upper bound.** LP 무한대 방지용으로 형식적 상한
+   (예: 총 설비용량) 하나 두는 것은 무해하나, coupling이 이미 bound하므로
+   불필요. 넣는다면 절대 binding 안 되게 크게.
+4. **Peak가 현재 실험에서 비활성.** 모든 CSV의 `peak_penalty_ratio=0`.
+   $\delta^{peak}$를 켜는 순간 결과가 바뀌므로 baseline 재실행 필요.
+
+---
+
+## 2. 파라미터 테이블
+
+### 2.1 신규 시장 파라미터
+
+| 기호 | 코드명 | 권장값 | 단위 | 출처 |
+|---|---|---|---|---|
+| $\pi^{res}$ | `reserve_price` | **56** (baseline) | EUR/MW·h | Nordic **FCR-N** 평균 (2022-01~2023-03, Energinet 데이터 기반); DK2 = 우리 풍력 CF와 동일 zone |
+| — | — | 11 (low regime) | EUR/MW·h | Johnsen et al., illustrative case의 flat reserve price |
+| — | — | 15–17 (CE 참조) | EUR/MW·h | DK1 FCR 2023 월평균 최고 16.9; CE 공통시장 ~60 EUR/MW per 4h block ≈ 15 EUR/MW·h |
+| $\delta^{peak}$ | `peak_penalty` | **0.15–0.20** | EUR/kW = 150–200 EUR/MW (horizon당) | Cornélusse et al. 2019 (community peak charge의 유일한 직접 선례) |
+| $Q^{FCR}$ | (미구현) | 0.1 | MW | Saretta et al., Table III — Nordic 최소 입찰. **제약으로 넣지 말 것**, 논문의 "pooled headroom > min bid" 주장의 수치 근거로만 |
+
+**왜 FCR-N인가 (Saretta/Johnsen 중 선택 근거).**
+1. FCR-N은 **symmetric two-sided** product — 우리 $r^{sym}$의 의미와 정확히
+   일치. Johnsen의 DK1 FCR도 symmetric이지만 4h block이고, 2022년 가격이
+   국지 조달 요건이라는 시장설계 인공물로 494 EUR/MWh까지 튀어 baseline으로
+   부적절 (2023년엔 17 이하로 급락 — 변동이 물리가 아니라 규칙 변경 탓).
+2. DK2 zone이 기존 풍력 CF(raheli, Eastern Denmark) zone과 **일치**.
+3. Saretta가 FCR-N을 쓰고 코드·입력데이터를 공개.
+
+**단위 규약 (중요).** $r^{sym}$은 horizon 전체에 대해 상수이므로 하루 수익은
+$24\times\pi^{res}\times r^{sym}$. 코드에서는
+`revenue_reserve = 24 * reserve_price * r_sym` 또는 시간별로 나눠 더하되
+이중 계산 주의. Baseline 56 EUR/MW·h → **1344 EUR/MW/day**.
+
+**규모 sanity check.** 커뮤니티 총 headroom을 0.3–0.5 MW로 가정하면 reserve
+수익 400–670 EUR/day, 현재 $v(N)\approx2000$ EUR/day 대비 **20–30%**. 채널이
+의미 있게 작동하되 지배하지는 않는 수준이라 실험용으로 적절. 실제 값이
+50% 넘으면 $\pi^{res}$를 low regime(11)으로 내리고, 5% 미만이면 headroom
+계산 버그 의심.
+
+### 2.2 기존 asset 파라미터 (reserve headroom을 결정 — 값 교차확인용)
+
+| 기호 | 코드명 | 현재값 | Saretta | Johnsen | 비고 |
+|---|---|---|---|---|---|
+| $\overline d^G$ | `els_cap` | 1 MW | 10 MW | 10 MW | 커뮤니티 규모라 작은 것 정상 |
+| $\underline d^G$ | (비율) | raheli 기준 | 1.6 MW = **16%** | 1 MW = **10%** | **upward headroom 결정** — 현재값이 10–16% 밖이면 재확인 |
+| $c^{sb}_G$ | (비율) | varela 계열 | 0.5 MW = **5%** | 0.25 MW = **2.5%** | standby 배제 로직에 영향 |
+| $c^{su}_G$ | `c_su_G` | 50 EUR | 1,000 EUR (10 MW) | — | 용량 정규화 시 100 EUR/MW → 현재 50은 같은 자릿수 |
+| $\overline d^H$ | `hp_cap` | 0.8 MW | — | — | siddique 기반 유지 |
+| $\nu^{COP}$ | `nu_cop` | 3.28 | — | — | 유지 |
+| $\overline b^{E,ch/dis}$ | `storage_power_ratio_E` | 0.25 | — | — | storage headroom 결정 |
+| $\overline s^E$ | `storage_capacity_ratio_E` | 3.0 | — | — | 지속성 제약 결정 |
+
+$\underline d^G$와 $c^{sb}_G$는 reserve 실험 결과를 직접 좌우하므로, 현재
+raheli/varela 캘리브레이션 값을 위 두 논문 범위(min load 10–16%, standby
+2.5–5%)와 대조해 로그로 남길 것.
+
+### 2.3 참조하지 않아도 되는 것 (혼동 방지)
+
+Activation rate $\alpha$, 주파수 시계열, balancing price, 수소 tube-trailer
+용량, 4h block index, duration factor — 전부 activation-aware 모델
+(Johnsen §5.3) 전용. Capacity-only이므로 **구현 불필요**.
+
+---
+
+## 3. 실험 설계
+
+### 3.1 시나리오 축
+
+| 축 | 값 | 목적 |
+|---|---|---|
+| `reserve_price` | 0 / 11 / 56 | 채널 off / low regime / baseline |
+| `peak_penalty` | 0 / 150 / 200 (EUR/MW) | 채널 off / Cornélusse 범위 |
+| 채널 토글 | balance만 / +reserve / +peak / 전부 | 세 채널의 가치 분해 |
+| 기존 축 | community_size, low_h2_margin, export_cap, full_storage | 유지 |
+
+### 3.2 새로 기록해야 할 출력
+
+기존 CSV 스키마에 추가:
+- `r_sym` (판매량, MW), `reserve_revenue`, `peak_value` (p, MW), `peak_cost`
+- `mu_plus_t`, `mu_minus_t` (24개씩), `xi_t` (24개) — binding 시각·방향 진단
+- `r_plus[j,t]`, `r_minus[j,t]` 집계: prosumer별 총 기여, 자산별 분해
+- **Stand-alone 비교값**: 각 $j$가 단독으로 팔 수 있는
+  $\min_t\min(r^+_{jt},r^-_{jt})$ — pooling gain 계산에 필수
+- 개별 peak의 합 (coincidence factor 계산용)
+
+### 3.3 핵심 지표
+
+1. **채널 가치 분해**: $v(N)$ 차이 (balance / +reserve / +peak).
+2. **Reserve pooling gain**:
+   $\min_t\min(\sum_j r^+,\sum_j r^-)\ \text{vs}\ \sum_j\min_t\min(r^+_j,r^-_j)$.
+   시간 pooling과 방향 pooling으로 분해해 보고.
+3. **Peak netting**: community peak vs 개별 peak 합.
+4. **$\varepsilon$**: 채널 on/off별, Prop. bound와 대비.
+5. **$\mu^\pm_t$ 프로파일**: 어느 시각·방향이 scarcity를 만드는지.
+6. `reserve_price` × `low_h2_margin` 상호작용 (reserve 수익이 수소 마진을
+   대체하며 commitment 패턴이 바뀌는지 → $\bar\rho$, $\varepsilon$ 변화).
+
+### 3.4 회귀 테스트
+
+- `reserve_price=0, peak_penalty=0`에서 기존 CSV 결과와 **일치해야 함**
+  (els_res 버그 수정이 energy-only 해를 바꾸지 않는지 확인).
+- Standby 상태가 실제로 발생하는지 확인 (수정 전에는 reserve 켜면 소멸).
+- $r^{sym}\le$ 모든 $t$의 headroom 합 — 사후 검증.
+- Budget balance: $\sum_j\chi_j$와 $v(N)+\omega$ 일치.
+
+---
+
+## 4. 인용 문헌
+
+- **saretta2023electrolyzer** — Saretta, Raheli, Kazempour, "Electrolyzer
+  Scheduling for Nordic FCR Services," SmartGridComm 2023.
+  → FCR-N/FCR-D product 구조, 3-state headroom 제약, standby 배제, Table III
+  파라미터, min bid 0.1 MW, activation 무시 근거. 코드·데이터 공개.
+- **johnsen2025value** — Johnsen, Mitridati, Zarrilli, Kazempour, "The Value
+  of Ancillary Services for Electrolyzers," DTU.
+  → DK1 FCR+mFRR 동시 참여, 2021–23 가격 분포, activation-aware 모델(우리는
+  미채택), 전해조 파라미터 Table 1. 코드 공개. **게재지 정보 확인 필요.**
+- **cornelusse2019community** — Cornélusse et al., Applied Energy 2019.
+  → symmetric community reserve 구조, $\delta^{peak}$, bilevel 분배 규칙.
+- 가격 원데이터: Energinet **Energi Data Service** (공개 API) — FCR-N(DK2),
+  FCR(DK1) capacity price.

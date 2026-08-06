@@ -1,0 +1,974 @@
+\documentclass[lettersize,journal]{IEEEtran}
+\usepackage{amsmath,amsfonts, amsthm, amssymb}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{kotex}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vmip}{v^{\mathrm{MIP}}}
+\newcommand{\vlr}{v^{\mathrm{LR}}}
+\newcommand{\vcp}{v^{\mathrm{CP}}}
+\newcommand{\conv}{\mathrm{conv}}
+\newcommand{\CP}{\mathcal{CP}}
+\newcommand{\COP}{\mathcal{COP}}
+\newcommand{\inner}[2]{\langle #1, #2\rangle}
+\newcommand{\Acom}{A}
+\newcommand{\TBD}[1]{\textcolor{red}{[#1]}}
+
+\allowdisplaybreaks
+\setlength{\jot}{1pt}          % align 줄간격 (기본 3pt)
+\setlength{\abovedisplayskip}{4pt plus 2pt minus 2pt}
+\setlength{\belowdisplayskip}{4pt plus 2pt minus 2pt}
+
+\newcommand{\ssum}{\textstyle\sum}
+\newcommand{\dual}[1]{\ \ [#1]}
+% \usepackage{natbib}
+\usepackage{cite}
+\hyphenation{op-tical net-works semi-conduc-tor IEEE-Xplore}
+% updated with editorial comments 8/9/2021
+
+\begin{document}
+
+\title{Profit Allocation in Energy Community Games under Non-convex Operations: A Duality-based Perspective}
+
+\author{Seokwoo Kim,~\IEEEmembership{Member,~IEEE,}
+Yuin Moon,~\IEEEmembership{Member,~IEEE,}
+Mohammad Reza Hesamzadeh,~\IEEEmembership{Senior Member,~IEEE,}
+Jan Kronqvist,~\IEEEmembership{Member,~IEEE,}
+Dong Gu Choi,~\IEEEmembership{Member,~IEEE,}
+        % <-this % stops a space
+\thanks{This paper was produced by the IEEE Publication Technology Group. They are in Piscataway, NJ.}% <-this % stops a space
+\thanks{Manuscript received April 19, 2021; revised August 16, 2021.}}
+
+% The paper headers
+\markboth{ IEEE TRANSACTIONS ON ENERGY MARKETS, POLICY, AND REGULATION,~Vol.~xx, No.~xx, xx~2026}%
+{Shell \MakeLowercase{\textit{et al.}}: A Sample Article Using IEEEtran.cls for IEEE Journals}
+
+\IEEEpubid{0000--0000/00\$00.00~\copyright~2021 IEEE}
+% Remember, if you use this you must call \IEEEpubidadjcol in the second
+% column for its text to clear the IEEEpubid mark.
+
+\maketitle
+
+\begin{abstract}
+Sector-coupled energy communities create operational synergies by jointly dispatching electricity, hydrogen, and heat assets, but electrolyzer unit commitment and nonlinear efficiency make the community dispatch problem non-convex. Stable profit allocation then becomes difficult: shadow prices are unavailable, the core of the associated cooperative game may be empty, and existing row-generation methods scale poorly. We propose a near-optimal profit allocation based on Lagrangian duality. Partially dualizing the inter-player linking constraints renders the Lagrangian sub-game a linear production game, a structure that energy communities naturally possess. The resulting allocation is always stable against coalition deviation and requires only a single grand-coalition solve; efficiency is relaxed by a per-member subsidy that decreases toward zero as the community grows. Applying the same argument to an exact copositive reformulation, we further establish a nonempty core under homogeneous linking constraints. Experiments with up to 30 prosumers confirm the scalability and the predicted decay of the subsidy.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Energy community, sector coupling, cooperative game theory, mixed-integer linear programming games
+\end{IEEEkeywords}
+
+%% ==========================================================
+\section*{Nomenclature}
+ 
+\noindent\textit{Sets and indices}
+\begin{IEEEdescription}[\IEEEsetlabelwidth{$\overline b_j^{k,ch/dis}$}]
+\item[$N,\,S$] Set of prosumers (players); coalition $S\subseteq N$.
+\item[$T$] Set of time periods, $T=\{1,\dots,|T|\}$.
+\item[$K$] Carriers, $K=\{E,G,H\}$ (electricity, hydrogen, heat).
+\item[$L$] Segments of the piecewise-linear electrolysis curve.
+\item[$Q_j$] Column (dispatch pattern) index set of prosumer $j$.
+\end{IEEEdescription}
+ 
+\medskip
+\noindent\textit{Parameters}
+\begin{IEEEdescription}[\IEEEsetlabelwidth{$\overline b_j^{k,ch/dis}$}]
+\item[$\pi_t^{k,imkt}$] External import price of carrier $k$ at time $t$.
+\item[$\pi_t^{k,emkt}$] External export price of carrier $k$ at time $t$.
+\item[$\pi^{res}$] Reserve capacity price (symmetric FCR-type product).
+\item[$\delta^{peak}$] Peak net-import penalty rate.
+\item[$\bar c_{jt}^k$] Unit production cost of carrier $k$.
+\item[$\bar u_{jt}^k$] Unit consumption utility of carrier $k$.
+\item[$c_j^{k,su}$] Start-up cost of technology $k$ of prosumer $j$.
+\item[$\overline s_j^k$] Storage energy capacity for carrier $k$.
+\item[$\overline b_j^{k,ch/dis}$] Storage charge / discharge power limit.
+\item[$\nu_j^{k,ch/dis}$] Storage charging / discharging efficiency.
+\item[$\nu^{\mathrm{COP}}$] Heat-pump coefficient of performance.
+\item[$\underline d^{G},\overline d^{G}$] Electrolyzer min./max. power draw when on.
+\item[$c_G^{sb}$] Electrolyzer standby power draw.
+\item[$\underline c^{H},\overline c^{H}$] Heat-pump min./max. operating ratio when on.
+\item[$\overline d^{H}$] Heat-pump rated electricity input.
+\item[$R^{U},R^{D}$] Heat-pump ramp-up / ramp-down limits.
+\item[$R^{SU},R^{SD}$] Heat-pump start-up / shut-down ramp limits.
+\item[$\phi_l^{0},\phi_l^{1}$] Intercept and slope of electrolysis segment $l$.
+\item[$\underline P_l,\overline P_l$] Breakpoints of electrolysis segment $l$.
+\item[$\underline D_{jt}^{G},\overline D_{jt}^{G}$] Electrolyzer on-state power window, \eqref{eq:window}.
+\item[$\underline D_{jt}^{H},\overline D_{jt}^{H}$] Heat-pump on-state power window, \eqref{eq:window}.
+\item[$\CP,\COP$] Completely positive and copositive cones.
+\item[$w_j^q,a_j^q$] Objective value and linking contribution of pattern $q$.
+\end{IEEEdescription}
+ 
+\medskip
+\noindent\textit{Decision variables}
+\begin{IEEEdescription}[\IEEEsetlabelwidth{$\overline b_j^{k,ch/dis}$}]
+\item[$x_j,\,y_j$] Continuous / binary variables of prosumer $j$.
+\item[$x_0$] Community-level (shared) variables.
+\item[$p_{jt}^k$] Production of carrier $k$ by prosumer $j$.
+\item[$d_{jt}^{k,load}$] Load consumption of carrier $k$.
+\item[$i_{jt}^{k,mkt}$] Import from the external market.
+\item[$e_{jt}^{k,mkt}$] Export to the external market.
+\item[$i_{jt}^{k,com}$] Import from the community.
+\item[$e_{jt}^{k,com}$] Export to the community.
+\item[$d_{jt}^{G,sc}$] Electricity input to power-to-gas conversion.
+\item[$\tilde d_{jt}^{G,sc}$] Productive part of $d_{jt}^{G,sc}$ (standby draw excluded).
+\item[$d_{jt}^{H,sc}$] Electricity input to power-to-heat conversion.
+\item[$s_{jt}^k$] State of charge of carrier-$k$ storage.
+\item[$b_{jt}^{k,ch/dis}$] Storage charge / discharge.
+\item[$r_{jt}^{+},r_{jt}^{-}$] Upward / downward reserve contribution.
+\item[$r^{sym}$] Community symmetric reserve capacity sold.
+\item[$p$] Community peak net import.
+\item[$z_{jt}^{G,\cdot},z_{jt}^{H,\cdot}$] Commitment / transition binaries (on, standby, off, start-up, shut-down).
+\item[$\hat z_{jlt},\hat d_{jlt}$] Segment selector and segment input, electrolysis.
+\item[$\lambda_j^q$] Weight of dispatch pattern $q$ of prosumer $j$.
+\item[$\theta$] Stacked multiplier of all linking constraints.
+\end{IEEEdescription}
+
+ 
+\medskip
+\noindent\textit{Cooperative game and duality}
+\begin{IEEEdescription}[\IEEEsetlabelwidth{$\overline b_j^{k,ch/dis}$}]
+\item[$n$] Community size, $n=|N|$.
+\item[$m$] Number of linking-constraint rows.
+\item[$\chi$] Profit allocation vector.
+\item[$\Gamma$] Coperative game tuple.
+\item[$v$] Characteristic function of $\Gamma$.
+\item[$\mathcal{C}(v)$] Core; $\mathcal{C}_{\varepsilon}(v)$ weak $\varepsilon$-core.
+\item[$\omega$] Excess of allocation over $v(N)$.
+\item[$\varepsilon$] Per-member concession, $\varepsilon=\omega/n$.
+\end{IEEEdescription}
+ 
+ %% ==========================================================
+\section{Introduction}
+ 
+\IEEEPARstart{S}{ector} coupling, a concept of the integration
+of electricity with other energy carriers such as hydrogen and heat, has emerged as a
+promising strategy to address the intermittency of renewable energy sources~\cite{ramsebner2021sector}. Local energy communities have recently emerged as an effective organizational structure for implementing sector
+coupling at the distribution level~\cite{bovera2022energy}. By jointly operating the energy assets of community participants, communities can integrate electricity, hydrogen, and heat systems and generate significant economic synergies. One of the central challenges in the design of energy communities is the allocation of cooperative economic benefits among participants.
+ 
+A desirable allocation must ensure that no subset of participants can improve their collective payoff by leaving the community. This property is called \emph{stability}, sometimes called \emph{group fairness}, and is formalized by the \textit{core} concept in cooperative games~\cite{shapley1971assignment}. When the members are coupled solely through the balance of each carrier, whose right-hand side is the sum of their individual positions, the dispatch game is an instance of Owen's \emph{linear production game}~(LPG), and the shadow prices of those balances induce a core allocation~\cite{valencia2025stable,karaca2019core}. Several community-market designs exploit precisely this structure~\cite{cornelusse2019community,mitridati2021design,sanjab2022tso,sangare2024cooperative}.
+ 
+Sector coupling precludes this construction. Electrolyzers hold discrete on/standby/off states with start-up costs and convert power to hydrogen along a concave curve, so the community dispatch becomes a mixed-integer linear program~(MILP)~\cite{raheli2023conic,varela2021modeling}. Its value function carries no shadow prices, and the game it induces need not be balanced: an efficient and stable allocation may fail to \emph{exist}, not merely to be computable. Non-convexity is not the only obstacle. Even in electricity-only microgrids, a community can sell reserve capacity and be charged on its aggregate peak import~\cite{cornelusse2019community}; these are quantities of the collective rather than of any individual member, so the value of a coalition does not enter through the carrier balances alone. Nor can the core be approached by enumeration, since each of its exponentially many inequalities is itself a unit-commitment problem. What is required is an allocation that certifies stability without evaluating exponentially many coalitions, at a loss of efficiency that is small and quantifiable. This paper asks whether the duality argument that works so cleanly in the linear case can be recovered, in a controlled and quantified way, once the dispatch is non-convex.
+ 
+The allocation of community benefits has been studied almost entirely under
+convex dispatch. Mechanism-oriented designs price internal exchanges at the
+duals of the welfare-maximizing problem~\cite{cornelusse2019community,
+moret2018energy}, establishing individual rationality rather than
+coalitional stability. The cooperative strand pursues stability directly.
+Core allocation has
+been investigated for a heat--electricity community by a problem-specific
+argument~\cite{mitridati2021design}. Where the dispatch is a linear program,
+the structural explanation is Owen's linear production
+game~\cite{owen1975core,granot1986generalized}, and for a peer-to-peer
+market the Owen imputation coincides with the settlement of each member's
+net position at the balance price~\cite{valencia2025stable}. Row generation over the core inequalities remains
+exact and has recently been applied to linear model~\cite{fioriti2025fair},
+but its cost grows with the number of members, \textcolor{red}{worse, mixed-integer dispatch makes much harder subproblem.}
+
+Pricing under non-convexity has been studied extensively in wholesale
+markets, with a different equilibrium notion in mind. Because the LP dual of
+a unit-commitment dispatch does not in general support the efficient integer
+schedule as a competitive equilibrium, side payments are unavoidable. The
+cleared commitment may be fixed and prices extracted from the residual
+LP~\cite{o2005efficient}. Convex hull pricing~\cite{schiro2015convex}
+instead prices the convex hull of the feasible dispatch--commitment set and
+minimizes total uplift, and these prices are computable by Dantzig--Wolfe
+decomposition when integrality is local to each
+unit~\cite{andrianesis2021computation}. Conic reformulations, semidefinite and
+copositive approaches, have more recently been used to obtain exact dual
+characterizations of discrete markets~\cite{guo2026copositive}. Duality is
+used here to produce prices, and the uplift restores each participant's
+willingness to follow the schedule; nothing is claimed about the willingness
+of a group of participants to remain in the community together.
+
+Outside the energy literature, duality has been used to produce allocations
+rather than prices for games whose value function is an (mixed-)integer program.
+Since the core of such a game may be empty, efficiency is relaxed: the
+\emph{optimal profit allocation problem} seeks the stable allocation recovering as
+much of the grand-coalition value as possible~\cite{caprara2010new}, the
+shortfall being the cost of stability~\cite{bachrach2009cost}. Caprara and
+Letchford~\cite{caprara2010new} obtain such an allocation from the LP
+relaxation, provided the constraints are assignable, that is, have a
+right-hand side that decomposes over the members; identifying them is
+problem-specific and, for several classical games, open. Liu \emph{et
+al.}~\cite{liu2016computing} replace the LP relaxation by a Lagrangian one,
+which tightens the bound and admits nonlinear objectives, and split the
+relaxed game into two sub-games whose stable allocations add up. Only the
+first of the two is separable across members and hence balanced by
+construction. When the second is not, part of its value cannot be allocated
+at all, no choice of multiplier removes this deficit, and sharpening the
+Lagrangian bound need not increase the amount allocated; recovering even the
+reduced amount calls for an allocation problem over the second sub-game,
+which returns the analysis to the exponential setting that the relaxation
+was meant to avoid. Whether this occurs is settled numerically, instance by
+instance, and neither line of work predicts how the shortfall behaves as the
+game grows.
+
+Both bodies of work rest on duality, and neither yields what a
+sector-coupled community requires: prices without stability on one side,
+stability without a structural account of its price on the other. The
+community itself supplies the missing structure, in that a coalition's
+opportunities differ from those of the grand coalition only through the
+endowments its members bring to the pool.
+ 
+The main contributions are as follows.
+\begin{itemize}
+\item We formulate a sector-coupled community as a mixed-integer cooperative game $\Gamma^{\mathrm{MIP}}$ over three carriers. The three channels through which the community creates value---internal carrier balance, aggregate reserve adequacy, and aggregate peak import---are those identified for electricity-only microgrids~\cite{cornelusse2019community}, and we carry them to a mixed-integer setting in which each is additive on both sides, hence assignable in the sense of~\cite{caprara2010new}.
+
+\item We show that partially dualizing the linking constraints leaves a Lagrangian sub-game that is a linear production game (Lemma~\ref{lem:lpg}). Two caveats of the generic approach of~\cite{liu2016computing} are thereby removed: the sub-game core is nonempty by construction, and a point in it---the Owen solution---is read off the Dantzig--Wolfe dual, so no separation oracle is needed. Spreading the duality gap evenly over the members yields an efficient allocation under which no coalition gains more than $\varepsilon$ per member by leaving, and we bound $\varepsilon$ by $O(|T|/n)$, decreasing in community size (Proposition~\ref{prop:eps}).
+
+\item Applying the same dualization to an exact copositive reformulation of the coalition value, we show that the reduced sub-game is again a linear production game, and that under homogeneous linking constraints and dual attainment the gap closes, so $\Gamma^{\mathrm{MIP}}$ has a nonempty core (Theorem~\ref{thm:core}).
+
+\item On communities of up to 30 prosumers with electrolyzer commitment and piecewise-linear efficiency, the proposed allocation is computed in under two minutes where row generation exceeds one hour, and the measured $\varepsilon$ falls by an order of magnitude between $n=6$ and $n=30$, matching the bound. For a regulator, this says that the residual incentive to leave a sector-coupled community is bounded, quantifiable ex ante, and self-extinguishing as the community grows.
+\end{itemize}
+The remainder is organized as follows. Section~\ref{sec:prelim} collects the cooperative-game background. Section~\ref{sec:model} presents the community game. Section~\ref{sec:duality} develops the duality-based allocation. Section~\ref{sec:num} reports numerical results, and Section~\ref{sec:concl} concludes.
+ 
+%% ==========================================================
+
+
+%% ==========================================================
+\section{Preliminaries}
+\label{sec:prelim}
+ 
+\subsection{Core and Optimal Profit Allocation Problems}
+ 
+A cooperative game with transferable utility is a pair $\Gamma=(N,v)$ with player set $N=\{1,\dots,n\}$ and value function $v:2^N\to\R$, $v(\emptyset)=0$. An \emph{allocation} $\chi\in\R^n$ is \emph{efficient} if $\sum_{j\in N}\chi_j=v(N)$ and \emph{stable} if $\sum_{j\in S}\chi_j\ge v(S)$ for all $S\subseteq N$. \emph{Core} is the set of allocations defined as follows~\cite{shapley1971assignment},
+\begin{equation}
+\mathcal{C}(v)=\Big\{\chi\in\R^n:\ \textstyle\sum_{j\in N}\chi_j=v(N),\ \sum_{j\in S}\chi_j\ge v(S)\ \forall S\Big\}.
+\label{eq:core}
+\end{equation}
+When $v$ is the value function of a mixed-integer program, $\mathcal{C}(v)$ can be empty, and even deciding membership is coNP-complete~\cite{deng2008algorithmic}. Following~\cite{caprara2010new}, we relax efficiency minimally and consider the \emph{optimal partial allocation problem}
+\begin{equation}
+(\mathrm{OPAP}):\quad \alpha^{*}=\min_{\chi\in\R^n}\Big\{\textstyle\sum_{j\in N}\chi_j:\ \sum_{j\in S}\chi_j\ge v(S)\ \forall S\neq\emptyset\Big\}.
+\label{eq:opap}
+\end{equation}
+Any feasible $\chi$ of \eqref{eq:opap} is stable; $\alpha^{*}\ge v(N)$, and the excess
+\begin{equation}
+\omega^{*}:=\alpha^{*}-v(N)
+\label{eq:excess}
+\end{equation}
+is the minimum external subsidy that makes the grand coalition stable, called as \emph{cost of stability}~\cite{bachrach2009cost}. The core is nonempty if and only if $\omega^{*}=0$.
+ 
+It is convenient to express the same quantity without leaving the efficient hyperplane. The \emph{weak $\varepsilon$-core}~\cite{shapley1971assignment} is
+\begin{equation}
+\mathcal{C}_{\varepsilon}(v)=\Big\{\chi:\ \textstyle\sum_{j\in N}\chi_j=v(N),\ \sum_{j\in S}\chi_j\ge v(S)-\varepsilon|S|\ \forall S\Big\},
+\label{eq:weakeps}
+\end{equation}
+which charges each deviating member a per-capita concession $\varepsilon$. The two notions are equivalent up to a uniform shift: if $\chi$ is feasible for \eqref{eq:opap} with $\sum_j\chi_j=v(N)+\omega$, then $\chi'_j:=\chi_j-\omega/n$ satisfies $\chi'\in\mathcal{C}_{\varepsilon}(v)$ with
+\begin{equation}
+\varepsilon=\omega/n .
+\label{eq:eps_omega}
+\end{equation}
+We report $\varepsilon$ throughout, since it is the quantity a community member actually experiences: either a per-member subsidy paid in, or a per-member shortfall relative to what a deviating coalition could obtain.
+ 
+\subsection{Linear Production Games and the Owen Solution}
+ 
+\begin{definition}[Linear production game~\cite{owen1975core}]
+\label{def:lpg}
+$\Gamma=(N,v)$ is a \emph{linear production game} if there exist, for each $j\in N$, an endowment $b_j\in\R^m$, a technology matrix $A_j$ and an objective vector $c_j$, together with an optional common technology $(A_0,c_0)$, such that
+\begin{align}
+v(S)=\max_{x_j,x_0\ge 0}\ & \textstyle\sum_{j\in S}c_j^{\top}x_j+c_0^{\top}x_0 \label{eq:lpg_obj}\\
+\mathrm{s.t.}\ & \textstyle\sum_{j\in S}A_jx_j+A_0x_0\le \sum_{j\in S}b_j \quad (\cdots\mu). \label{eq:lpg_res}
+\end{align}
+\end{definition}
+ 
+Coalition $S$ pools the endowments of its members and produces subject to what it has pooled. Let $\mu^{*}$ solve the dual of \eqref{eq:lpg_obj}--\eqref{eq:lpg_res} at $S=N$. The \emph{Owen solution} is
+\begin{equation}
+\chi_j^{\mathrm{OW}}:=(\mu^{*})^{\top}b_j,\qquad j\in N,
+\label{eq:owen}
+\end{equation}
+and it lies in the core, by one line of duality:
+\begin{equation}
+\textstyle\sum_{j\in S}\chi_j^{\mathrm{OW}}=(\mu^{*})^{\top}\sum_{j\in S}b_j\ \ge\ \mathrm{val}(\mathcal{D}_S)=v(S),
+\label{eq:owen_proof}
+\end{equation}
+where $\mathcal{D}_S$ is the dual of coalition $S$'s program and $\mu^{*}$ is feasible for it. Two features of \eqref{eq:owen_proof} matter here. It certifies stability against \emph{all} $2^{|N|}-1$ coalitions from a single grand-coalition solve, and it does so without ever evaluating $v(S)$ for $S\neq N$.
+ 
+%% ==========================================================
+\section{Problem Setting}
+
+\subsection{Modeling Assumptions}
+
+We consider a community of prosumers $N=\{1,\dots,|N|\}$ that integrates three carriers $K=\{E,G,H\}$ through sector-coupling technologies. A prosumer may own renewable generators, storage devices for any carrier, conversion technologies (electrolyzer, heat pump), and demands for one or more carriers. The community trades with external wholesale markets and sells reserve capacity to the system operator.
+
+The reserve is a single symmetric capacity product: one quantity, held over the horizon and remunerated at the exogenous capacity price $\pi^{res}$, that the community must be able to deliver on request in either direction. This is the community reserve of~\cite{cornelusse2019community}, and it corresponds to the frequency containment reserve (FCR) of the Continental European synchronous area and to the Nordic FCR-N; in the electrolyzer-scheduling model of~\cite{saretta2023electrolyzer} it is the special case in which the one-sided FCR-D products are dropped and the bid is held constant over the horizon. Remuneration is for capacity only, since the activation of FCR-type products oscillates around the setpoint and its net energy is negligible~\cite{saretta2023electrolyzer,johnsen2025value}, and minimum bid sizes are omitted, since the community bids as one aggregated provider whose pooled headroom exceeds the sub-megawatt minimum of FCR-type products. A directional (aFRR- or mFRR-type) product menu would only split the community bid into an upward and a downward quantity, and is not pursued here.
+ 
+\begin{assumption}[Operating environment]
+\label{as:env}
+A central community manager schedules all member assets over a single day-ahead
+horizon $T$; the community is a price taker in all external markets; and all
+parameters are known at the time of scheduling.
+\end{assumption}
+
+Assumption~\ref{as:env} is made for tractability and is standard in the
+community-manager literature~\cite{cornelusse2019community,moret2018energy,mitridati2021design}. It
+restricts attention to a single market stage and sets aside forecast error, which
+keeps the coalition value function deterministic and lets us isolate the effect
+that non-convex operation alone has on stability. Nothing in Sections~\ref{sec:duality}
+depends on it beyond the fact that $\vmip(S)$ is well defined; extending the
+allocation to a stochastic/multi-stage setting is left to future work.
+
+ \begin{assumption}[Community as a resource pool]
+\label{as:pool}
+Members interact only by pooling individually owned endowments, so that for every
+coalition $S\subseteq N$ the community-level constraints read
+\begin{equation}
+\ssum_{j\in S}A_j^{(\ell)}x_j+A_0^{(\ell)}x_0\ \lessgtr\ \ssum_{j\in S}b_j^{(\ell)},
+\qquad \ell\in\mathcal{L},
+\label{eq:additive}
+\end{equation}
+with $\mathcal{L}$ the index set of linking constraints.
+\end{assumption}
+
+Assumption~\ref{as:pool} makes the characteristic function well defined, since a
+coalition inherits exactly the endowments its members bring and nothing else. It
+is the structural counterpart of the economic premise that an energy community is
+a \emph{pooling} institution, members gaining by netting internal flows,
+aggregating reserve capability, and sharing a single point of common coupling,
+rather than by competing for an externally fixed resource. Remark~\ref{rmk:nonadditive}
+examines what the results of this paper lose when it does not hold.
+ 
+
+\subsection{Community Dispatch Model}
+\label{sec:model}
+ 
+Let $x_j$ collect all decision variables of prosumer $j$ over $T$, including its binary commitment variables $y_j$, and let $x_0=(r^{sym},p)^{\top}\ge 0$ collect the community-level variables: the symmetric reserve capacity sold and the peak net grid import. The dispatch problem of a coalition $S\subseteq N$ is
+% NOTE: subequations sub-labels use \alph (a--z). Keep numbered lines <= 26,
+% otherwise LaTeX raises "Counter too large". Currently 24.
+\begin{subequations}\label{eq:dp}
+\begin{align}
+&(\mathrm{DP}_S):\ \max\ \sum_{j\in S}\sum_{k\in K}\sum_{t\in T}\Big(\pi_t^{k,emkt}e_{jt}^{k,mkt}-\pi_t^{k,imkt}i_{jt}^{k,mkt} \nonumber\\
+&+\bar u_{jt}^kd_{jt}^{k,load}-\bar c_{jt}^kp_{jt}^k-c_j^{k,su}z_{jt}^{k,su}\Big) +\ \pi^{res}r^{sym}-\delta^{peak}p \label{eq:dp_obj}
+\end{align}
+subject to the community-level linking constraints
+\begin{align}
+& \ssum_{j\in S}\big(i_{jt}^{k,com}-e_{jt}^{k,com}\big)=0,\quad \forall t,k \dual{\pi_t^{k,com}} \label{eq:dp_bal}\\
+& r^{sym}\le\ssum_{j\in S}r_{jt}^{+},\quad r^{sym}\le\ssum_{j\in S}r_{jt}^{-},\quad \forall t \dual{\mu_t^{\pm}} \label{eq:dp_res}\\
+& \ssum_{j\in S}\big(i_{jt}^{E,mkt}-e_{jt}^{E,mkt}\big)\le p,\quad \forall t \dual{\xi_t} \label{eq:dp_peak}
+\end{align}
+and, for every $j\in S$ and $t\in T$, to the prosumer-private constraints
+\begin{align}
+& e_{jt}^{E,mkt}\!-i_{jt}^{E,mkt}\!+e_{jt}^{E,com}\!-i_{jt}^{E,com}\!-p_{jt}^{E}\!+d_{jt}^{E,load} \nonumber\\
+&\hspace{7.2em}+d_{jt}^{G,sc}+d_{jt}^{H,sc}=0, \label{eq:pb_E}\\
+& e_{jt}^{k,mkt}\!-i_{jt}^{k,mkt}\!+e_{jt}^{k,com}\!-i_{jt}^{k,com}\!-p_{jt}^{k}\!+d_{jt}^{k,load}=0,\ k\in\{G,H\}, \label{eq:pb_GH}\\
+& \underline p_{jt}^k\le p_{jt}^k\le\overline p_{jt}^k,\ \ \underline d_{jt}^{k,load}\le d_{jt}^{k,load}\le\overline d_{jt}^{k,load}, \label{eq:bnd_pd}\\
+& s_{jt}^k=s_{j,t-1}^k+\nu_j^{k,ch}b_{jt}^{k,ch}-\tfrac{1}{\nu_j^{k,dis}}b_{jt}^{k,dis}, \label{eq:soc}\\
+& 0\le s_{jt}^k\le\overline s_j^k,\ \ 0\le b_{jt}^{k,ch}\le\overline b_j^{k,ch},\ \ 0\le b_{jt}^{k,dis}\le\overline b_j^{k,dis}, \label{eq:bnd_sto}\\
+& r_{jt}^{\pm}=r_{jt}^{\pm,\mathrm{sto}}+r_{jt}^{\pm,\mathrm{els}}+r_{jt}^{\pm,\mathrm{hp}}\ \ge 0, \label{eq:res_agg}\\
+& b_{jt}^{E,dis}\!-b_{jt}^{E,ch}\!+r_{jt}^{+,\mathrm{sto}}\le\overline b_j^{E,dis},\ \ r_{jt}^{+,\mathrm{sto}}\le\nu_j^{E,dis}s_{jt}^E, \nonumber\\
+& b_{jt}^{E,ch}\!-b_{jt}^{E,dis}\!+r_{jt}^{-,\mathrm{sto}}\le\overline b_j^{E,ch},\ \ r_{jt}^{-,\mathrm{sto}}\le\tfrac{\overline s_j^E-s_{jt}^E}{\nu_j^{E,ch}}, \label{eq:res_sto}
+\end{align}
+together with the sector-coupling technology constraints. For the electrolyzer, with state indicators $z_{jt}^{G,on},z_{jt}^{G,sb},z_{jt}^{G,off}$, transition indicators $z_{jt}^{G,su},z_{jt}^{G,sd}$, and segment indicators $\hat z_{jlt}$,
+\begin{align}
+& z_{jt}^{G,on}+z_{jt}^{G,sb}+z_{jt}^{G,off}=1, \label{eq:els_state}\\
+& z_{jt}^{G,su}\ge z_{jt}^{G,on}+z_{j,t-1}^{G,off}+z_{j,t-1}^{G,sb}-1, \nonumber\\
+& z_{jt}^{G,sd}\ge z_{j,t-1}^{G,on}+z_{jt}^{G,off}+z_{jt}^{G,sb}-1, \label{eq:els_trans}\\
+& z_{jt}^{G,su}+z_{jt}^{G,sd}\le 1,\qquad z_{j,t-1}^{G,off}+z_{jt}^{G,sb}\le 1, \label{eq:els_excl}\\
+& d_{jt}^{G,sc}=\tilde d_{jt}^{G,sc}+c_G^{sb}z_{jt}^{G,sb}, \label{eq:els_decomp}\\
+& \underline D_{jt}^{G}\le d_{jt}^{G,sc}\le\overline D_{jt}^{G}, \label{eq:els_bnd}\\
+& \underline d^{G}z_{jt}^{G,on}\le\tilde d_{jt}^{G,sc}\mp r_{jt}^{\pm,\mathrm{els}}\le\overline d^{G}z_{jt}^{G,on}, \label{eq:els_res}\\
+& p_{jt}^G=\ssum_{l\in L}\big(\phi_l^1\hat d_{jlt}+\phi_l^0\hat z_{jlt}\big),\ \ \underline P_l\hat z_{jlt}\le\hat d_{jlt}\le\overline P_l\hat z_{jlt}, \label{eq:els_pwl}\\
+& z_{jt}^{G,on}=\ssum_{l\in L}\hat z_{jlt},\quad \tilde d_{jt}^{G,sc}=\ssum_{l\in L}\hat d_{jlt}, \label{eq:els_link}
+\end{align}
+and, for the heat pump with on/off indicator $z_{jt}^{H,on}$,
+\begin{align}
+& p_{jt}^H=\nu^{\mathrm{COP}}d_{jt}^{H,sc},\ \ z_{jt}^{H,su}-z_{jt}^{H,sd}=z_{jt}^{H,on}-z_{j,t-1}^{H,on}, \label{eq:hp_conv}\\
+& \underline D_{jt}^{H}\le d_{jt}^{H,sc}\le\overline D_{jt}^{H}, \label{eq:hp_bnd}\\
+& d_{jt}^{H,sc}-d_{j,t-1}^{H,sc}\le R^Uz_{j,t-1}^{H,on}+R^{SU}z_{jt}^{H,su}, \nonumber\\
+& d_{j,t-1}^{H,sc}-d_{jt}^{H,sc}\le R^Dz_{jt}^{H,on}+R^{SD}z_{jt}^{H,sd}, \label{eq:hp_ramp}\\
+& \underline D_{jt}^{H}\le d_{jt}^{H,sc}\mp r_{jt}^{\pm,\mathrm{hp}}\le\overline D_{jt}^{H}, \label{eq:hp_res}\\
+& y_j:=\big(z_{jt}^{G,\cdot},\hat z_{jlt},z_{jt}^{H,\cdot}\big)\in\{0,1\}^{n_{y_j}},\quad r_{jt}^{\pm,\cdot}\ge 0. \label{eq:bin}
+\end{align}
+\end{subequations}
+Here $\underline D_{jt}^{G},\overline D_{jt}^{G}$ and $\underline D_{jt}^{H},\overline D_{jt}^{H}$ abbreviate the commitment-dependent power windows of the two conversion units,
+\begin{equation}
+\begin{aligned}
+\underline D_{jt}^{G}&=\underline d^{G}z_{jt}^{G,on}+c_G^{sb}z_{jt}^{G,sb}, & \overline D_{jt}^{G}&=\overline d^{G}z_{jt}^{G,on}+c_G^{sb}z_{jt}^{G,sb},\\
+\underline D_{jt}^{H}&=\underline c^{H}\overline d^{H}z_{jt}^{H,on}, & \overline D_{jt}^{H}&=\overline c^{H}\overline d^{H}z_{jt}^{H,on},
+\end{aligned}
+\label{eq:window}
+\end{equation}
+which collapse to $\{0\}$ when the unit is off. Constraints \eqref{eq:els_state}--\eqref{eq:els_link} and \eqref{eq:hp_conv}--\eqref{eq:hp_res} apply only to prosumers owning the corresponding technology; all remaining constraints are carrier-wise and vacuous for assets a prosumer does not own.
+ 
+The objective~\eqref{eq:dp_obj} is the community's social welfare: net external trading revenue, consumption utility net of production and start-up cost, reserve capacity revenue, and the peak-import charge.
+ 
+Three constraints couple distinct prosumers, and they are the three channels through which a community creates value~\cite{cornelusse2019community}. Constraint~\eqref{eq:dp_bal} clears internal trading of each carrier in each period, and its multiplier $\pi_t^{k,com}$ is the internal price. Constraint~\eqref{eq:dp_res} requires the reserve capacity to be deliverable in \emph{both} directions in \emph{every} period---upward by reducing net consumption, downward by increasing it---so the scarcest period and direction bind; the directional contributions $r_{jt}^{\pm}$ are auxiliary variables, not separately sold products. Constraint~\eqref{eq:dp_peak} defines the community peak net import; because net imports are summed \emph{before} the maximum is taken, opposite positions of different prosumers cancel. Everything else is private to a prosumer: carrier-wise balances~\eqref{eq:pb_E}--\eqref{eq:pb_GH}, operating bounds~\eqref{eq:bnd_pd}, storage dynamics and limits~\eqref{eq:soc}--\eqref{eq:bnd_sto}, and the headroom constraints~\eqref{eq:res_agg}--\eqref{eq:res_sto}, \eqref{eq:els_res}, \eqref{eq:hp_res}, which bound each asset's reserve contribution by its own residual capability---and, for the conversion units, confine it to the on state~\cite{saretta2023electrolyzer}.
+ 
+Constraints~\eqref{eq:els_state}--\eqref{eq:hp_res} form the non-convex block at the center of this paper, and it is worth being precise about what each contributes. Electrolyzers do not simply switch on and off: they hold a standby state with a nonzero power draw, which is cheaper than a cold restart but not free~\cite{varela2021modeling}. Constraints~\eqref{eq:els_state}--\eqref{eq:els_excl} encode the resulting three-state automaton and charge $c_j^{G,su}$ whenever the unit returns from off, so the coalition's cost acquires a \emph{fixed} component that no marginal price can recover. Constraint~\eqref{eq:els_bnd} then makes the admissible power draw a union of disjoint sets---$\{0\}$ when off, $\{c_G^{sb}\}$ in standby, and $[\underline d^{G},\overline d^{G}]$ when on---rather than a single interval. Independently of commitment, the power-to-hydrogen curve is concave: marginal output falls as input rises, so maximizing hydrogen production over a \emph{convex} feasible set would place the optimum in the interior of the wrong segment. Constraints~\eqref{eq:els_pwl}--\eqref{eq:els_link} therefore select exactly one segment through $\hat z_{jlt}$, which is what makes the piecewise-linear representation exact and simultaneously integral. The heat pump adds commitment and ramping~\eqref{eq:hp_conv}--\eqref{eq:hp_ramp}, which couple periods through binaries and give the same effect over time~\cite{siddique2024dispatch}. The consequence for the cooperative problem is a single one: with \eqref{eq:els_state}--\eqref{eq:hp_res} present, the coalition value is no longer concave in the pooled endowments, so the shadow prices of \eqref{eq:dp_bal}--\eqref{eq:dp_peak} are undefined and the core may be empty. This is what Section~\ref{sec:duality} confronts.
+ 
+Collecting the private constraints \eqref{eq:pb_E}--\eqref{eq:bin} of prosumer $j$ gives its operational region,
+\begin{equation}
+\mathcal{X}_j^{\mathrm{MIP}}=\big\{(x_j,y_j)\in\R^{n_{x_j}}\times\{0,1\}^{n_{y_j}}:\ T_jx_j+W_jy_j\le h_j\big\},
+\label{eq:Xmip}
+\end{equation}
+a bounded mixed-integer linear representable set, while stacking \eqref{eq:dp_bal}--\eqref{eq:dp_peak} gives
+\begin{equation}
+\textstyle\sum_{j\in S}A_jx_j+A_0x_0\ \lessgtr\ \sum_{j\in S}b_j
+\label{eq:linking_stacked}
+\end{equation}
+with $m:=(|K|+3)|T|$ rows and common technology $c_0=(\pi^{res},-\delta^{peak})^{\top}$. By Assumption~\ref{as:pool}(iv), \eqref{eq:linking_stacked} is additive on both sides; note further that $b_j=0$ for every $j$ and every row.
+ 
+ 
+\subsection{The Mixed-Integer Community Game}
+ 
+\begin{definition}[Mixed-integer energy community game]
+\label{def:game}
+Let $(\mathrm{DP}_S^{\mathrm{MIP}})$ denote problem~\eqref{eq:dp} with $\mathcal{X}_j$ replaced by $\mathcal{X}_j^{\mathrm{MIP}}$. The \emph{mixed-integer energy community game} is $\Gamma^{\mathrm{MIP}}=(N,\vmip)$ with $\vmip(S):=\mathrm{val}(\mathrm{DP}_S^{\mathrm{MIP}})$ for $S\subseteq N$ and $\vmip(\emptyset)=0$.
+\end{definition}
+ 
+Evaluating $\vmip$ once is already NP-hard in general, and \eqref{eq:core} involves $2^{|N|}-1$ such evaluations. $\Gamma^{\mathrm{MIP}}$ also need not be totally balanced, so the core may be empty. The next section addresses both issues without evaluating $\vmip(S)$ for any $S\neq N$.
+ 
+%% ==========================================================
+\section{Duality-Based Profit Allocation}
+\label{sec:duality}
+ 
+Since $\vmip$ is the value function of a mixed-integer program, it admits neither
+shadow prices on the linking constraints nor a guarantee that its core is
+nonempty. Taking a partial Lagrangian in which only \eqref{eq:dp_bal}--\eqref{eq:dp_peak} leaves a relaxed
+dispatch problem that is again the characteristic function of an modified game,
+and under Assumption~\ref{as:pool}(iv) that game always has a nonempty core and its one element can be obtained by solving the Lagrangian dual problem. Weak duality makes this element feasible for
+$(\mathrm{OPAP})$, hence stable in $\Gamma^{\mathrm{MIP}}$, and its excess over
+$\vmip(N)$ is the duality gap (Section~\ref{sec:lr}). Section~\ref{sec:cpp} settles that separate question by applying the same
+partial Lagrangian to an exact completely positive reformulation of $\vmip(S)$,
+which yields an efficient and stable Owen solution and hence a nonempty core
+under a homogeneity condition. The construction is not computationally viable,
+which is precisely why the allocation of Section~\ref{sec:lr} is the one we
+compute.
+ 
+\subsection{Lagrangian Relaxation Based Profit Allocation}
+\label{sec:lr}
+ 
+Write the objective~\eqref{eq:dp_obj} as $\sum_{j\in S}f_j(x_j,y_j)+c_0^{\top}x_0$ and the linking constraints as~\eqref{eq:linking_stacked}. Dualizing the latter with a multiplier $\theta\ge 0$ gives, for every coalition $S$,
+\begin{align}
+&\vlr(S;\theta)=\max\Big\{\textstyle\sum_{j\in S}f_j(x_j,y_j)+c_0^{\top}x_0 \nonumber \\
+&-\theta^{\top}\big(\textstyle\sum_{j\in S}A_jx_j+A_0x_0-\sum_{j\in S}b_j\big)\\ &:\ (x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}\ \forall j\in S,\ x_0\ge 0\Big\}.
+\label{eq:vlr}
+\end{align}
+The community variables $x_0$ are bounded only by
+\eqref{eq:dp_res}--\eqref{eq:dp_peak}, which have just been dualized, so
+\eqref{eq:vlr} is finite only if $c_0-A_0^{\top}\theta\le 0$, in which case the
+$x_0$ terms contribute zero to its value. Restricting $\theta$ to
+\begin{equation}
+\Lambda:=\big\{\theta\in\Theta:\ A_0^{\top}\theta\ge c_0\big\},
+\label{eq:Lambda}
+\end{equation}
+which is the dual feasibility condition for the common technology of
+Definition~\ref{def:lpg}, \eqref{eq:vlr} therefore separates across prosumers:
+\begin{equation}
+\vlr(S;\theta)=\textstyle\sum_{j\in S}\sigma_j(\theta),\quad \theta\in\Lambda,
+\label{eq:vlr_sep}
+\end{equation}
+where
+\begin{equation}
+\sigma_j(\theta):=\theta^{\top}b_j+\max_{(x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}}\big\{f_j(x_j,y_j)-\theta^{\top}A_jx_j\big\}.
+\label{eq:sigma}
+\end{equation}
+For each $\theta\in\Lambda$, \eqref{eq:vlr_sep} defines a cooperative game
+$(N,\vlr(\cdot\,;\theta))$, the \emph{sub-game}, and weak duality gives
+\begin{equation}
+\vlr(S;\theta)\ \ge\ \vmip(S),\qquad \forall S\subseteq N,\ \forall\theta\in\Lambda .
+\label{eq:weakdual}
+\end{equation}
+The sub-game is still assembled from the mixed-integer sets
+$\mathcal{X}_j^{\mathrm{MIP}}$, so it is again a mixed-integer game. It
+nevertheless carries linear production structure, and this is what makes it
+possible to allocate within it.
+
+Let $Q_j$ index the elements of $\mathcal{X}_j^{\mathrm{MIP}}$, with $w_j^q$ and
+$a_j^q$ the objective value and linking-row contribution of pattern $q$, and let
+$(\mathrm{DWR}_S)$ denote the Dantzig--Wolfe master
+\begin{subequations}\label{eq:dwr}
+\begin{align}
+&(\mathrm{DWR}_S):\ \max\  \textstyle\sum_{j\in S}\sum_{q\in Q_j}w_j^q\lambda_j^q+c_0^{\top}x_0 \label{eq:dwr_obj}\\
+&\mathrm{s.t.}\  \textstyle\sum_{j\in S}\sum_{q\in Q_j}a_j^q\lambda_j^q+A_0x_0\le\sum_{j\in S}b_j\ \ (\theta) \label{eq:dwr_link}\\
+& \textstyle\sum_{q\in Q_j}\lambda_j^q=1,\quad \forall j\in S \quad (\sigma_j) \label{eq:dwr_conv}\\
+& \lambda_j^q\ge 0,\quad x_0\ge 0. \label{eq:dwr_nn}
+\end{align}
+\end{subequations}
+\begin{lemma}[Linear production structure of the sub-game]
+\label{lem:lpg}
+Under Assumption~\ref{as:pool}, following properties hold.
+\begin{enumerate}
+\item[(a)] $\min_{\theta\in\Lambda}\vlr(S;\theta)=\mathrm{val}(\mathrm{DWR}_S)$
+for every $S\subseteq N$, and $(\mathrm{DWR}_S)$ is a linear production game in
+the sense of Definition~\ref{def:lpg}, in which prosumer $j$ contributes the
+endowment $b_j$ to the linking rows~\eqref{eq:dwr_link} and one unit to its own
+convexity row~\eqref{eq:dwr_conv}.
+\item[(b)] If $(\theta^{*},\sigma^{*})$ is an optimal dual solution of
+$(\mathrm{DWR}_N)$, the Owen solution~\eqref{eq:owen} of $(\mathrm{DWR}_N)$ is
+$(\theta^{*})^{\top}b_j+\sigma_j^{*}$, which equals $\sigma_j(\theta^{*})$.
+\end{enumerate}
+\end{lemma}
+
+\begin{IEEEproof}
+For (a), the Lagrangian dual value of a mixed-integer program equals the value of
+its Dantzig--Wolfe master over $\conv(\mathcal{X}_j^{\mathrm{MIP}})$
+\cite{desrosiers2024branch}. Comparing \eqref{eq:dwr_link}--\eqref{eq:dwr_conv} with
+\eqref{eq:lpg_res} identifies the endowments, both sides of the linking rows
+being additive over $S$ by Assumption~\ref{as:pool}(iv) and the convexity row of
+$j$ being present precisely when $j\in S$. Part (b) follows because the pricing
+problem of $(\mathrm{DWR}_N)$ at $\theta^{*}$ is exactly \eqref{eq:sigma}. See
+Appendix~\ref{app:proofs}.
+\end{IEEEproof}
+
+We take as the proposed allocation the sub-game core element at an optimal
+multiplier,
+\begin{equation}
+\chi^{\mathrm{LR}}:=\sigma(\theta^{*})=\sigma^{*} .
+\label{eq:chi_lr}
+\end{equation}
+ 
+The linear production game of Lemma~\ref{lem:lpg} has a direct reading. Each
+prosumer endows the community with its own operational patterns $(q\in Q_{j})$, one unit of the
+right to use them, and the community pools these endowments and operates on what
+it has been given. The convexity row~\eqref{eq:dwr_conv} is that endowment, and
+$\sigma_j^{*}$ is its price.  
+This linear production structure yields the two properties on which the proposed mechanism rests.
+ 
+\begin{proposition}
+\label{prop:opap}
+Let $\chi^{\mathrm{LR}}$ be the allocation~\eqref{eq:chi_lr}. Then:
+ 
+\emph{(i) (Stability.)} $\sum_{j\in S}\chi_j^{\mathrm{LR}}\ge\vmip(S)$ for every $S\subseteq N$, so $\chi^{\mathrm{LR}}$ is feasible for $(\mathrm{OPAP})$ of $\Gamma^{\mathrm{MIP}}$, and its excess is the duality gap,
+\begin{equation}
+\omega^{\mathrm{LR}}=\ssum_{j\in N}\chi_j^{\mathrm{LR}}-\vmip(N)\ \ge 0 .
+\label{eq:omega_lr}
+\end{equation}
+ 
+\emph{(ii) (Computatioinal viability.)} $\chi^{\mathrm{LR}}$ is determined by an
+optimal dual solution of $(\mathrm{DWR}_N)$ alone. Computing it requires neither
+the evaluation of $\vmip(S)$ for any $S\neq N$ nor the solution of a separation
+problem over coalitions.
+\end{proposition}
+ 
+\begin{IEEEproof}
+(i) By \eqref{eq:vlr_sep}, $\sum_{j\in S}\chi_j^{\mathrm{LR}}=\vlr(S;\theta^{*})$
+for every $S$, and $\vlr(S;\theta^{*})\ge\vmip(S)$ by \eqref{eq:weakdual} since
+$\theta^{*}\in\Lambda$. Taking $S=N$ gives \eqref{eq:omega_lr}, whose right-hand
+side is the Lagrangian duality gap $\mathrm{val}(\mathrm{DWR}_N)-\vmip(N)$ by
+Lemma~\ref{lem:lpg}(a). (ii) Immediate from Lemma~\ref{lem:lpg}(b): $\chi^{\mathrm{LR}}$ is a function of the optimal dual of
+$(\mathrm{DWR}_N)$ only.
+\end{IEEEproof}
+ 
+The two parts answer the two questions that an allocation mechanism for a mixed-integer community game has to answer, and they answer them at opposite ends. Part~(i) settles what the allocation is worth: no coalition can improve on it, so the community is stable at the cost of an external subsidy that never exceeds the integrality gap. Part~(ii) settles what it costs to obtain: the entire allocation is a by-product of pricing the grand-coalition dispatch, so the exponential object $\{\vmip(S)\}_{S\subseteq N}$ never has to be touched, either by enumeration or by separation.
+
+Both parts rest on Assumption~\ref{as:pool}(iv) rather than on any property of the
+dualization. The sub-game is built from the same mixed-integer sets
+$\mathcal{X}_j^{\mathrm{MIP}}$ as the original game, and for a general
+mixed-integer game nothing more can be said: its core may be empty, and even when
+it is not, locating a point in it requires a sequence of NP-hard separation
+problems~\cite{liu2016computing}. Under Assumption~\ref{as:pool}(iv) the sub-game
+instead agrees in value with $(\mathrm{DWR}_S)$, a linear production game, so a
+core element is guaranteed to exist and is already available from the dual
+solution at hand.
+ 
+\subsection{Stability and the Residual Subsidy}
+\label{sec:eps}
+
+The size of $\omega^{\mathrm{LR}}$ is governed by how far each prosumer's
+own problem is from being convex. For prosumer $j$ let
+\begin{equation}
+p_j(u):=\max\big\{f_j(x_j,y_j):\ (x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}},\
+A_jx_j\le u\big\}
+\label{eq:perturb}
+\end{equation}
+be the profit it can earn when its linking contribution is held at $u$, and let
+$\rho_j$ be the largest amount by which the concave envelope of $p_j$ exceeds
+$p_j$ itself. Equivalently, $\rho_j$ is the profit prosumer $j$ appears to gain
+when its commitment decisions are treated as divisible. Two facts follow directly
+from the separability of \eqref{eq:vlr_sep}. First, $\rho_j$ is determined by the
+assets of prosumer $j$ alone, and is finite because $\mathcal{X}_j^{\mathrm{MIP}}$
+is bounded. Second, $\rho_j=0$ whenever $\mathcal{X}_j^{\mathrm{MIP}}$ contains no
+binary variables, so only the owners of committed conversion units contribute to
+the gap at all.
+ 
+\begin{proposition}[Size-decreasing weak $\varepsilon$-core]
+\label{prop:eps}
+Let $\bar\rho:=\max_{j\in N}\rho_j$. Then the allocation
+$\chi_j^{\mathrm{LR}}-\omega^{\mathrm{LR}}/n$ lies in the weak
+$\varepsilon$-core of $\Gamma^{\mathrm{MIP}}$ with
+\begin{equation}
+\varepsilon^{\mathrm{LR}}\ \le\ \frac{(m+1)\,\bar\rho}{n}\ =\ O\!\left(\frac{|T|}{n}\right).
+\label{eq:eps_bound}
+\end{equation}
+\end{proposition}
+
+\begin{IEEEproof}
+Problem \eqref{eq:vlr} is separable across prosumers once
+\eqref{eq:linking_stacked} is dualized, and \eqref{eq:linking_stacked} has $m$
+rows. The Shapley--Folkman lemma therefore bounds the Lagrangian duality gap of
+$(\mathrm{DP}_N^{\mathrm{MIP}})$ by $(m+1)\bar\rho$~\cite{bertsekas2009convex}: at most
+$m+1$ of the $n$ prosumers need be at a non-convex point of their own perturbation
+function \eqref{eq:perturb} at the optimum, and each such prosumer contributes at
+most $\rho_j$. By Proposition~\ref{prop:opap} this gap is $\omega^{\mathrm{LR}}$,
+and $\varepsilon^{\mathrm{LR}}=\omega^{\mathrm{LR}}/n$ by \eqref{eq:eps_omega}.
+The last equality holds because $m=(|K|+3)|T|$ with $|K|$ fixed.
+\end{IEEEproof}
+
+Neither factor in the numerator of \eqref{eq:eps_bound} grows with membership.
+The row count $m$ is set by the market design, one row per carrier and period
+plus reserve and peak, and $\bar\rho$ by the largest committed unit any single
+member operates. A community that grows by admitting members with assets of the
+usual residential and small-commercial ratings therefore divides a fixed quantity
+over more participants, and the subsidy per member falls as $1/n$. The bound
+degrades only if individual members are themselves allowed to scale without limit,
+which is a different regime from the one energy communities occupy.
+ 
+The policy content of Proposition~\ref{prop:eps} is direct. The coupling rows count the community's coordination channels---one per carrier and period, plus reserve and peak---and are fixed by the market design, not by membership. The non-convexity that has to be paid for is therefore a fixed cost spread over a growing membership, and the risk that a sector-coupled community fragments diminishes as it grows.
+
+
+% \subsection{Computation}
+% \label{sec:comp}
+ 
+% The column set $Q_j$ in \eqref{eq:dwr} is exponential and is never enumerated. We solve $(\mathrm{DWR}_N)$ by a standard column generation procedure: a restricted master over a subset of columns supplies $(\theta,\sigma)$, and for each prosumer the pricing problem
+% \begin{equation}
+% \max_{(x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}}\ f_j(x_j,y_j)-\theta^{\top}A_jx_j
+% \label{eq:pricing}
+% \end{equation}
+% generates an improving column if its value exceeds $\sigma_j$. Three points are worth noting. The $n$ pricing problems are independent single-prosumer MIPs and are solved in parallel; the master is an LP whose row count $(|K|+3)|T|+n$ grows linearly in $n$; and \eqref{eq:pricing} is exactly the expression \eqref{eq:sigma} whose value \emph{is} the allocation, so no post-processing is required. The total cost is therefore $O(\text{iterations}\times n)$ single-prosumer MIPs, against the $2^{n}-1$ coalition MIPs of enumeration and the NP-hard separation oracle $\max_S\{\vmip(S)-\sum_{j\in S}\chi_j\}$ of row generation.
+ 
+
+\subsection{Exact Core Existence via a Copositive Reformulation}
+\label{sec:cpp}
+
+In general, mixed-integer games may or may not have a core depending on the instance at hand, and deciding
+which is the case is coNP-hard, so the question is normally settled only after the
+fact. We ask instead whether the structure of Section~\ref{sec:model} settles it in
+advance, for every instance of $\Gamma^{\mathrm{MIP}}$ at once. It does, and we
+show this by taking the same partial Lagrangian approach to a completely positive
+reformulation of $\vmip(S)$. The resulting Owen solution is both stable and
+efficient, but copositive programs of this size are beyond current solvers, so we
+report it as an existence result and continue to compute the allocation of
+Section~\ref{sec:lr}.
+ 
+ Throughout this subsection we use the property, noted after~\eqref{eq:linking_stacked}, that the linking constraints of Section~\ref{sec:model} are not merely additive but \emph{homogeneous}: $b_j=0$ for every $j$ and every row. Internal balance nets to zero by construction, and reserve adequacy and peak import compare member contributions against a shared decision variable rather than an exogenous constant.
+ 
+Since each $\mathcal{X}_j^{\mathrm{MIP}}$ is bounded and mixed-binary linear representable set, Burer's theorem~\cite{bomze2023optimization} yields an exact completely positive reformulation of the coalition problem. Appending slacks so that~\eqref{eq:linking_stacked} holds with equality, lift $z_S=(1,(x_j)_{j\in S})^{\top}$ and $Y_S=z_Sz_S^{\top}$, and partition $Y_S$ into per-prosumer diagonal blocks $Y_j=(x_j,X_{jj})$ and off-diagonal blocks $X_{ij}$, $i\neq j$. Then
+\begin{subequations}\label{eq:cpp}
+\begin{align}
+(\mathrm{CP}_S):\ \max_{Y_S}\ & \inner{W_S}{Y_S} \label{eq:cpp_obj}\\
+\mathrm{s.t.}\ & (x_j,X_{jj})\in\mathcal{L}_j, \quad \forall j\in S \label{eq:cpp_a}\\
+& \ssum_{j\in S}A_jx_j+A_0x_0=0 \label{eq:cpp_b}\\
+& \mathrm{Tr}\big(A^{\top}AX_S\big)=0 \label{eq:cpp_c}\\
+& Y_S\in\CP \label{eq:cpp_d}
+\end{align}
+\end{subequations}
+where $\CP=\conv\{zz^{\top}:z\ge 0\}$, with dual the copositive cone $\COP$, and
+$\vmip(S)=\mathrm{val}(\mathrm{CP}_S)$ for every $S$. Constraint~\eqref{eq:cpp_a}
+collects the per-prosumer affine constraints of the lifting and \eqref{eq:cpp_b}
+is the lifted linking constraint; both respect the coalition structure, the first
+per prosumer and the second additively. Constraints \eqref{eq:cpp_c}, the squared
+counterpart of \eqref{eq:cpp_b}, and \eqref{eq:cpp_d} are the only ones that
+entangle distinct prosumers, through the off-diagonal blocks $X_{ij}$.
+ 
+Dualizing exactly those two, with $\tau\in\R$ for \eqref{eq:cpp_c} and
+$M\in\COP$ for \eqref{eq:cpp_d}, gives
+\begin{equation}
+\begin{aligned}
+\vcp(S;M,\tau)=\max_{Y_S}\ & \inner{W_S+M}{Y_S}-\tau\,\mathrm{Tr}\big(A^{\top}AX_S\big)\\
+\mathrm{s.t.}\ & \eqref{eq:cpp_a},\ \eqref{eq:cpp_b}.
+\end{aligned}
+\label{eq:vcp}
+\end{equation}
+ 
+\begin{proposition}
+\label{prop:cp_lpg}
+At any $(M,\tau)$ at which $\vcp(\cdot;M,\tau)$ is finite, the off-diagonal blocks $X_{ij}$ carry zero objective coefficient. Consequently, for every $S\subseteq N$,
+\begin{equation}
+\begin{aligned}
+\vcp(S;M,\tau)=\max_{Y_S}\ & \ssum_{j\in S}\inner{\widetilde W_j}{Y_j}\\
+\mathrm{s.t.}\ & \eqref{eq:cpp_a},\ \eqref{eq:cpp_b},
+\end{aligned}
+\label{eq:cp_reduced}
+\end{equation}
+which is a linear production game with pooled endowment $\ssum_{j\in S}b_j=0$.
+\end{proposition}
+
+\begin{IEEEproof}
+The blocks $X_{ij}$, $i\neq j$, are free variables appearing in neither
+\eqref{eq:cpp_a} nor \eqref{eq:cpp_b}; finiteness of the maximum therefore forces
+their objective coefficients to vanish, which is precisely dual feasibility. The
+remaining objective is block-separable and the only surviving coupling is
+\eqref{eq:cpp_b}, which is of the form~\eqref{eq:lpg_res} with $b_j=0$. See
+Appendix~\ref{app:proofs}.
+\end{IEEEproof}
+ 
+Let $\chi^{\mathrm{CP}}$ denote the Owen solution of \eqref{eq:cp_reduced} at $S=N$, read from the multipliers of the linking rows and the per-prosumer blocks.
+ 
+\begin{theorem}[Core of the mixed-integer community game]
+\label{thm:core}
+Suppose the linking constraints are homogeneous, the copositive dual of \eqref{eq:cpp} at $S=N$ attains its optimum at some $(M^{*},\tau^{*})$, and Slater's condition holds. Then
+\begin{equation}
+\textstyle\sum_{j\in S}\chi_j^{\mathrm{CP}}\ \ge\ \vmip(S)\ \ \forall S,\qquad \sum_{j\in N}\chi_j^{\mathrm{CP}}=\vmip(N),
+\label{eq:thm_core}
+\end{equation}
+so $\chi^{\mathrm{CP}}\in\mathcal{C}(\vmip)$, the cost of stability of $\Gamma^{\mathrm{MIP}}$ is zero, and $\chi^{\mathrm{CP}}$ solves $(\mathrm{OPAP})$ exactly.
+\end{theorem}
+ 
+\begin{IEEEproof}
+Stability follows from Proposition~\ref{prop:cp_lpg} and \eqref{eq:owen_proof}, together with $\vcp(S;M^{*},\tau^{*})\ge\vmip(S)$, which holds coalition-wise because $(M^{*},\tau^{*})$ is dual feasible for every $S$. Efficiency follows from strong duality of the copositive program at $S=N$ under Slater's condition, $\min_{M,\tau}\vcp(N;M,\tau)=\vmip(N)$. See Appendix~\ref{app:proofs}.
+\end{IEEEproof}
+ 
+\begin{remark}[Scope of Theorem~\ref{thm:core}]
+Theorem~\ref{thm:core} is an existence result, not an algorithm: copositive programs are not tractable at the dimensions arising here, and we do not solve \eqref{eq:cpp} numerically. Its role is twofold. It certifies that the residual subsidy in Proposition~\ref{prop:opap} is an artifact of the relaxation rather than of the game, so $\omega^{\mathrm{CP}}=0\le\omega^{\mathrm{LR}}$; and it explains the empirical finding of Section~\ref{sec:num} that exact row generation terminates with a nonempty core in every converged instance tested. Dual attainment for copositive programs is not automatic and constitutes the main technical restriction.
+\end{remark}
+ 
+\begin{remark}[Scope of Assumption~\ref{as:pool}]
+\label{rmk:nonadditive}
+Assumption~\ref{as:pool} can fail on either side of \eqref{eq:additive}. The
+right-hand side fails when it is an exogenous constant rather than a sum of
+member-owned quantities, so that every coalition faces the same resource whatever
+its size. Suppose, for example, that the community of Section~\ref{sec:model}
+additionally contracts a single export capacity $C$ at its point of common
+coupling, adding
+\begin{equation}
+\ssum_{j\in S}e_{jt}^{E,mkt}\le C,\qquad \forall t,
+\label{eq:expcap}
+\end{equation}
+to \eqref{eq:dp_bal}--\eqref{eq:dp_peak}. Dualizing \eqref{eq:expcap} with
+multiplier $\psi$ leaves
+\begin{equation}
+\vlr(S;\theta,\psi)=\ssum_{j\in S}\sigma_j(\theta,\psi)-\psi C ,
+\label{eq:pfg}
+\end{equation}
+in which the last term is the same for every coalition. The sub-game is no longer
+additive in $S$ and no longer agrees in value with a linear production program, so
+neither Lemma~\ref{lem:lpg} nor Theorem~\ref{thm:core} applies, and $\Gamma$
+acquires a partition-function-form structure. The rating of a community-owned
+asset and the thermal limits of the distribution network take the same form. The
+left-hand side fails when the coupling is not separable across members, as it is
+not under the AC power flow equations, and then \eqref{eq:additive} cannot be
+written at all.  If instead each member contracts
+its own capacity $c_j$ and the coalition faces $\sum_{j\in S}c_j$,
+Assumption~\ref{as:pool} holds with $b_j=c_j$; Lemma~\ref{lem:lpg} and
+Proposition~\ref{prop:eps} survive unchanged, but the coupling is no longer
+homogeneous and Theorem~\ref{thm:core} does not apply as stated.
+\end{remark}
+
+\section{Solution Procedures and Complexity}
+\label{sec:complexity}
+ 
+
+Sections~\ref{sec:lr} and~\ref{sec:cpp} produced two allocations,
+$\chi^{\mathrm{LR}}$ and $\chi^{\mathrm{CP}}$, alongside the exact
+row-generation scheme that is the standard benchmark. We state here how each is
+computed and what the computation costs. None of the three is polynomially
+computable, since evaluating $\vmip(S)$ even once embeds a unit-commitment
+dispatch, which is strongly NP-hard in
+general~\cite{bendotti2019complexity}. The three procedures decompose into a master problem and a subproblem. In all
+three the master is a linear program, so their complexity is that of the
+subproblem, and that is what we compare.
+
+\emph{Row generation for $(\mathrm{OPAP})$}~\cite{drechsel2010computing} maintains a subset of coalition
+inequalities, solves the restricted $(\mathrm{OPAP})$ over it for an incumbent
+$\chi$, and appends a violated inequality found by separation,
+\begin{equation}
+\max_{S\subseteq N}\ \Big\{\vmip(S)-\ssum_{j\in S}\chi_j\Big\}.
+\label{eq:rg_sep}
+\end{equation}
+Termination at a nonpositive value certifies that $\chi$ solves
+$(\mathrm{OPAP})$ exactly. The cost is concentrated entirely in
+\eqref{eq:rg_sep}, which is not an evaluation of $\vmip$ but an optimization
+\emph{over} it: coalition membership must be encoded by $n$ prosumer-selection
+binaries entering the dispatch through big-$M$ constraints that deactivate the
+variables of excluded prosumers~\cite[Sec.~3]{drechsel2010computing}. The oracle is thus
+a single monolithic MIP that stacks a subset-selection layer on an already
+combinatorial dispatch, and it grows in $n$ on both layers. It admits no
+decomposition across prosumers, no bound on the iteration count is available,
+and its relaxation weakens as $M$ grows~\cite{ref_bigM}.
+ 
+\emph{Column generation for $(\mathrm{DWR}_N)$}. The master is $(\mathrm{DWR}_N)$ restricted to a
+subset of columns, an LP with $m+n=(|K|+3)|T|+n$ rows, and returns
+$(\theta,\sigma)$. The subproblem prices prosumer $j$,
+\begin{equation}
+\max_{(x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}}\ f_j(x_j,y_j)-\theta^{\top}A_jx_j,
+\label{eq:pricing}
+\end{equation}
+and generates a column if its value exceeds $\sigma_j$, so $Q_j$ is never
+enumerated. At termination $\chi^{\mathrm{LR}}=\sigma^{*}$ by
+Lemma~\ref{lem:lpg}(b). The subproblem separates into $n$ independent
+single-prosumer MIPs, each of size $n_j$ and solvable in parallel; it remains
+NP-hard, and the iteration count is not bounded.
+
+\emph{Cutting planes for $(\mathrm{CP}_N)$}. Burer's lifting places every binary restriction in the
+single constraint $Y_N\in\CP$, so $(\mathrm{CP}_N)$ is convex and
+\eqref{eq:cpp_a}--\eqref{eq:cpp_c} are linear. The master optimizes over an
+outer approximation of $\CP$ and the subproblem separates the incumbent $Y_N$
+from $\CP$~\cite{guo2026copositive}. That separation is
+also an NP-hard MILP problem and its difficulty is
+independent of $n$: the subproblem is already intractable at $n=1$, and $Y_N$
+has order $1+\ssum_{j\in N}n_j+m$, of order $10^{3}$ at $n=6$. Terminating at
+an outer approximation makes $\vcp$ an upper bound on $\vmip$, which preserves
+stability but not efficiency.
+ 
+Table~\ref{tab:complexity} collects the comparison. Read by column rather than
+by row, it gives the design trade-off: exactness is available from row
+generation and from the copositive route, tractability from the proposed scheme,
+and no procedure supplies both. The proposed scheme gives up exact efficiency by
+the amount bounded in Proposition~\ref{prop:eps}---which
+Theorem~\ref{thm:core} identifies as an artifact of the relaxation rather than
+of the game---and buys an oracle that does not grow with membership.
+Section~\ref{sec:num} measures both sides of that exchange.
+ 
+\begin{table}[!t]
+\caption{Procedures for constructing a stable allocation of $\Gamma^{\mathrm{MIP}}$. $n_j:=n_{x_j}+n_{y_j}$ is the variable count of prosumer $j$ and $m=(|K|+3)|T|$ is fixed by the market design.}
+\label{tab:complexity}
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\multirow{2}{*}{Procedure} & Oracle per & Oracle size & \multirow{2}{*}{Parallel} & \multirow{2}{*}{$\omega$} \\
+ & iteration & in $n$ & & \\
+\midrule
+Brute force
+ & $2^{n}-1$ MILPs & $\le\ssum_{j\in N}n_j$ & yes & $\omega^{*}$ \\
+Row gen.~\cite{drechsel2010computing}
+ & 1 MILP & $\ssum_{j\in N}n_j+n$ & no & $\omega^{*}$ \\
+Column gen.
+ & $n$ MILPs & $\max_j n_j$ & yes & $\omega^{\mathrm{LR}}$ \\
+Cutting plane
+ & 1 MILP & intractable & --- & $0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+ 
+%% ==========================================================
+\section{Numerical Study}
+\label{sec:num}
+ \subsection{Setup and Benchmarks}
+\textcolor{red}{
+\begin{itemize}
+  \item Six-player community + 한국 데이터 (preprint Sec.~6.1 재사용); reserve/peak block 활성화 ($\pi^{up},\pi^{dn},\delta^{peak}$ 외생). 벤치마크: brute force ($n=6$), row generation, IP pricing, PCA --- IP는 벤치마크 행으로만. 가격 figure 없음; 모든 결과는 allocation, $\varepsilon^{\mathrm{LR}}$, $\rho_j$.
+\end{itemize}}
+ 
+\subsection{Small-Scale Validation and Diagnosis ($n=6$, exact ground truth)}
+\textcolor{red}{
+\begin{itemize}
+  \item 정확성: 협력 synergy; row generation $\varepsilon=0$으로 core nonempty 실증 (Theorem~\ref{thm:core}); Prop.~\ref{prop:eps} bound의 tightness를 true $\varepsilon$ 대비 검증. 같은 테이블에 게임의 stability margin (true least-core 값, FLC의 $\theta^{\mathrm{LC}}$ 상당)과 우리 해의 gap ($\varepsilon^{\mathrm{LR}}$)을 나란히 --- 게임 성질 vs 방법 성질의 구분을 선제적으로.
+  \item 진단: subsidy의 non-convexity 원천 (UC vs nonlinear efficiency; startup sweep, segments 1 vs 6, wind 수준 대비 $\rho_{u_2}$ U자형) + efficient allocation의 blocking coalition을 brute force로 식별해 commitment divergence와 연결. 위반 폭 $\le\varepsilon$이므로 진단적 잔차 톤.
+  \item Robustness: 31일 $\times$ 시나리오에서 $\varepsilon^{\mathrm{LR}}$가 surplus 크기가 아니라 commitment activity ($\bar\rho$)를 따라감; admissibility 경계 --- homogeneous coupling (reserve/peak)은 무해, non-additive coupling (shared export cap)은 counterexample.
+\end{itemize}}
+ 
+\subsection{Computational Scalability and the $\varepsilon$ Bound}
+\textcolor{red}{
+\begin{itemize}
+  \item $|N|\in\{6,15,30\}$: exact 방법 (row generation, brute force)이 실패하는 규모에서 우리는 $n$개 독립 pricing MIP로 해결 (FLC Sec.~VIII-B 대응 서사); blocking 확인은 고정 $\chi$에 separation MIP 1회.
+  \item 측정된 $\varepsilon^{\mathrm{LR}}$의 $O(|T|/n)$ decay 확인 (log-scale figure) --- $n=30$에선 전수 검증이 불가능하므로 a priori bound가 실질적 보증이라는 메시지.
+  \item Non-convex player 비중 실험: 현재 구성은 integer player가 적음 ($n=15$에 6명, $n=30$에 10명) --- 같은 $n$에서 electrolyzer 등 non-convex player 수를 늘려가며 $\varepsilon^{\mathrm{LR}}$ 거동을 관찰. 논점: $O(|T|/n)$ decay가 소비자 희석 효과인지, non-convex 비중을 고정/증가시켜도 유지되는지 --- bound의 $\bar\rho$ 의존성과 직결되는 리뷰어 예상 질문.
+\end{itemize}}
+ 
+\subsection{Economic and Policy Implications}
+\textcolor{red}{
+\begin{itemize}
+  \item Incidence (실험으로만): reserve 가치는 누가 가져가고 peak penalty는 누가 부담하는가 --- counterfactual on/off의 $\Delta\chi_j$; Corn\'elusse의 explicit bilevel share와 framing 대비. 회계적 분해 claim 없음.
+  \item Fairness: $\Theta^{*}$ spread 측정 (singleton이면 폐기) 후, Rawlsian maximin selection이 worst-off member를 zero subsidy cost로 개선 (P3/P4) vs solver-arbitrary Owen. Claim은 computational (coalition oracle 없는 selection; FLC, Valencia-Zuluaga \& Oren이 conceptual 선행).
+\end{itemize}}
+ 
+%% ==========================================================
+\section{Conclusion}
+\label{sec:concl}
+ 
+We have studied stable profit allocation in a sector-coupled energy community with a non-convex dispatch model. The starting point is a structural property of the institution rather than of the algebra: an energy community is a resource pool, so its members are coupled only through constraints that are additive on both sides. Under this property, partially dualizing the linking constraints leaves a Lagrangian sub-game that is a linear production game, and its Owen solution---read directly off the Dantzig--Wolfe dual of a single grand-coalition solve---is stable against every coalition while relaxing efficiency by exactly the integrality gap. We bounded the corresponding per-member subsidy by $O(|T|/n)$ and showed that, applying the same dualization to an exact copositive reformulation, the subsidy vanishes and the core of the mixed-integer community game is nonempty under homogeneous linking and dual attainment. Experiments on communities of up to 30 prosumers confirmed both the scalability and the predicted decay.
+ 
+Two implications follow for market design and regulation. First, the cost of holding a non-convex energy community together is bounded, computable before the fact, and small: never above one tenth of one percent of community welfare in our instances. A regulator specifying a community tariff can budget for it rather than discover it. Second, that cost is a fixed quantity divided by membership, because the coordination channels of a community---carrier balance, reserve adequacy, peak import---are set by the market design and do not multiply with participants. Policies that enlarge communities therefore reduce the fragmentation risk that non-convex assets create, and the case for consolidating small communities is economic as well as administrative.
+ 
+Several directions remain. Stability is not fairness, and how the Owen solution relates to fairness-oriented concepts such as the nucleolus or the Shapley value in this mixed-integer setting is open. The copositive result rests on dual attainment, which is not automatic, and a computationally usable relaxation between the Dantzig--Wolfe and copositive extremes---semidefinite or set-copositive---would tighten the subsidy without abandoning tractability. Finally, the copperplate assumption removes network constraints, whose limits are
+exogenous to membership and therefore violate Assumption~\ref{as:pool}; extending
+the framework to that case requires a genuinely different treatment, as
+Remark~\ref{rmk:nonadditive} indicates.
+ 
+\appendices
+
+ 
+\section*{Acknowledgment}
+This work was supported by the National Research Council of Science and Technology (No. CRC23033-530) and the Korea Environmental Industry and Technology Institute (No. RS-2025-02213125), funded by the Korean government.
+ 
+\bibliographystyle{IEEEtran}
+\bibliography{reference_ieee}
+% \begin{thebibliography}{1}
+% \bibliographystyle{IEEEtran}
+
+% \bibitem{ref1}
+% {\it{Mathematics Into Type}}. American Mathematical Society. [Online]. Available: https://www.ams.org/arc/styleguide/mit-2.pdf
+
+% \bibitem{ref2}
+% T. W. Chaundy, P. R. Barrett and C. Batey, {\it{The Printing of Mathematics}}. London, U.K., Oxford Univ. Press, 1954.
+
+% \bibitem{ref3}
+% F. Mittelbach and M. Goossens, {\it{The \LaTeX Companion}}, 2nd ed. Boston, MA, USA: Pearson, 2004.
+
+% \bibitem{ref4}
+% G. Gr\"atzer, {\it{More Math Into LaTeX}}, New York, NY, USA: Springer, 2007.
+
+% \bibitem{ref5}M. Letourneau and J. W. Sharp, {\it{AMS-StyleGuide-online.pdf,}} American Mathematical Society, Providence, RI, USA, [Online]. Available: http://www.ams.org/arc/styleguide/index.html
+
+% \bibitem{ref6}
+% H. Sira-Ramirez, ``On the sliding mode control of nonlinear systems,'' \textit{Syst. Control Lett.}, vol. 19, pp. 303--312, 1992.
+
+% \bibitem{ref7}
+% A. Levant, ``Exact differentiation of signals with unbounded higher derivatives,''  in \textit{Proc. 45th IEEE Conf. Decis.
+% Control}, San Diego, CA, USA, 2006, pp. 5585--5590. DOI: 10.1109/CDC.2006.377165.
+
+% \bibitem{ref8}
+% M. Fliess, C. Join, and H. Sira-Ramirez, ``Non-linear estimation is easy,'' \textit{Int. J. Model., Ident. Control}, vol. 4, no. 1, pp. 12--27, 2008.
+
+% \bibitem{ref9}
+% R. Ortega, A. Astolfi, G. Bastin, and H. Rodriguez, ``Stabilization of food-chain systems using a port-controlled Hamiltonian description,'' in \textit{Proc. Amer. Control Conf.}, Chicago, IL, USA,
+% 2000, pp. 2245--2249.
+
+% \end{thebibliography}
+
+
+\newpage
+
+\section{Biography Section}
+If you have an EPS/PDF photo (graphicx package needed), extra braces are
+ needed around the contents of the optional argument to biography to prevent
+ the LaTeX parser from getting confused when it sees the complicated
+ $\backslash${\tt{includegraphics}} command within an optional argument. (You can create
+ your own custom macro containing the $\backslash${\tt{includegraphics}} command to make things
+ simpler here.)
+ 
+\vspace{11pt}
+
+% \bf{If you include a photo:}\vspace{-33pt}
+% \begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{fig1}}]{Michael Shell}
+% Use $\backslash${\tt{begin\{IEEEbiography\}}} and then for the 1st argument use $\backslash${\tt{includegraphics}} to declare and link the author photo.
+% Use the author name as the 3rd argument followed by the biography text.
+% \end{IEEEbiography}
+
+\vspace{11pt}
+
+\bf{If you will not include a photo:}\vspace{-33pt}
+\begin{IEEEbiographynophoto}{John Doe}
+Use $\backslash${\tt{begin\{IEEEbiographynophoto\}}} and the author name as the argument followed by the biography text.
+\end{IEEEbiographynophoto}
+
+
+
+
+\vfill
+
+\end{document}
