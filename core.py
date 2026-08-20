@@ -532,6 +532,29 @@ class SeparationProblem(LocalEnergyMarket):
         return obj_val, selected_coalition
 
 
+def fairness_mode(egalitarian) -> Optional[str]:
+    """Normalise the `egalitarian` argument to a fairness mode, or None.
+
+    'range'    Kimms MP_I: min (max_i p_i - min_i p_i). An LP, so the objective value
+               is determined but the ARGMIN generally is not -- see egalitarian_width.
+    'variance' Fioriti et al. (2025) Fair Core with f = -variance, i.e. the Variance
+               Core of eq.(27): min sum_i (p_i - c(N)/n)^2. Efficiency pins the mean at
+               c(N)/n, so this objective IS n times the variance of the shares. Strictly
+               convex, hence a unique minimiser -- which is the whole point: the same
+               allocation comes back whatever coalitions row generation happened to
+               generate, and it is what makes the per-player numbers reportable.
+
+    True is accepted as an alias for 'range'.
+    """
+    if not egalitarian:
+        return None
+    if egalitarian is True:
+        return 'range'
+    if egalitarian in ('range', 'variance'):
+        return egalitarian
+    raise ValueError(f"egalitarian must be False, 'range' or 'variance', got {egalitarian!r}")
+
+
 class CoreComputation:
     """
     Main class for computing core allocations using row generation algorithm
@@ -627,7 +650,8 @@ class CoreComputation:
         return cost
     
     def initialize_master_problem(self, initial_coalitions: List[List[str]],
-                                  cost_of_stability: bool = False) -> None:
+                                  cost_of_stability: bool = False,
+                                  egalitarian: bool = False) -> None:
         """
         Initialize the master problem with initial set of coalitions
 
@@ -638,6 +662,20 @@ class CoreComputation:
                 every proper-coalition constraint is left strict. Then v* = cost of
                 stability. Default False = uniform epsilon on every coalition
                 (strong ε-core / least-core, original behaviour).
+            egalitarian: if True, build MP_I of Drechsel & Kimms (2010) sec.2.3 instead:
+                the core is assumed nonempty and, among its elements, the one whose cost
+                shares are least spread is selected,
+
+                    min  P_hi - P_lo   s.t.  Σ_N p = c(N),  Σ_S p ≤ c(S) ∀S∈𝒮,
+                                             P_hi ≥ p_i,  P_lo ≤ p_i  ∀i.
+
+                Minimisation drives P_hi down onto max_i p_i and P_lo up onto min_i p_i,
+                so the objective is the range whatever the sign of the shares -- ours are
+                costs, negative for a member that profits. There is no epsilon anywhere:
+                the efficiency row is the exact c(N) and every coalition row is strict, so
+                an infeasible master is not a failure but a proof that the core is empty
+                (the rows present are a subset of the core's, hence a relaxation of it).
+                Overrides `cost_of_stability`, whose subsidy has no meaning here.
         """
         print("\n" + "="*70)
         print("Initializing Master Problem")
@@ -653,19 +691,53 @@ class CoreComputation:
                 lb=-float('inf')  # Payoffs can be negative
             )
         
-        # Create slack variable v >= 0
+        # Create slack variable v >= 0. In egalitarian mode it is pinned to zero and
+        # carries no objective: the variable stays only so that solve_master_problem and
+        # every caller that reads `slack` keep working unchanged.
         self.slack_var = self.master_model.addVar(
             vtype="C",
             name="v",
             lb=0,
-            obj=1.0  # Minimize v
+            ub=0.0 if egalitarian else None,
+            obj=0.0 if egalitarian else 1.0  # Minimize v
         )
+
+        # Egalitarian objective: the two range variables. Free, because the shares they
+        # bracket are costs and may be negative.
+        self.range_vars = None
+        mode = fairness_mode(egalitarian)
+        if mode == 'range':
+            p_hi = self.master_model.addVar(vtype="C", name="P_hi", lb=-float('inf'), obj=1.0)
+            p_lo = self.master_model.addVar(vtype="C", name="P_lo", lb=-float('inf'), obj=-1.0)
+            self.range_vars = (p_hi, p_lo)
         
         # Constraint: Efficiency (sum of payoffs = grand coalition cost)
         grand_coalition_cost = self.compute_coalition_cost(self.players)
         print(f"\nGrand coalition cost c(N): {grand_coalition_cost:.4f}")
         
-        if cost_of_stability:
+        if mode:
+            efficiency_cons = self.master_model.addCons(
+                quicksum(self.payoff_vars[i] for i in self.players) == grand_coalition_cost,
+                name="efficiency"
+            )
+        if mode == 'range':
+            p_hi, p_lo = self.range_vars
+            for i in self.players:
+                self.master_model.addCons(p_hi >= self.payoff_vars[i], name=f"hi_{i}")
+                self.master_model.addCons(p_lo <= self.payoff_vars[i], name=f"lo_{i}")
+        elif mode == 'variance':
+            # SCIP takes no quadratic objective directly, so epigraph it: minimise q
+            # subject to sum_i (p_i - a)^2 <= q. The constraint is convex, so the
+            # relaxation is tight at the optimum and q equals the true objective.
+            a = grand_coalition_cost / len(self.players)
+            q = self.master_model.addVar(vtype="C", name="q", lb=0.0, obj=1.0)
+            self.master_model.addCons(
+                quicksum((self.payoff_vars[i] - a) * (self.payoff_vars[i] - a)
+                         for i in self.players) <= q,
+                name="variance_epigraph"
+            )
+            print(f"Variance Core: minimising sum_i (p_i - {a:.4f})^2 over the core")
+        elif cost_of_stability:
             # Cost-of-stability: the epsilon slack v is an external subsidy sitting
             # on the grand coalition ONLY. In cost form the subsidy lowers the total
             # cost that must be allocated to members:  Σ_i p_i == c(N) - v.
@@ -682,7 +754,8 @@ class CoreComputation:
         # Add initial coalition constraints
         print(f"\nAdding {len(initial_coalitions)} initial coalition constraints:")
         for coalition in initial_coalitions:
-            self._add_coalition_constraint(coalition, cost_of_stability=cost_of_stability)
+            self._add_coalition_constraint(
+                coalition, cost_of_stability=(cost_of_stability or egalitarian))
         
         print("="*70 + "\n")
     
@@ -853,7 +926,8 @@ class CoreComputation:
                      max_iterations: int = 100,
                      tolerance: float = 1e-6,
                      time_limit: float = 36000,
-                     cost_of_stability: bool = True) -> Optional[Dict[str, float]]:
+                     cost_of_stability: bool = True,
+                     egalitarian: bool = False) -> Optional[Dict[str, float]]:
         """
         Main row generation algorithm to compute core allocation
 
@@ -871,6 +945,30 @@ class CoreComputation:
                 v*≈0 this q is exactly the core point, so it is a drop-in for the
                 previous behaviour. Set False for the old uniform-epsilon
                 strong-ε-core / least-core (early-exits on empty core).
+            egalitarian: DEFAULT False. 'range' (or True) selects MP_I of Drechsel &
+                Kimms (2010) sec.2.3, 'variance' the Variance Core of Fioriti et al.
+                (2025) eq.(27). Both pick, among the core elements, the one whose cost
+                shares are least spread; they differ in how spread is measured, and that
+                difference decides whether the answer is a point. See `fairness_mode`.
+                `cost_of_stability` is ignored. Row generation is
+                otherwise unchanged: separation reads only the allocation, never the
+                master's objective, so the same loop, the same convergence test and the
+                same budget apply. On convergence the range is left in
+                self.egalitarian_range and self.egalitarian_converged is True; the
+                returned allocation is a core element by construction, so the returned
+                flag means the same thing it does in the other modes.
+
+                'range' is NOT a canonical point. min(max - min) fixes the objective
+                value, not the argument: if the optimal face is more than a point, which
+                element of it comes back is the solver's choice. Measured here at 6
+                prosumers over the full 62-coalition core, that face is 220 EUR wide on
+                shares of order 500, and two honest solves of the same MP_I -- one over
+                the 14 rows row generation produced, one over all 62 -- return the same
+                objective 1436.0916 and allocations 108 EUR apart. `egalitarian_width()`
+                measures it; it is a diagnostic, not a tie-break.
+
+                'variance' is a canonical point, by strict convexity. That is what makes
+                per-player numbers reportable, and it is why Fioriti et al. propose it.
 
         Returns:
             (Dict[str, float], bool): allocation and success/core-nonempty flag.
@@ -886,7 +984,13 @@ class CoreComputation:
 
         # Step 1: Initialize with singleton coalitions
         initial_coalitions = [[player] for player in self.players]
-        self.initialize_master_problem(initial_coalitions, cost_of_stability=cost_of_stability)
+        self.initialize_master_problem(initial_coalitions,
+                                       cost_of_stability=cost_of_stability,
+                                       egalitarian=egalitarian)
+        mode = fairness_mode(egalitarian)
+        strict = bool(cost_of_stability or mode)
+        self.fairness_mode = mode
+        self.egalitarian_converged = False
 
         # `tolerance` is RELATIVE to the value of the game. Read absolutely it was the
         # cause of a non-termination that looked like combinatorial hardness: a separation
@@ -953,6 +1057,18 @@ class CoreComputation:
             
             # Step 2: Solve master problem
             payoffs, slack = self.solve_master_problem()
+            if not payoffs:
+                # No solution. In egalitarian mode the master carries no slack, so this
+                # is infeasibility and infeasibility is a RESULT: the rows generated so
+                # far are a subset of the core's, hence a relaxation, so an empty
+                # relaxation proves the core itself is empty. In the other modes the
+                # slack keeps the master feasible, so it is a solver failure instead.
+                print(f"\n{'='*70}")
+                print("CORE IS EMPTY (master infeasible on a relaxation)" if egalitarian
+                      else "MASTER PROBLEM FAILED")
+                print(f"Stopped after {iteration} iterations")
+                print(f"{'='*70}\n")
+                return None, False
             
             # Step 3: Check if core is empty
             # In cost-of-stability mode a positive slack is exactly the subsidy we
@@ -994,6 +1110,30 @@ class CoreComputation:
                 return payoffs, False
 
             if len(coalition) == 0 or violation <= tol_eff:
+                if mode:
+                    # Both dispersion measures are read off the allocation rather than
+                    # the solver's variables, so the two modes report the same pair of
+                    # numbers and are directly comparable.
+                    a = self.coalition_costs[_grand] / len(self.players)
+                    self.egalitarian_range = max(payoffs.values()) - min(payoffs.values())
+                    self.egalitarian_variance = sum((payoffs[i] - a) ** 2
+                                                    for i in self.players)
+                    self.egalitarian_converged = True
+                    print(f"\n{'='*70}")
+                    print("EGALITARIAN CORE ELEMENT FOUND "
+                          + ("(MP_I, min range)" if mode == 'range'
+                             else "(Variance Core, unique)"))
+                    print(f"Converged after {iteration} iterations")
+                    print(f"Range max-min       = {self.egalitarian_range:.6f}")
+                    print(f"Sum (p_i - mean)^2  = {self.egalitarian_variance:.6f}")
+                    print(f"Equal split c(N)/n = {a:.4f}")
+                    total = 0.0
+                    for i in self.players:
+                        print(f"  Player {i}: {payoffs[i]:.4f}")
+                        total += payoffs[i]
+                    print(f"  Total: {total:.4f}  (c(N) = {self.coalition_costs[_grand]:.4f})")
+                    print(f"{'='*70}\n")
+                    return payoffs, True
                 if cost_of_stability:
                     # v* = cost of stability (external subsidy needed to make the
                     # core non-empty). Core is non-empty iff v* ≈ 0.
@@ -1037,7 +1177,7 @@ class CoreComputation:
             
             # Step 6: Add violated coalition constraint
             print(f"\nAdding violated coalition {coalition} to master problem")
-            self._add_coalition_constraint(coalition, cost_of_stability=cost_of_stability)
+            self._add_coalition_constraint(coalition, cost_of_stability=strict)
         
         print(f"\n{'='*70}")
         print(f"WARNING: Maximum iterations ({max_iterations}) reached")
@@ -1052,6 +1192,61 @@ class CoreComputation:
                   f"(weak-eps >= {self.weak_eps:.6f})")
             return self.weak_eps_core_allocation(payoffs, slack), False
         return payoffs, False
+
+    def egalitarian_width(self, rel_tol: float = 1e-6) -> Dict[str, float]:
+        """How much of the MP_I optimum is pinned down, and how much the solver chose.
+
+        `min (P_hi - P_lo)` fixes the objective, not the argument. If the optimal face is
+        more than a point, the per-player numbers that come back are whichever vertex the
+        simplex landed on, and reporting them as "the egalitarian allocation" would be
+        reporting a solver artefact -- the failure that retracted the maximin selection
+        (`convergence.md` sec.1.2). This measures it instead of assuming either way: hold
+        the range at its optimum and swing each share as far as it will go.
+
+        Returns {player: width}. A width of zero means that share is determined.
+
+        ONE-SIDED, and the direction matters. The rows in the master are the coalitions
+        row generation happened to generate, a SUBSET of the core's, so the face measured
+        here CONTAINS the true one. Zero width therefore proves the share is pinned;
+        nonzero width does not prove it is free. This is the same asymmetry that made the
+        2n-LP singleton screen useless as a skip test, and it is why this is reported
+        rather than acted on.
+        """
+        if getattr(self, 'fairness_mode', None) == 'variance':
+            raise RuntimeError("the Variance Core minimiser is unique by strict convexity; "
+                               "there is no face to measure. Test it by re-solving with a "
+                               "different coalition set and comparing allocations instead.")
+        if self.range_vars is None or not getattr(self, 'egalitarian_converged', False):
+            raise RuntimeError("egalitarian_width() needs a converged "
+                               "compute_core(egalitarian='range') run")
+        p_hi, p_lo = self.range_vars
+        m = self.master_model
+        r = self.egalitarian_range
+        slack = max(rel_tol, abs(r) * rel_tol)
+
+        m.freeTransform()
+        m.addCons(p_hi - p_lo <= r + slack, name="fix_range")
+
+        widths = {}
+        for i in self.players:
+            bounds = []
+            for sense in ("minimize", "maximize"):
+                m.freeTransform()
+                m.setObjective(self.payoff_vars[i], sense)
+                m.hideOutput()
+                m.optimize()
+                if m.getStatus() != "optimal":
+                    bounds = None
+                    break
+                bounds.append(m.getVal(self.payoff_vars[i]))
+            widths[i] = float('nan') if bounds is None else bounds[1] - bounds[0]
+
+        worst = max((w for w in widths.values() if w == w), default=float('nan'))
+        print(f"\nMP_I optimal face, width per share (0 = determined):")
+        for i in self.players:
+            print(f"  {i}: {widths[i]:.3e}")
+        print(f"  worst: {worst:.3e}   [upper bound: measured over a superset of the core]")
+        return widths
 
     def weak_eps_core_allocation(self, cos_payoffs: Dict[str, float],
                                  epsilon: Optional[float] = None) -> Dict[str, float]:

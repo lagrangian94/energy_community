@@ -279,6 +279,15 @@ OWEN_COLS = ['run', 'day', 'n_players', 'num_households', 'base_h2_price_eur', '
              'v_mip', 'v_chp', 'gap', 'eps_bound', 'time_mip_s', 'time_cg_s',
              # reserve.txt sec.3.2 headline outputs (full series stay in the JSON)
              'r_sym', 'reserve_revenue',
+             # Block-era columns. `flatten_for_csv` began emitting these when the reserve
+             # product went to 4-hour blocks, and DictWriter rejects a row carrying a key
+             # the header does not have -- so the whole Owen phase failed on every day
+             # until they were declared here. Adding the name is the fix; dropping the
+             # value silently would have been worse than the crash.
+             'product', 'n_blocks', 'block_hours', 'r_sym_mwh', 'r_up_mwh', 'r_dn_mwh',
+             'pool_standalone_mwh', 'pool_gain_mwh', 'pool_blocks_with_gain',
+             'mech_no_pooling_mwh', 'mech_full_mwh',
+             'mech_gain_time_mwh', 'mech_gain_direction_mwh',
              'pool_standalone_sum', 'pool_gain_abs', 'pool_gain_ratio',
              'mech_no_pooling', 'mech_time_only', 'mech_full', 'mech_gain_time',
              'mech_gain_direction', 'mech_share_direction',
@@ -354,8 +363,17 @@ def owen_day(run, day):
     row.update(stab_for_csv(stab))
     bad = failed_checks(rp)
     row['schema_checks'] = 'ok' if not bad else ';'.join(bad)
+    # r_sym is one scalar under a 24-hour product and one value PER BLOCK under any
+    # shorter one, so it cannot be formatted as a float. That is the third place the
+    # block change has broken -- see convergence.md sec.3 for the warm start and
+    # solver.private_dispatch for the fix that generalised there. Here the whole Owen
+    # phase aborted on the log line, after the JSON had already been written, so 31 days
+    # produced correct files and no CSV rows.
+    _rs = rp.get('r_sym', 0.0)
+    _rs_txt = (f"{min(_rs.values()):.4f}-{max(_rs.values()):.4f} over {len(_rs)} blocks"
+               if isinstance(_rs, dict) else f"{_rs:.4f}")
     print(f"  [Owen] {run['name']} day {day}: v_mip={v_mip:.3f} eps_bound={eps_bound:.5f} "
-          f"r_sym={rp.get('r_sym', 0.0):.4f} peak={rp.get('peak_value', 0.0):.4f} "
+          f"r_sym={_rs_txt} peak={rp.get('peak_value', 0.0):.4f} "
           f"checks={row['schema_checks']} stab={'ok' if stab['all_hold'] else 'FAIL'} "
           f"({t_mip+t_cg:.0f}s)")
     return row
