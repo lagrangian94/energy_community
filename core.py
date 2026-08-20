@@ -349,9 +349,18 @@ class SeparationProblem(LocalEnergyMarket):
 
         print(f"Modified balance constraints to incorporate z variables")
     
-    def solve_separation(self):
+    def solve_separation(self, time_limit: Optional[float] = None):
         """
         Solve the separation problem
+
+        Args:
+            time_limit: wall-clock cap in seconds for this single separation solve.
+                Gurobi path only (the SCIP and HiGHS paths ignore it). On expiry the
+                incumbent is used instead of the optimum and `self.truncated` is set:
+                an incumbent coalition still yields a VALID cut -- it is violated, just
+                not necessarily the most violated one -- but it is NOT a certificate,
+                so a caller must never read "no coalition found" off a truncated solve
+                as convergence.
 
         Returns:
             tuple: (selected_coalition, violation)
@@ -365,10 +374,11 @@ class SeparationProblem(LocalEnergyMarket):
         # This is equivalent to maximizing: Σ payoffs[i]*z[i] - cost
         # So we keep the default minimize objective
 
+        self.truncated = False
         if self.mipsolver and self.mipsolver.lower() == 'highs':
             obj_val, selected_coalition = self._solve_with_highs()
         elif self.mipsolver and self.mipsolver.lower() == 'gurobi':
-            obj_val, selected_coalition = self._solve_with_gurobi()
+            obj_val, selected_coalition = self._solve_with_gurobi(time_limit)
         else:
             # Solve with SCIP (default)
             status = self.solve()
@@ -450,7 +460,7 @@ class SeparationProblem(LocalEnergyMarket):
 
         return obj_val, selected_coalition
 
-    def _solve_with_gurobi(self):
+    def _solve_with_gurobi(self, time_limit: Optional[float] = None):
         """
         Export SCIP model to .mps, then solve with Gurobi via gurobipy.
 
@@ -471,9 +481,34 @@ class SeparationProblem(LocalEnergyMarket):
         gm.setParam("MIPGap", 1e-4)   # default relative gap; the caller's
                                       # violation verification uses a matching
                                       # relative tolerance (see find_violated_coalition)
+        if time_limit is not None:
+            # Without this a single separation solve is unbounded and the row-generation
+            # budget is only enforced between iterations. One second is the floor: asking
+            # Gurobi for less returns no incumbent at all, which is strictly worse than a
+            # cut of unknown quality.
+            gm.setParam("TimeLimit", max(1.0, float(time_limit)))
         gm.optimize()
 
-        if gm.Status != gp.GRB.OPTIMAL:
+        if gm.Status == gp.GRB.OPTIMAL:
+            pass
+        elif gm.SolCount > 0:
+            # Cut off with an incumbent. The incumbent selects a coalition whose
+            # violation is real (the objective is a lower bound on it), so the cut is
+            # valid and the master stays a relaxation. What is lost is the guarantee
+            # that this is the MOST violated coalition, hence the certificate: see
+            # `truncated` in solve_separation.
+            self.truncated = True
+            print(f"  Gurobi separation cut off at the time limit "
+                  f"(status {gm.Status}, {gm.SolCount} incumbent(s), "
+                  f"gap {gm.MIPGap:.2%}); using the incumbent coalition")
+        else:
+            # Out of time with nothing to show. Report no coalition and stay truncated;
+            # the caller sees "nothing found" flagged as uncertified and stops rather
+            # than mistaking it for convergence.
+            self.truncated = True
+            print(f"  Gurobi separation cut off with no incumbent (status {gm.Status})")
+            if gm.Status in (gp.GRB.TIME_LIMIT, gp.GRB.INTERRUPTED):
+                return 0.0, []
             raise RuntimeError(
                 f"Gurobi separation problem failed with status: {gm.Status}"
             )
@@ -534,6 +569,9 @@ class CoreComputation:
         self.master_model = None
         self.payoff_vars = {}
         self.slack_var = None
+        # Set by find_violated_coalition: True when the last separation solve was cut
+        # off at its time limit, i.e. "no violated coalition" is not a certificate.
+        self.last_separation_truncated = False
         
         print(f"\n{'='*70}")
         print(f"Core Computation Initialized")
@@ -724,13 +762,17 @@ class CoreComputation:
         
         return payoffs, slack
     
-    def find_violated_coalition(self, payoffs: Dict[str, float]) -> Tuple[List[str], float]:
+    def find_violated_coalition(self, payoffs: Dict[str, float],
+                                time_limit: Optional[float] = None) -> Tuple[List[str], float]:
         """
         Solve separation problem to find most violated coalition
-        
+
         Args:
             payoffs: Current payoff allocation
-            
+            time_limit: cap on this single separation solve (Gurobi path only). If it
+                expires, `self.last_separation_truncated` is set and the returned
+                coalition, if any, is violated but not necessarily the most violated.
+
         Returns:
             tuple: (coalition, violation)
                 - coalition: Most violated coalition (empty if none found)
@@ -760,9 +802,17 @@ class CoreComputation:
         # model.chgVarUb(sep_problem.z['u2'], 0.0)
         ## 이렇게했더니 infeasible 뜸
         # model.hideOutput()
-        coalition, violation = sep_problem.solve_separation()
-        # Compute actual violation for verification
-        if violation > 1e-7:
+        coalition, violation = sep_problem.solve_separation(time_limit=time_limit)
+        self.last_separation_truncated = getattr(sep_problem, 'truncated', False)
+        # Compute actual violation for verification.
+        #
+        # `coalition` must be non-empty to be worth verifying: the violation of the empty
+        # set is identically zero (no payoffs summed, c(empty) = 0), so an empty selection
+        # IS the statement that nothing is violated. Its reported objective is pure solver
+        # noise -- 9.3e-4 on 15p day 27 -- and comparing that against a freshly computed
+        # exact 0 tripped the mismatch guard and killed the run one iteration before it
+        # would have declared convergence.
+        if coalition and violation > 1e-7:
             coalition_cost = self.compute_coalition_cost(coalition)
             payoff_sum = sum(payoffs[i] for i in coalition)
             actual_violation = payoff_sum - coalition_cost
@@ -779,7 +829,17 @@ class CoreComputation:
             # absolute floor, rather than a fixed 1e-4 that only held for near-exact
             # solves and spuriously tripped with the Gurobi separation path.
             verify_tol = max(1e-4, 2e-4 * abs(coalition_cost))
-            if abs(actual_violation - violation) > verify_tol:
+            if self.last_separation_truncated:
+                # A cut-off incumbent may carry a suboptimal dispatch for the coalition
+                # it selects, so its objective only bounds the true violation from
+                # below; equality is the wrong test. `compute_coalition_cost` re-solves
+                # c(S) exactly, so the recomputed value is the one to carry forward.
+                if actual_violation < violation - verify_tol:
+                    raise RuntimeError(
+                        f"Truncated separation reports violation {violation:.6f} above "
+                        f"the exact {actual_violation:.6f} for the same coalition!")
+                violation = actual_violation
+            elif abs(actual_violation - violation) > verify_tol:
                 raise RuntimeError(
                     f"Mismatch between actual ({actual_violation:.6f}) and separation "
                     f"({violation:.6f}) violation exceeds tol {verify_tol:.6f}!")
@@ -828,33 +888,64 @@ class CoreComputation:
         initial_coalitions = [[player] for player in self.players]
         self.initialize_master_problem(initial_coalitions, cost_of_stability=cost_of_stability)
 
+        # `tolerance` is RELATIVE to the value of the game. Read absolutely it was the
+        # cause of a non-termination that looked like combinatorial hardness: a separation
+        # residual of 5.96e-06 at 6 prosumers and roughly 5e-04 at 15 cleared an absolute
+        # 1e-6, so the loop kept re-adding a coalition already in the master, the LP never
+        # moved, and the identical coalition came back -- 14 458 times in one hour at 6
+        # prosumers, on a day that had in fact converged at iteration 11. Because the add
+        # rule is the negation of the stop rule, an add that changes nothing makes stopping
+        # unreachable; this is `convergence.md` sec.2 in the other loop.
+        #
+        # The answer does not depend on the constant. Swept over five decades at 6p and 15p,
+        # every tolerance that terminates at all returns the same cut count, the same v* and
+        # a bit-identical allocation; what the tolerance decides is only whether the loop can
+        # stop. The measured room to choose in, between the residual that must be ignored and
+        # the smallest genuine violation that must not be:
+        #
+        #     6p   [1e-5,  1.7  ]      15p  [1e-3,  0.022]
+        #
+        # so `tolerance = 1e-6` puts the effective threshold at 3.0e-3 and 6.3e-3, inside
+        # both. The residual grows much faster with n than |c(N)| does (100x against 2x from
+        # 6p to 15p), so |c(N)| is a scale, not a predictor: the band has to be re-measured
+        # before trusting this at a size where it has not been.
+        _grand = tuple(sorted(self.players))
+        tol_eff = tolerance * (1.0 + abs(self.coalition_costs.get(_grand, 0.0)))
+        print(f"Convergence tolerance: {tolerance:.1e} relative -> {tol_eff:.3e} "
+              f"(|c(N)| = {abs(self.coalition_costs.get(_grand, 0.0)):.1f})")
+
         iteration = 0
 
         while iteration < max_iterations:
             iteration += 1
 
-            # Check time limit every 10 iterations
+            # Time limit, checked EVERY iteration. It used to be checked every tenth,
+            # which let a run overshoot its budget by up to nine iterations -- the
+            # 30-prosumer instance reported 3955 s against a 3600 s budget for exactly
+            # that reason. At the sizes where row generation does not converge a single
+            # iteration is minutes, so the overshoot is not a rounding error. The
+            # printout stays on the tenth iteration to keep the log readable.
+            elapsed = time.time() - start_time
             if iteration % 10 == 0:
-                elapsed = time.time() - start_time
                 print(f"  [Time check at iteration {iteration}] Elapsed: {elapsed:.1f}s / {time_limit:.0f}s")
-                if elapsed > time_limit:
-                    print(f"\n{'='*70}")
-                    print(f"TIME LIMIT EXCEEDED ({elapsed:.1f}s > {time_limit:.0f}s)")
-                    print(f"Stopped after {iteration} iterations")
-                    print(f"{'='*70}\n")
-                    if cost_of_stability and 'slack' in dir():
-                        # Not converged: the master slack over the coalitions
-                        # generated so far is a LOWER BOUND on v* (slack is
-                        # monotone non-decreasing as rows are added). Expose it so
-                        # the partial run still brackets eps_min from below.
-                        self.cost_of_stability_value = slack
-                        self.weak_eps = slack / len(self.players)
-                        self.cos_converged = False
-                        self.cos_raw_payoffs = dict(payoffs)
-                        print(f"Partial cost-of-stability LOWER BOUND v* >= {slack:.6f} "
-                              f"(weak-eps >= {self.weak_eps:.6f})")
-                        return self.weak_eps_core_allocation(payoffs, slack), False
-                    return payoffs if 'payoffs' in dir() else None, False
+            if elapsed > time_limit:
+                print(f"\n{'='*70}")
+                print(f"TIME LIMIT EXCEEDED ({elapsed:.1f}s > {time_limit:.0f}s)")
+                print(f"Stopped after {iteration} iterations")
+                print(f"{'='*70}\n")
+                if cost_of_stability and 'slack' in dir():
+                    # Not converged: the master slack over the coalitions
+                    # generated so far is a LOWER BOUND on v* (slack is
+                    # monotone non-decreasing as rows are added). Expose it so
+                    # the partial run still brackets eps_min from below.
+                    self.cost_of_stability_value = slack
+                    self.weak_eps = slack / len(self.players)
+                    self.cos_converged = False
+                    self.cos_raw_payoffs = dict(payoffs)
+                    print(f"Partial cost-of-stability LOWER BOUND v* >= {slack:.6f} "
+                          f"(weak-eps >= {self.weak_eps:.6f})")
+                    return self.weak_eps_core_allocation(payoffs, slack), False
+                return payoffs if 'payoffs' in dir() else None, False
 
             print(f"\n{'='*70}")
             print(f"ITERATION {iteration}")
@@ -867,6 +958,9 @@ class CoreComputation:
             # In cost-of-stability mode a positive slack is exactly the subsidy we
             # are trying to measure (not an emptiness certificate), so we must NOT
             # early-exit here — keep generating rows until separation is clean.
+            # NOTE: `slack` is the subsidy v*, not a violation, and is still compared
+            # absolutely here and in `core_nonempty` below. Measured |v*| has never exceeded
+            # 1.5e-12, so the same noise-floor problem has not bitten; one change at a time.
             if not cost_of_stability and slack > tolerance:
                 print(f"\n{'='*70}")
                 print(f"CORE IS EMPTY")
@@ -874,11 +968,32 @@ class CoreComputation:
                 print(f"{'='*70}\n")
                 return slack, False
             
-            # Step 4: Find violated coalition
-            coalition, violation = self.find_violated_coalition(payoffs)
-            
-            # Step 5: Check convergence
-            if len(coalition) == 0 or violation <= tolerance:
+            # Step 4: Find violated coalition, within what is left of the budget.
+            # Giving separation the remainder is what makes `time_limit` a bound on the
+            # whole algorithm: the per-iteration check above cannot fire while a single
+            # unbounded separation MIP is running.
+            remaining = time_limit - (time.time() - start_time)
+            coalition, violation = self.find_violated_coalition(payoffs, time_limit=remaining)
+
+            # Step 5: Check convergence. A truncated separation proves nothing: it may
+            # have missed a violated coalition it had not reached yet, so an empty
+            # result is "out of time", not "converged".
+            if (len(coalition) == 0 or violation <= tol_eff) and self.last_separation_truncated:
+                print(f"\n{'='*70}")
+                print(f"SEPARATION CUT OFF AT ITS TIME LIMIT -- no certificate")
+                print(f"Stopped after {iteration} iterations")
+                print(f"{'='*70}\n")
+                if cost_of_stability:
+                    self.cost_of_stability_value = slack
+                    self.weak_eps = slack / len(self.players)
+                    self.cos_converged = False
+                    self.cos_raw_payoffs = dict(payoffs)
+                    print(f"Partial cost-of-stability LOWER BOUND v* >= {slack:.6f} "
+                          f"(weak-eps >= {self.weak_eps:.6f})")
+                    return self.weak_eps_core_allocation(payoffs, slack), False
+                return payoffs, False
+
+            if len(coalition) == 0 or violation <= tol_eff:
                 if cost_of_stability:
                     # v* = cost of stability (external subsidy needed to make the
                     # core non-empty). Core is non-empty iff v* ≈ 0.

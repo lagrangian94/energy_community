@@ -45,6 +45,32 @@ class LEMPricer(Pricer):
             self.L_bar = -np.inf
             # Incumbent (upper bound) — will be set from outside or from init_sol
             self.Z_INC = np.inf
+    @staticmethod
+    def _pricing_tol(scale):
+        """The one pricing tolerance, RELATIVE to the problem's own scale.
+
+        Every threshold in this pricer used to be absolute, which is what made it
+        size-dependent: `-1e-8` is `1e-12` relative on a master worth 6499, i.e. four
+        orders below what double precision can resolve in a reduced cost that is a
+        difference of terms of size 1e+4. The pricer was being asked to chase noise.
+
+        It matters more that this is the SAME number everywhere than what it is.
+        Convergence is declared when no column is added, so the add rule IS the stop
+        rule; two different add thresholds in two branches (`-1e-8` in the main one,
+        `-1e-7` in the misprice fallback) meant a reduced cost landing between them
+        kept the adding branch permanently active and the stopping branch permanently
+        unreachable. At 15 prosumers on the 4-hour reserve product that is exactly what
+        happened: 6474 rounds, 71 494 columns of which 95% were duplicates, one column
+        re-added 6148 times, `minRC` and `LB-Z` frozen to the last bit, and the 1800 s
+        master limit hit — with the Lagrangian bound already equal to the LP objective
+        to 3.6e-11 relative since round ~500.
+
+        Accuracy given up: termination now allows `|rc| <= tol` per prosumer, so the
+        bound is within `n * tol` of `z*` — about 1e-4 EUR at 15p, i.e. 1e-8 relative.
+        Far below anything reported.
+        """
+        return 1e-9 * (1.0 + abs(scale))
+
     def price(self, farkas=False):
         """
         Common pricing logic for both regular and Farkas pricing
@@ -139,6 +165,9 @@ class LEMPricer(Pricer):
         min_reduced_cost = float('inf')
         debug_sol = {}
         obj_val_list = []
+        # Farkas pricing measures infeasibility, not cost, so the LP objective is not a
+        # scale for it; it keeps the absolute threshold.
+        tol = 1e-8 if farkas else self._pricing_tol(lp_obj)
         for player in self.players:
             reduced_cost, solution, obj_val = self.subproblems[player].solve_pricing(
                 dual_elec, dual_heat, dual_hydro, dual_convexity[player],
@@ -147,7 +176,7 @@ class LEMPricer(Pricer):
             debug_sol[player] = solution
             obj_val_list.append(obj_val)
             # Add column if reduced cost is negative
-            if reduced_cost < -1e-8:
+            if reduced_cost < -tol:
                 columns_added += 1
                 self._add_column(player, solution)
                 if farkas:
@@ -371,7 +400,8 @@ class LEMPricer(Pricer):
         self.lb = max(self.lb, L_pi_ST)
 
         # Early termination: LB가 LP objective에 충분히 가까우면 column 추가 없이 종료
-        if self.lb > Z_RM - 1e-7:
+        tol = self._pricing_tol(Z_RM)
+        if self.lb > Z_RM - tol:
             print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | L_bar: {self.L_bar:12.2f} | "
                   f"α: {alpha:.2f} | EARLY TERMINATION (LB ≥ Z_RM)")
             print("\n>>> Column generation converged: LB reached LP objective <<<\n")
@@ -380,12 +410,18 @@ class LEMPricer(Pricer):
         # Step 4→5: 각 column에 대해 π^RM 기준 reduced cost 재계산 (subproblem re-solve 없이)
         columns_added = 0
         misprice = False
+        # worst reduced cost seen this round, logged only. Without it a stalled run is
+        # indistinguishable from a working one: the log shows LP Obj == L_bar and
+        # columns still being added every iteration, and the question of whether those
+        # columns carry real reduced cost or only numerical noise cannot be answered.
+        min_rc_rm = 0.0
         for player in self.players:
             if st_solutions[player] is not None:
                 rc_rm = self._recalculate_reduced_cost_wrt_pi_RM(
                     player, st_solutions[player], pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player],
                     dual_resup, dual_resdn, dual_peak)
-                if rc_rm < -1e-8:
+                min_rc_rm = min(min_rc_rm, rc_rm)
+                if rc_rm < -tol:
                     self._add_column(player, st_solutions[player])
                     columns_added += 1
 
@@ -398,7 +434,7 @@ class LEMPricer(Pricer):
                 rc_rm, sol, obj_val = self.subproblems[player].solve_pricing(
                     pi_RM_elec, pi_RM_heat, pi_RM_hydro, pi_RM_conv[player],
                     dual_resup=dual_resup, dual_resdn=dual_resdn, dual_peak=dual_peak)
-                if rc_rm < -1e-7:
+                if rc_rm < -tol:
                     self._add_column(player, sol)
                     columns_added += 1
                 rm_solutions[player] = sol
@@ -415,11 +451,13 @@ class LEMPricer(Pricer):
             else:
                 misprice_str = "N"
             print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | L_bar: {self.L_bar:12.2f} | "
-                  f"α: {alpha:.2f} | Misprice: {misprice_str} | Cols: {columns_added}")
+                  f"α: {alpha:.2f} | Misprice: {misprice_str} | Cols: {columns_added} | "
+                  f"minRC: {min_rc_rm:9.2e} | LB-Z: {self.lb - Z_RM:9.2e}")
         else:
             status_str = "CONVERGED" if columns_added == 0 else f"Cols: {columns_added}"
             print(f"Iter {self.iteration:3d} | LP Obj: {lp_obj:12.2f} | L_bar: {self.L_bar:12.2f} | "
-                  f"α: {alpha:.2f} | STANDARD CG | {status_str}")
+                  f"α: {alpha:.2f} | STANDARD CG | {status_str} | "
+                  f"minRC: {min_rc_rm:9.2e} | LB-Z: {self.lb - Z_RM:9.2e}")
 
         # Step 8: 여전히 0이면 진짜 수렴
         if columns_added == 0:

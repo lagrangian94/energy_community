@@ -77,10 +77,18 @@ class ColumnGenerationSolver:
             rp = init_sol.get('r_plus') or {}
             rm = init_sol.get('r_minus') or {}
             if rp and rm:
-                up = [sum(rp.get((u, t), 0.0) for u in self.players) for t in T]
-                dn = [sum(rm.get((u, t), 0.0) for u in self.players) for t in T]
-                r_sym = min(min(a, b) for a, b in zip(up, dn))
-                cost -= len(T) * params.get('pi_res', 0.0) * max(0.0, r_sym)
+                from compact_utility import reserve_blocks as _rblocks
+                sym = params.get('reserve_product', 'symmetric') == 'symmetric'
+                pi = params.get('pi_res', 0.0)
+                pu, pd = params.get('pi_up', pi), params.get('pi_dn', pi)
+                for blk in _rblocks(T, params.get('reserve_block_hours', 24)):
+                    up = [sum(rp.get((u, t), 0.0) for u in self.players) for t in blk]
+                    dn = [sum(rm.get((u, t), 0.0) for u in self.players) for t in blk]
+                    if sym:
+                        cost -= len(blk) * pi * max(0.0, min(min(up), min(dn)))
+                    else:
+                        cost -= len(blk) * (pu * max(0.0, min(up))
+                                            + pd * max(0.0, min(dn)))
 
         if params.get('enable_peak'):
             imp = init_sol.get('i_E_gri') or {}
@@ -128,11 +136,11 @@ class ColumnGenerationSolver:
 
         # Set incumbent value for smoothing
         if self.smoothing and self.init_sol is not None:
-            from solver import calculate_column_cost
+            from solver import calculate_column_cost, private_dispatch
             Z_INC = sum(
                 calculate_column_cost(
                     p,
-                    {k: {key: val for key, val in self.init_sol[k].items() if key[0] == p} for k in self.init_sol},
+                    private_dispatch(self.init_sol, p),
                     self.subproblems[p].parameters,
                     self.time_periods
                 )
@@ -145,6 +153,11 @@ class ColumnGenerationSolver:
             # amount and the smoothing schedule is driven by a wrong Z_INC.
             Z_INC += self._shared_block_cost(self.init_sol)
             pricer.Z_INC = Z_INC
+
+        # Kept for reporting: the pricer carries the Lagrangian bound and the iteration
+        # count, which Table II of the validation plan wants as measured oracle counts
+        # and which a caller otherwise has no way to reach.
+        self.pricer = pricer
 
         # Include pricer in master problem
         self.master.model.includePricer(
@@ -181,6 +194,13 @@ class ColumnGenerationSolver:
             chp_elec = {}
             chp_heat = {}
             chp_hydro = {}
+            # RAW duals, kept alongside the absolute ones below. `convex_hull_prices`
+            # stores |dual| because a settlement wants a positive price, but the pricing
+            # subproblem applies RC = c - pi*a and therefore needs the sign SCIP reports
+            # (negative on these rows). Any offline re-solve of eq:pricing must read THIS
+            # dict, not that one -- feeding it the absolute values negates the price
+            # vector silently and the pricing problem still solves.
+            raw_duals = {'electricity': {}, 'heat': {}, 'hydrogen': {}}
 
             for t in self.time_periods:
                 elec_cons = self.master.model.data['cons']['community_elec_balance'][t]
@@ -190,9 +210,12 @@ class ColumnGenerationSolver:
                     t_elec_cons = self.master.model.getTransformedCons(elec_cons)
                     t_heat_cons = self.master.model.getTransformedCons(heat_cons)
                     t_hydro_cons = self.master.model.getTransformedCons(hydro_cons)
-                    chp_elec[t] = np.abs(self.master.model.getDualsolLinear(t_elec_cons))
-                    chp_heat[t] = np.abs(self.master.model.getDualsolLinear(t_heat_cons))
-                    chp_hydro[t] = np.abs(self.master.model.getDualsolLinear(t_hydro_cons))
+                    raw_duals['electricity'][t] = float(self.master.model.getDualsolLinear(t_elec_cons))
+                    raw_duals['heat'][t] = float(self.master.model.getDualsolLinear(t_heat_cons))
+                    raw_duals['hydrogen'][t] = float(self.master.model.getDualsolLinear(t_hydro_cons))
+                    chp_elec[t] = np.abs(raw_duals['electricity'][t])
+                    chp_heat[t] = np.abs(raw_duals['heat'][t])
+                    chp_hydro[t] = np.abs(raw_duals['hydrogen'][t])
 
                 except:
                     raise Exception("Error getting dual multipliers")
@@ -227,19 +250,25 @@ class ColumnGenerationSolver:
             cons = self.master.model.data['cons']
             if cons.get('reserve_up'):
                 chp_resup, chp_resdn = {}, {}
+                raw_duals['reserve_up'], raw_duals['reserve_dn'] = {}, {}
                 for t in self.time_periods:
                     up_c = self.master.model.getTransformedCons(cons['reserve_up'][t])
                     dn_c = self.master.model.getTransformedCons(cons['reserve_dn'][t])
-                    chp_resup[t] = np.abs(self.master.model.getDualsolLinear(up_c))
-                    chp_resdn[t] = np.abs(self.master.model.getDualsolLinear(dn_c))
+                    raw_duals['reserve_up'][t] = float(self.master.model.getDualsolLinear(up_c))
+                    raw_duals['reserve_dn'][t] = float(self.master.model.getDualsolLinear(dn_c))
+                    chp_resup[t] = np.abs(raw_duals['reserve_up'][t])
+                    chp_resdn[t] = np.abs(raw_duals['reserve_dn'][t])
                 solution['convex_hull_prices']['reserve_up'] = chp_resup
                 solution['convex_hull_prices']['reserve_dn'] = chp_resdn
             if cons.get('peak'):
                 chp_peak = {}
+                raw_duals['peak'] = {}
                 for t in self.time_periods:
                     pk_c = self.master.model.getTransformedCons(cons['peak'][t])
-                    chp_peak[t] = np.abs(self.master.model.getDualsolLinear(pk_c))
+                    raw_duals['peak'][t] = float(self.master.model.getDualsolLinear(pk_c))
+                    chp_peak[t] = np.abs(raw_duals['peak'][t])
                 solution['convex_hull_prices']['peak'] = chp_peak
+            solution['coupling_duals_raw'] = raw_duals
 
             return status, solution, obj_val, solution_by_player
         else:

@@ -498,7 +498,14 @@ class MasterProblem:
         self.enable_peak = bool(params.get('enable_peak', False))
         self.pi_res = params.get('pi_res', 0.0)
         self.pi_peak = params.get('pi_E_peak', 0.0)
-        self.r_sym = None
+        self.reserve_block_hours = params.get('reserve_block_hours', 24)
+        self.reserve_product = params.get('reserve_product', 'symmetric')
+        self.pi_up = params.get('pi_up', self.pi_res)
+        self.pi_dn = params.get('pi_dn', self.pi_res)
+        # {block index: shared RMP variable}; r_sym under the symmetric product,
+        # r_up/r_dn under the one-sided one
+        self.r_sym, self.r_up, self.r_dn = {}, {}, {}
+        self.reserve_blocks = []
         self.chi_peak_E = None
         # Storage for variables and constraints
         self.model.data['vars'] = {
@@ -602,13 +609,30 @@ class MasterProblem:
         # The SAME r_sym enters both row families -- one symmetric product, as in
         # LocalEnergyMarket._add_reserve_constraints (reserve.txt sec.1.1).
         if self.enable_reserve:
-            # Shared reserve product (revenue -> negative obj under min-cost).
-            # Held over the whole horizon: payment |T| * pi_res * r_sym.
-            horizon_payment = len(self.time_periods) * self.pi_res
-            self.r_sym = self.model.addVar(vtype="C", name="r_sym", lb=0.0, obj=-1.0*horizon_payment)
+            # One shared reserve product per delivery block (revenue -> negative obj
+            # under min-cost). Each block is paid for its own length, and each hour's
+            # row carries its own block's variable, so the row count is unchanged and
+            # only dim(x_0) grows. Mirrors LocalEnergyMarket._add_reserve_constraints.
+            from compact_utility import reserve_blocks as _rblocks
+            self.reserve_blocks = _rblocks(self.time_periods, self.reserve_block_hours)
+            block_of_t = {t: i for i, blk in enumerate(self.reserve_blocks) for t in blk}
+            sym = self.reserve_product == 'symmetric'
+            for i, blk in enumerate(self.reserve_blocks):
+                if sym:
+                    self.r_sym[i] = self.model.addVar(
+                        vtype="C", name=f"r_sym_{i}", lb=0.0,
+                        obj=-1.0 * len(blk) * self.pi_res)
+                else:
+                    self.r_up[i] = self.model.addVar(
+                        vtype="C", name=f"r_up_{i}", lb=0.0,
+                        obj=-1.0 * len(blk) * self.pi_up)
+                    self.r_dn[i] = self.model.addVar(
+                        vtype="C", name=f"r_dn_{i}", lb=0.0,
+                        obj=-1.0 * len(blk) * self.pi_dn)
             for t in self.time_periods:
-                up_expr = 1.0 * self.r_sym
-                dn_expr = 1.0 * self.r_sym
+                i = block_of_t[t]
+                up_expr = 1.0 * (self.r_sym[i] if sym else self.r_up[i])
+                dn_expr = 1.0 * (self.r_sym[i] if sym else self.r_dn[i])
                 for u in self.players:
                     var = self.model.data["vars"][u][0]["var"]
                     solution = self.model.data["vars"][u][0]["solution"]
@@ -665,7 +689,7 @@ class MasterProblem:
                 )
             else:
                 # Solve subproblem with initial solution
-                solution = {k:{key:value for key, value in init_sol[k].items() if key[0] == player } for k,v in init_sol.items()}
+                solution = private_dispatch(init_sol, player)
             
             if solution is None:
                 raise Exception(f"  WARNING: Could not generate initial column for {player}")
@@ -733,6 +757,25 @@ class MasterProblem:
                     solution_by_player[player][idx] = (lambda_val, col_solution)
         
         return solution, solution_by_player
+
+def private_dispatch(init_sol: Dict, player: str) -> Dict:
+    """Project a grand-coalition solution onto player `player`'s own column.
+
+    A column is the PRIVATE part of a dispatch, so only the (u,t)-indexed entries
+    belong in it. The community's SHARED variables sit in the same model.data["vars"]
+    dict -- chi_peak_E as a bare var, and (since reserve_block_hours was introduced)
+    r_sym / r_up / r_dn as dicts keyed by BLOCK INDEX. Callers used to drop them with
+    an `isinstance(v, dict)` test, which stopped catching the reserve variables the
+    moment they became block-indexed dicts; the key-shape test is what the contract
+    actually needs. They are first-class RMP variables that MasterProblem creates for
+    itself, never column contents.
+    """
+    return {
+        k: {key: val for key, val in v.items()
+            if isinstance(key, tuple) and key[0] == player}
+        for k, v in init_sol.items() if isinstance(v, dict)
+    }
+
 
 def calculate_column_cost(player: str, solution: Dict, params: Dict, time_periods: List[int]) -> float:
     """Calculate cost for a column"""

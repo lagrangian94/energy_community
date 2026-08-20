@@ -268,6 +268,23 @@ def create_heat_tou_import_prices(base_heat_prices, time_periods):
         heat_tou_prices.append(heat_tou_price)
     
     return heat_tou_prices
+def reserve_blocks(time_periods, block_hours):
+    """Partition the horizon into reserve delivery blocks of `block_hours` each.
+
+    Each hour lands in exactly one block, which is what keeps the coupling row count
+    at 2|T| and m = (|K|+3)|T| unchanged as the block length varies. A block length
+    that does not divide the horizon is a market design that cannot be settled, so it
+    is rejected rather than silently truncated.
+    """
+    T = list(time_periods)
+    n = int(block_hours) if block_hours else len(T)
+    if n <= 0 or len(T) % n:
+        raise ValueError(
+            f"reserve_block_hours={block_hours} does not partition a {len(T)}-period "
+            f"horizon; use a divisor of {len(T)}")
+    return [T[k:k + n] for k in range(0, len(T), n)]
+
+
 def solve_and_extract_results(model):
     """
     모델을 풀고 결과를 반환합니다.
@@ -441,6 +458,19 @@ class LocalEnergyMarket:
         # copositive nc/constraint counts are unchanged -- unless deliberately
         # switched on via the params (enable_reserve/enable_peak, set in
         # data_generator from reserve_price / peak_penalty).
+        # ---- horizon index helpers (was hardcoded to the 24-hour day) ----
+        # The dispatch is CYCLIC: SOC and commitment wrap from the last period back to
+        # the first, and the initial SOC is pinned at the "logical start of day" (06:00).
+        # Those three positions were written as the literals 23, 0 and 6, which fixed
+        # |T| = 24. They are now derived, so |T| can vary -- needed because the coupling
+        # row count m = (|K|+3)|T| is what places n on either side of the prop:eps
+        # regime boundary n > m+1. At |T| = 24 these resolve to 23, 0 and 6 exactly, so
+        # the 24-period model is unchanged.
+        self._T_LAST = self.time_periods[-1]
+        self._T_FIRST = self.time_periods[0]
+        self._T_INIT = self.time_periods[len(self.time_periods) // 4]
+        self._NT = len(self.time_periods)
+
         self.enable_reserve = bool(self.params.get('enable_reserve', False))
         self.enable_peak = bool(self.params.get('enable_peak', False))
         # Reserve is only modelled for the MILP dispatch. model_type='lp' is the
@@ -937,37 +967,90 @@ class LocalEnergyMarket:
         return
 
     def _add_reserve_constraints(self):
-        """Community reserve coupling + the shared community variable r_sym.
+        """Community reserve coupling + the shared community variables r_sym[i].
 
-        SYMMETRIC product (reserve.txt sec.1.1): a single FCR-N-type capacity
-        product r^sym -- ONE scalar, no time index -- must be deliverable in
-        BOTH directions in EVERY hour, so the same variable enters both row
-        families:
+        SYMMETRIC product: an FCR-type capacity product must be deliverable in BOTH
+        directions in EVERY hour it covers, so one scalar per delivery block enters
+        both row families over that block's hours:
 
-            r_sym - sum_j r_plus[j,t]  <= 0    for all t   dual mu_plus[t]
-            r_sym - sum_j r_minus[j,t] <= 0    for all t   dual mu_minus[t]
+            r_sym[i] - sum_j r_plus[j,t]  <= 0   for all t in T_i   dual mu_plus[t]
+            r_sym[i] - sum_j r_minus[j,t] <= 0   for all t in T_i   dual mu_minus[t]
 
-        At the optimum this yields r_sym* = min_t min(sum_j r+, sum_j r-)
-        without that min ever being written down (writing it would destroy the
-        LP structure the theory depends on). Rows stay homogeneous (b=0) with
-        x_0 = (r_sym, p) >= 0, as the duality argument requires.
+        At the optimum this gives r_sym[i]* = min_{t in T_i} min(sum_j r+, sum_j r-)
+        without that min ever being written down (writing it would destroy the LP
+        structure the theory depends on).
 
-        Revenue convention (reserve.txt sec.2.1): capacity-only remuneration is
-        pi_res [EUR/MW.h] and r_sym is held for the whole horizon, so the
-        payment is |T| * pi_res * r_sym (baseline 24 * 56 = 1344 EUR/MW/day).
-        Max-profit +pi*r maps to obj=-pi*r under the model's cost-min convention.
+        BLOCK LENGTH is a market-design parameter, `reserve_block_hours`:
+
+            24 -> one block, the horizon-constant product of Cornelusse et al. 2019
+             4 -> six blocks, the product Continental Europe FCR has used since 2020
+             1 -> hourly, as in the Nordic FCR-N market
+
+        It matters far more than it looks. Under a single 24-hour product the worst
+        single hour of the day sets the quantity for all 24: in the 6-prosumer
+        instance the electrolyzer and heat pump are both off at t=6..7, which caps
+        r_sym at the battery's band alone and leaves the pooling gain exactly zero on
+        all 372 days measured. Splitting into 4-hour blocks confines that loss to the
+        block containing it -- the same dispatch then supports 2.4x the reserve and a
+        strictly positive pooling gain in every block.
+
+        The theory is untouched. Each hour still belongs to exactly one block, so the
+        row count stays 2|T| and m = (|K|+3)|T| is unchanged, leaving the prop:eps
+        bound as stated; the rows stay homogeneous (b = 0) with x_0 = (r_sym, p) >= 0;
+        and the member coefficients are still -r_plus/-r_minus, so the pricing
+        subproblem does not change at all. Only dim(x_0) grows from 1 to |blocks|.
+
+        Revenue: capacity-only remuneration pi_res [EUR/MW.h] held for the block, so
+        the payment is sum_i |T_i| * pi_res * r_sym[i]. Max-profit +pi*r maps to
+        obj = -pi*r under the model's cost-minimisation convention.
         """
         self.reserve_cons = {"up": {}, "dn": {}}
+        self.reserve_blocks = reserve_blocks(
+            self.time_periods, self.params.get('reserve_block_hours', 24))
+        self.reserve_block_of_t = {t: i for i, blk in enumerate(self.reserve_blocks)
+                                   for t in blk}
+        self.reserve_product = self.params.get('reserve_product', 'symmetric')
+        if self.reserve_product not in ('symmetric', 'asymmetric'):
+            raise ValueError("reserve_product must be 'symmetric' or 'asymmetric', "
+                             f"got {self.reserve_product!r}")
+
         pi_res = self.params.get('pi_res', 0)
-        horizon_payment = len(self.time_periods) * pi_res
-        self.r_sym = self.model.addVar(vtype="C", name="r_sym", lb=0, obj=-1*horizon_payment)
-        self.model.data["vars"]["r_sym"] = self.r_sym
+        self.r_sym, self.r_up, self.r_dn = {}, {}, {}
+
+        if self.reserve_product == 'symmetric':
+            for i, blk in enumerate(self.reserve_blocks):
+                self.r_sym[i] = self.model.addVar(
+                    vtype="C", name=f"r_sym_{i}", lb=0, obj=-1 * len(blk) * pi_res)
+            self.model.data["vars"]["r_sym"] = self.r_sym
+        else:
+            # ONE-SIDED products: up and down are sold separately, so each row family
+            # gets its own variable and neither is capped by the other's scarcity.
+            # This is the structural difference that removes the direction-pooling
+            # channel; time pooling within the block survives. pi_dn = 0 gives the
+            # up-only product (FCR-D Up), where a unit at full load sells its entire
+            # upward headroom at no opportunity cost.
+            pi_up = self.params.get('pi_up', pi_res)
+            pi_dn = self.params.get('pi_dn', pi_res)
+            for i, blk in enumerate(self.reserve_blocks):
+                self.r_up[i] = self.model.addVar(
+                    vtype="C", name=f"r_up_{i}", lb=0, obj=-1 * len(blk) * pi_up)
+                self.r_dn[i] = self.model.addVar(
+                    vtype="C", name=f"r_dn_{i}", lb=0, obj=-1 * len(blk) * pi_dn)
+            self.model.data["vars"]["r_up"] = self.r_up
+            self.model.data["vars"]["r_dn"] = self.r_dn
+
+        # One row pair per HOUR either way, carrying that hour's block variable, so
+        # the row count stays 2|T| and m is unchanged. Only dim(x_0) differs:
+        # |blocks| under symmetric, 2|blocks| under asymmetric.
         for t in self.time_periods:
+            i = self.reserve_block_of_t[t]
+            v_up = self.r_sym[i] if self.reserve_product == 'symmetric' else self.r_up[i]
+            v_dn = self.r_sym[i] if self.reserve_product == 'symmetric' else self.r_dn[i]
             self.reserve_cons["up"][f"reserve_up_coupling_{t}"] = self.model.addCons(
-                self.r_sym - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
+                v_up - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
                 name=f"reserve_up_coupling_{t}")
             self.reserve_cons["dn"][f"reserve_dn_coupling_{t}"] = self.model.addCons(
-                self.r_sym - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
+                v_dn - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
                 name=f"reserve_dn_coupling_{t}")
         return
 
@@ -1144,16 +1227,16 @@ class LocalEnergyMarket:
             nu_dis = self.params.get('nu_dis', 0.9)
                     
             # Set initial SOC at 6시 (논리적 시작점)
-            if (u,6) in self.s_E:
+            if (u,self._T_INIT) in self.s_E:
                 initial_soc = self.params.get(f'initial_soc_E_{u}', np.inf)  # Default 50% SOC
                 storage_capacity_E = self.params.get(f'storage_capacity_E_{u}', -np.inf)
                 if storage_capacity_E <=0:
                     initial_soc = 0.0
-                cons = self.model.addCons(self.s_E[u,6] == initial_soc, name=f"initial_soc_E_{u}")
+                cons = self.model.addCons(self.s_E[u,self._T_INIT] == initial_soc, name=f"initial_soc_E_{u}")
                 self.storage_cons[f"initial_soc_E_{u}"] = cons
             
             # 일반적인 SOC transition (1시~23시)
-            for t in range(1, 24):
+            for t in self.time_periods[1:]:
                 if (u,t) in self.s_E and (u,t-1) in self.s_E:
                     cons = self.model.addCons(
                         self.s_E[u,t] == self.s_E[u,t-1] + nu_ch * self.b_ch_E[u,t] - (1/nu_dis) * self.b_dis_E[u,t],
@@ -1162,9 +1245,9 @@ class LocalEnergyMarket:
                     self.storage_cons[f"soc_transition_E_{u}_{t}"] = cons
         
             # 특별한 23→0시 transition (심야 충전 → 아침 방전)
-            if (u,23) in self.s_E and (u,0) in self.s_E:
+            if (u,self._T_LAST) in self.s_E and (u,0) in self.s_E:
                 cons = self.model.addCons(
-                    self.s_E[u,0] == self.s_E[u,23] + nu_ch * self.b_ch_E[u,0] - (1/nu_dis) * self.b_dis_E[u,0],
+                    self.s_E[u,0] == self.s_E[u,self._T_LAST] + nu_ch * self.b_ch_E[u,0] - (1/nu_dis) * self.b_dis_E[u,0],
                     name=f"soc_transition_E_{u}_23_to_0"
                 )
                 self.storage_cons[f"soc_transition_E_{u}_23_to_0"] = cons
@@ -1217,13 +1300,13 @@ class LocalEnergyMarket:
                 nu_dis = self.params.get('nu_dis_H', np.inf)
                 # nu_loss = self.params.get('nu_loss_H', np.inf)
                 # Set initial SOC at 6시 (논리적 시작점)
-                if (u,6) in self.s_H:
+                if (u,self._T_INIT) in self.s_H:
                     initial_soc = self.params.get(f'initial_soc_H', np.inf)
-                    cons = self.model.addCons(self.s_H[u,6] == initial_soc, name=f"initial_soc_H_{u}")
+                    cons = self.model.addCons(self.s_H[u,self._T_INIT] == initial_soc, name=f"initial_soc_H_{u}")
                     self.storage_cons[f"initial_soc_H_{u}"] = cons
                 
                 # 일반적인 SOC transition (1시~23시)
-                for t in range(1, 24):
+                for t in self.time_periods[1:]:
                     if (u,t) in self.s_H and (u,t-1) in self.s_H:
                         cons = self.model.addCons(
                             self.s_H[u,t] == self.s_H[u,t-1] + nu_ch * self.b_ch_H[u,t] - (1/nu_dis) * self.b_dis_H[u,t],
@@ -1232,9 +1315,9 @@ class LocalEnergyMarket:
                     self.storage_cons[f"soc_transition_H_{u}_{t}"] = cons
         
                 # 특별한 23→0시 transition (심야 충전 → 아침 방전)
-                if (u,23) in self.s_H and (u,0) in self.s_H:
+                if (u,self._T_LAST) in self.s_H and (u,0) in self.s_H:
                     cons = self.model.addCons(
-                        self.s_H[u,0] == self.s_H[u,23] + nu_ch * self.b_ch_H[u,0] - (1/nu_dis) * self.b_dis_H[u,0],
+                        self.s_H[u,0] == self.s_H[u,self._T_LAST] + nu_ch * self.b_ch_H[u,0] - (1/nu_dis) * self.b_dis_H[u,0],
                         name=f"soc_transition_H_{u}_23_to_0"
                     )
                     self.storage_cons[f"soc_transition_H_{u}_23_to_0"] = cons
@@ -1276,12 +1359,12 @@ class LocalEnergyMarket:
                 if storage_capacity_G <=0:
                     initial_soc = 0.0
                 # Set initial SOC at 6시 (논리적 시작점)
-                if (u,6) in self.s_G:
-                    cons = self.model.addCons(self.s_G[u,6] == initial_soc, name=f"initial_soc_G_{u}")
+                if (u,self._T_INIT) in self.s_G:
+                    cons = self.model.addCons(self.s_G[u,self._T_INIT] == initial_soc, name=f"initial_soc_G_{u}")
                     self.storage_cons[f"initial_soc_G_{u}"] = cons
                 
                 # 일반적인 SOC transition (1시~23시)
-                for t in range(1, 24):
+                for t in self.time_periods[1:]:
                     if (u,t) in self.s_G and (u,t-1) in self.s_G:
                         cons = self.model.addCons(
                         self.s_G[u,t] == self.s_G[u,t-1] + nu_ch * self.b_ch_G[u,t] - (1/nu_dis) * self.b_dis_G[u,t],
@@ -1290,9 +1373,9 @@ class LocalEnergyMarket:
                     self.storage_cons[f"soc_transition_G_{u}_{t}"] = cons
                 
                 # 특별한 23→0시 transition (심야 충전 → 아침 방전)
-                if (u,0) in self.s_G and (u,23) in self.s_G:
+                if (u,0) in self.s_G and (u,self._T_LAST) in self.s_G:
                     cons = self.model.addCons(
-                        self.s_G[u,0] == self.s_G[u,23] + nu_ch * self.b_ch_G[u,0] - (1/nu_dis) * self.b_dis_G[u,0],
+                        self.s_G[u,0] == self.s_G[u,self._T_LAST] + nu_ch * self.b_ch_G[u,0] - (1/nu_dis) * self.b_dis_G[u,0],
                         name=f"soc_transition_G_{u}_23_to_0"
                     )
                     self.storage_cons[f"soc_transition_G_{u}_23_to_0"] = cons
@@ -1420,13 +1503,13 @@ class LocalEnergyMarket:
                         self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_{u}_{t}"] = cons
                     else:
                         cons = self.model.addCons(
-                                self.z_su_G[u,t] >= self.z_on_G[u,23] + self.z_off_G[u,t] + self.z_sb_G[u,23] - 1.0,
+                                self.z_su_G[u,t] >= self.z_on_G[u,self._T_LAST] + self.z_off_G[u,t] + self.z_sb_G[u,self._T_LAST] - 1.0,
                                 name=f"electrolyzer_startup_23_to_0_{u}_{t}"
                             )
                         self.electrolyzer_cons[f"electrolyzer_startup_23_to_0_{u}_{t}"] = cons
                         # shut-down
                         cons = self.model.addCons(
-                            self.z_sd_G[u,t] >= self.z_on_G[u,23] + self.z_off_G[u,t] + self.z_sb_G[u,23] - 1.0,
+                            self.z_sd_G[u,t] >= self.z_on_G[u,self._T_LAST] + self.z_off_G[u,t] + self.z_sb_G[u,self._T_LAST] - 1.0,
                             name=f"electrolyzer_shut_down_23_to_0_{u}_{t}"
                         )
                         self.electrolyzer_cons[f"electrolyzer_shut_down_23_to_0_{u}_{t}"] = cons
@@ -1438,7 +1521,7 @@ class LocalEnergyMarket:
                         self.electrolyzer_cons[f"electrolyzer_forbid_shut_up_down_conflict_23_to_0_{u}_{t}"] = cons
                         # off to standby is not allowed
                         cons = self.model.addCons(
-                                self.z_off_G[u,23] + self.z_sb_G[u,t] <= 1.0,
+                                self.z_off_G[u,self._T_LAST] + self.z_sb_G[u,t] <= 1.0,
                                 name=f"electrolyzer_forbid_off_to_sb_23_to_0_{u}_{t}"
                             )
                         self.electrolyzer_cons[f"electrolyzer_forbid_off_to_sb_23_to_0_{u}_{t}"] = cons
@@ -1459,15 +1542,15 @@ class LocalEnergyMarket:
                     self.electrolyzer_cons[f"electrolyzer_shut_down_{u}_{t}"] = cons
             # minimum down time
             for t in self.time_periods:
-                if t == 23:
+                if t == self._T_LAST:
                     cons = self.model.addCons(
-                        self.z_off_G[u,23] +quicksum(self.z_off_G[u,i] for i in range(0, DT_G-1)) >= DT_G*self.z_sd_G[u,t],
+                        self.z_off_G[u,self._T_LAST] +quicksum(self.z_off_G[u,i] for i in [self.time_periods[k % self._NT] for k in range(0, DT_G-1)]) >= DT_G*self.z_sd_G[u,t],
                         name=f"electrolyzer_minimum_down_time_23_to_0_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_minimum_down_time_23_to_0_{u}_{t}"] = cons
                 else:
                     cons = self.model.addCons(
-                        quicksum(self.z_off_G[u,i] for i in range(t, t+DT_G)) >= DT_G*self.z_sd_G[u,t],
+                        quicksum(self.z_off_G[u,i] for i in [self.time_periods[(self.time_periods.index(t)+k) % self._NT] for k in range(DT_G)]) >= DT_G*self.z_sd_G[u,t],
                         name=f"electrolyzer_minimum_down_time_{u}_{t}"
                     )
                     self.electrolyzer_cons[f"electrolyzer_minimum_down_time_{u}_{t}"] = cons
@@ -1520,7 +1603,7 @@ class LocalEnergyMarket:
                 else:
                     # sos-1
                     cons = self.model.addCons(
-                        self.z_su_H[u,t] - self.z_sd_H[u,t] - self.z_on_H[u,t] + self.z_on_H[u,23] == 0.0,
+                        self.z_su_H[u,t] - self.z_sd_H[u,t] - self.z_on_H[u,t] + self.z_on_H[u,self._T_LAST] == 0.0,
                         name=f"heatpump_state_{u}_{t}"
                     )
                     # forbid shut-up and shut-down at the same time
@@ -1539,11 +1622,11 @@ class LocalEnergyMarket:
                     )
                     # ramping up rate
                     cons = self.model.addCons(
-                        self.p.get((u,'hp',t),0) - self.p.get((u,'hp',23),0) <= c_RU_H * hp_cap * self.z_on_H[u,t] + c_RSU_H * hp_cap * self.z_su_H[u,t],
+                        self.p.get((u,'hp',t),0) - self.p.get((u,'hp',self._T_LAST),0) <= c_RU_H * hp_cap * self.z_on_H[u,t] + c_RSU_H * hp_cap * self.z_su_H[u,t],
                         name=f"heatpump_ramping_up_rate_{u}_{t}"
                     )
                     cons = self.model.addCons(
-                        self.p.get((u,'hp',23),0) - self.p.get((u,'hp',t),0) <= c_RD_H * hp_cap * self.z_on_H[u,t] + c_RSD_H * hp_cap * self.z_sd_H[u,t],
+                        self.p.get((u,'hp',self._T_LAST),0) - self.p.get((u,'hp',t),0) <= c_RD_H * hp_cap * self.z_on_H[u,t] + c_RSD_H * hp_cap * self.z_sd_H[u,t],
                         name=f"heatpump_ramping_down_rate_{u}_{t}"
                     )
 
@@ -1910,10 +1993,18 @@ class LocalEnergyMarket:
         # model (reserve.txt sec.2.1: the product is held for the whole horizon), so
         # the same |T| factor has to appear here or the breakdown will not reconcile
         # with the objective.
-        if 'r_sym' in results:
-            pi_res = self.params.get('pi_res', 0.0)
-            revenue_analysis['electricity']['reserve_revenue'] += (
-                len(self.time_periods) * pi_res * results['r_sym'])
+        pi_res = self.params.get('pi_res', 0.0)
+        blocks = getattr(self, 'reserve_blocks', [list(self.time_periods)])
+        _as_d = lambda x: x if isinstance(x, dict) else ({0: x} if x is not None else {})
+        # each block is paid for its own length; symmetric has one product per block,
+        # asymmetric two priced separately
+        for key, price in (('r_sym', pi_res),
+                           ('r_up', self.params.get('pi_up', pi_res)),
+                           ('r_dn', self.params.get('pi_dn', pi_res))):
+            if key in results:
+                revenue_analysis['electricity']['reserve_revenue'] += sum(
+                    len(blocks[i]) * price * v
+                    for i, v in _as_d(results[key]).items() if i < len(blocks))
         # Non-flexible demand utility
         if 'nfl_d' in results:
             for (u, resource_type, t), val in results['nfl_d'].items():

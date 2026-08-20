@@ -112,6 +112,11 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         # the mean import price.
         reserve_price = sensitivity_analysis.get('reserve_price', 0.0)
         peak_penalty = sensitivity_analysis.get('peak_penalty', None)
+        # market design of the reserve product (see compact_utility.reserve_blocks)
+        reserve_block_hours = sensitivity_analysis.get('reserve_block_hours', 24)
+        reserve_product = sensitivity_analysis.get('reserve_product', 'symmetric')
+        reserve_price_up = sensitivity_analysis.get('reserve_price_up', None)
+        reserve_price_dn = sensitivity_analysis.get('reserve_price_dn', None)
         wind_el_ratio = sensitivity_analysis['wind_el_ratio']
         solar_el_ratio = sensitivity_analysis['solar_el_ratio']
         storage_power_ratio_E = sensitivity_analysis['storage_power_ratio_E']
@@ -144,6 +149,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         peak_penalty_ratio = 0.0
         reserve_price = 0.0
         peak_penalty = None
+        reserve_block_hours = 24
+        reserve_product = 'symmetric'
+        reserve_price_up = reserve_price_dn = None
         wind_el_ratio = 1.0# [1.0, 2.0]
         solar_el_ratio = 1.0
         storage_power_ratio_E = 0.25
@@ -288,11 +296,24 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     # same bidding zone as the wind CF series, so the two are consistent.
     # Scalar bid; extend to a per-t series only if a time-varying price is needed.
     parameters["pi_res"] = float(reserve_price)
+    # Delivery-block length and product type. Defaults (24h, symmetric) reproduce the
+    # horizon-constant product, so nothing changes unless deliberately set.
+    #   reserve_block_hours: 24 (Cornelusse 2019) / 4 (CE FCR since 2020) / 1 (Nordic)
+    #   reserve_product: 'symmetric' | 'asymmetric'; under asymmetric the two
+    #     directions are priced separately and pi_dn = 0 gives the up-only product.
+    parameters["reserve_block_hours"] = int(reserve_block_hours)
+    parameters["reserve_product"] = reserve_product
+    parameters["pi_up"] = float(reserve_price_up if reserve_price_up is not None
+                                else reserve_price)
+    parameters["pi_dn"] = float(reserve_price_dn if reserve_price_dn is not None
+                                else reserve_price)
 
     # Enable flags -- gate construction of the reserve/peak coupling in the model.
     # Default off (prices 0) so existing scenarios and the copositive nc are
     # byte-identical unless the coupling is deliberately switched on.
-    parameters["enable_reserve"] = (parameters["pi_res"] > 0.0)
+    parameters["enable_reserve"] = (
+        parameters["pi_res"] > 0.0 if reserve_product == 'symmetric'
+        else (parameters["pi_up"] > 0.0 or parameters["pi_dn"] > 0.0))
     parameters["enable_peak"] = (parameters["pi_E_peak"] > 0.0)
 
     log_reserve_calibration(parameters)
