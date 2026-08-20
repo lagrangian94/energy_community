@@ -43,6 +43,7 @@ import numpy as np
 from data_generator import setup_lem_parameters, log_reserve_calibration
 from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
                              print_report as _report_reserve_peak)
+from stability_check import check_allocations
 from compact_utility import LocalEnergyMarket
 from chp import ColumnGenerationSolver
 from core import CoreComputation
@@ -60,6 +61,11 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 # (balance only / +reserve / +peak / both) just zero out one or the other.
 RESERVE_PRICE = 56.0
 PEAK_PENALTY = 150.0
+# Reserve market design. 4-hour blocks match Continental Europe FCR as operated since
+# 2020; the 24-hour product the code used before exists in no current FCR market and
+# let a single bad hour cap the whole day. 'symmetric' is the default product.
+RESERVE_BLOCK_HOURS = 4
+RESERVE_PRODUCT = 'symmetric'
 
 # ----------------------------------------------------------------------------- helpers
 def _jsonable(x):
@@ -99,6 +105,8 @@ def build_instance(n):
         params = setup_lem_parameters(players, config, T)
         params['pi_res'] = RESERVE_PRICE
         params['pi_E_peak'] = PEAK_PENALTY
+        params['reserve_block_hours'] = RESERVE_BLOCK_HOURS
+        params['reserve_product'] = RESERVE_PRODUCT
         params['enable_reserve'] = RESERVE_PRICE > 0.0
         params['enable_peak'] = PEAK_PENALTY > 0.0
         # This branch overrides the prices after setup_lem_parameters, so the
@@ -121,6 +129,8 @@ def build_instance(n):
 
     sens['reserve_price'] = RESERVE_PRICE
     sens['peak_penalty'] = PEAK_PENALTY
+    sens['reserve_block_hours'] = RESERVE_BLOCK_HOURS
+    sens['reserve_product'] = RESERVE_PRODUCT
     params = setup_lem_parameters(players, config, T, sens)
     params = override_fn(params, T)
     return players, config, T, params, scenario
@@ -159,10 +169,13 @@ def run_owen(n, players, T, params, scenario):
     eps_bound = owen_res['eps']            # |gap|/N
     prices = solution.get('convex_hull_prices', {})   # master LP coupling duals
 
-    # (Owen's own core-violation re-check via separation is intentionally SKIPPED —
-    #  we report only the free |gap|/N bound; row generation provides the exact/
-    #  lower-bound eps for comparison.)
     print(f"  Owen eps_bound=|gap|/N={eps_bound:.6f}")
+
+    # prop:opap(i) / prop:eps, MEASURED rather than bounded. One separation MIP per
+    # allocation at fixed chi -- not row generation (which searches for an allocation)
+    # and not enumeration (which does not scale). |gap|/N alone bounds the worst
+    # coalition excess; it does not measure it.
+    stab = check_allocations(players, T, params, sigma, owen, gap)
 
     # (4) reserve/peak output schema (reserve.txt sec.3.2-3.4). Primal quantities
     # come from the grand-coalition MIP, duals from the CG master.
@@ -196,6 +209,8 @@ def run_owen(n, players, T, params, scenario):
         # reserve.txt sec.3.2 schema: r_sym/revenue, peak value/cost, mu+-_t, xi_t,
         # per-player and per-asset offers, stand-alone values, pooling + netting.
         'reserve_peak_metrics': rp,
+        # measured coalition excess of both Owen points (prop:opap(i), prop:eps)
+        'stability_check': stab,
     }
     path = os.path.join(OUT, f"cg_{n}p.json")
     with open(path, 'w') as f:
