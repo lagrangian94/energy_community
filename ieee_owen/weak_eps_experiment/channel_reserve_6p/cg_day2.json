@@ -11,8 +11,8 @@
   "v_chp": -2197.6930175053126,
   "gap": -2.0296476038420224,
   "eps_bound_gap_over_N": 0.33827460064033704,
-  "time_mip_s": 0.1300361156463623,
-  "time_cg_s": 17.327178716659546,
+  "time_mip_s": 0.13212847709655762,
+  "time_cg_s": 17.398679971694946,
   "owen_sigma_cost": {
     "u1": -1381.883406701522,
     "u2": -86.41688991463106,
@@ -2845,5 +2845,33 @@
     "settlement_total": 191.52,
     "settlement_imbalance": 0.0,
     "settlement_slack_by_hour": {}
+  },
+  "stability_check": {
+    "n": 6,
+    "brute_force": false,
+    "eps_lr": 0.33827460064033704,
+    "gap": -2.0296476038420224,
+    "omega": 2.0296476038420224,
+    "sigma": {
+      "worst_coalition": [],
+      "excess": -0.0,
+      "is_imputation": true,
+      "limit": 0.0,
+      "holds": true,
+      "slack": 0.0,
+      "time_s": 0.22681713104248047,
+      "claim": "prop:opap(i)  excess <= 0"
+    },
+    "owen": {
+      "worst_coalition": [],
+      "excess": -0.0,
+      "is_imputation": true,
+      "limit": 0.33827460064033704,
+      "holds": true,
+      "slack": 0.33827460064033704,
+      "time_s": 0.2515907287597656,
+      "claim": "prop:eps      excess <= eps^LR"
+    },
+    "all_hold": true
   }
 }

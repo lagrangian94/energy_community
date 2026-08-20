@@ -11,8 +11,8 @@
   "v_chp": -1690.786030355976,
   "gap": -2.2076689160646765,
   "eps_bound_gap_over_N": 0.3679448193441128,
-  "time_mip_s": 0.12673377990722656,
-  "time_cg_s": 10.943596839904785,
+  "time_mip_s": 0.12899541854858398,
+  "time_cg_s": 10.931638479232788,
   "owen_sigma_cost": {
     "u1": -1030.4644350710162,
     "u2": 0.0,
@@ -862,5 +862,35 @@
       "22": 0.0,
       "23": 0.0
     }
+  },
+  "stability_check": {
+    "n": 6,
+    "brute_force": false,
+    "eps_lr": 0.3679448193441128,
+    "gap": -2.2076689160646765,
+    "omega": 2.2076689160646765,
+    "sigma": {
+      "worst_coalition": [],
+      "excess": -0.0,
+      "is_imputation": true,
+      "limit": 0.0,
+      "holds": true,
+      "slack": 0.0,
+      "time_s": 0.08925652503967285,
+      "claim": "prop:opap(i)  excess <= 0"
+    },
+    "owen": {
+      "worst_coalition": [
+        "u2"
+      ],
+      "excess": 0.3679448193441104,
+      "is_imputation": false,
+      "limit": 0.3679448193441128,
+      "holds": true,
+      "slack": 2.3869795029440866e-15,
+      "time_s": 0.19581174850463867,
+      "claim": "prop:eps      excess <= eps^LR"
+    },
+    "all_hold": true
   }
 }
