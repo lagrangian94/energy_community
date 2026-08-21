@@ -72,6 +72,9 @@ RESERVE_PRODUCT = 'symmetric'
 # MIP per prosumer per day. Turn off if the added solve time ever matters.
 STANDALONE_BASELINE = True
 SEP_SOLVER = 'gurobi'
+# Budget for EACH of the two stability measurements in the Owen phase (sigma and the
+# gap-corrected point), so a day costs at most twice this before it gives up and says so.
+STAB_TIME_LIMIT = 3600
 
 # 6-player config (u1..u6) — same as sensitivity_analysis_claude / analysis_mip
 P6 = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
@@ -129,6 +132,39 @@ RUNS = [
          base=scalarize(LC.BASELINE_CANDIDATES_15), ov={}, ovfn=LC.apply_15player_overrides, budget=900),
     dict(name='baseline_30p', group='core', players=LC.PLAYERS_30, config=LC.CONFIGURATION_30,
          base=scalarize(LC.BASELINE_CANDIDATES_30), ov={}, ovfn=LC.apply_30player_overrides, budget=3600),
+
+    dict(name='baseline_60p', group='core', players=LC.PLAYERS_60, config=LC.CONFIGURATION_60,
+         base=scalarize(LC.BASELINE_CANDIDATES_60), ov={}, ovfn=LC.apply_60player_overrides,
+         budget=3600),
+
+    # ---- non-convex share, at fixed n (validation_plan sec.4) ----
+    # The baselines hold the electrolyser count at 1/6, 3/15, 6/30, so the share of
+    # members carrying commitment binaries barely moves with n and the flatness of
+    # omega^LR across sizes cannot be separated from that. These raise the share while
+    # changing NOTHING else: no asset is removed, only electrolysers added, to renewable
+    # owners (co-located electrolysis) and to hydrogen consumers (self-supply). Heat pumps,
+    # the other source of binaries, are left alone so the axis is electrolysers only.
+    #
+    #                 electrolysers        members with binaries
+    #   baseline 15p  3                    6/15  (40%)
+    #   nonconvex_15p 7                    10/15 (67%)
+    #   baseline 30p  6                    10/30 (33%)
+    #   nonconvex_30p 15                   19/30 (63%)
+    #
+    # Own group and own directories: these do not overwrite the baselines they are read
+    # against.
+    dict(name='nonconvex_15p', group='nonconvex', players=LC.PLAYERS_15,
+         config={**LC.CONFIGURATION_15,
+                 'players_with_electrolyzers': ['u1', 'u2', 'u5', 'u7', 'u8', 'u10', 'u13']},
+         base=scalarize(LC.BASELINE_CANDIDATES_15), ov={},
+         ovfn=LC.apply_15player_overrides, budget=900),
+    dict(name='nonconvex_30p', group='nonconvex', players=LC.PLAYERS_30,
+         config={**LC.CONFIGURATION_30,
+                 'players_with_electrolyzers': ['u1', 'u2', 'u5', 'u7', 'u8', 'u10', 'u13',
+                                                'u16', 'u17', 'u18', 'u19', 'u21', 'u22',
+                                                'u27', 'u28']},
+         base=scalarize(LC.BASELINE_CANDIDATES_30), ov={},
+         ovfn=LC.apply_30player_overrides, budget=3600),
 
     # ---- reserve.txt sec.3.1 scenario axes (6p, on top of the baseline instance) ----
     # Channel toggle, for the sec.3.3 metric 1 decomposition of v(N). baseline_6p
@@ -295,7 +331,7 @@ OWEN_COLS = ['run', 'day', 'n_players', 'num_households', 'base_h2_price_eur', '
              # prop:opap(i)/prop:eps measured
              'stab_method', 'stab_excess_sigma', 'stab_holds_sigma',
              'stab_excess_owen', 'stab_holds_owen', 'stab_eps_lr',
-             'stab_worst_S_size', 'stab_time_s',
+             'stab_worst_S_size', 'stab_time_s', 'stab_certified',
              'peak_value', 'peak_cost', 'sum_individual_peaks', 'coincidence_factor',
              'peak_netting_saving', 'schema_checks']
 ROWGEN_COLS = ['run', 'day', 'n_players', 'converged', 'vstar_is_lower_bound',
@@ -324,8 +360,14 @@ def owen_day(run, day):
     gap, eps_bound = owen_res['gap'], owen_res['eps']
 
     # prop:opap(i) / prop:eps measured at fixed chi (one separation MIP each)
+    # 3600 s per allocation. The separation underneath is unbounded otherwise, and a
+    # single hard day would hold the whole sweep.
+    # mipsolver=SEP_SOLVER, the same separation oracle row generation uses. Left at the
+    # default it fell through to SCIP, which is both slower here and -- until the fix
+    # alongside this one -- the path on which the time limit was ignored.
     stab = check_allocations(players, T, params, owen_res['sigma'], owen_res['owen'],
-                             gap, verbose=False)
+                             gap, verbose=False, mipsolver=SEP_SOLVER,
+                             time_limit=STAB_TIME_LIMIT)
 
     # reserve.txt sec.3.2-3.4 schema: primal from the MIP, duals from the master,
     # plus one small MIP per prosumer for the stand-alone pooling baseline

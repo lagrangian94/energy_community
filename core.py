@@ -355,7 +355,7 @@ class SeparationProblem(LocalEnergyMarket):
 
         Args:
             time_limit: wall-clock cap in seconds for this single separation solve.
-                Gurobi path only (the SCIP and HiGHS paths ignore it). On expiry the
+                Honoured on the Gurobi and SCIP paths (HiGHS still ignores it). On expiry the
                 incumbent is used instead of the optimum and `self.truncated` is set:
                 an incumbent coalition still yields a VALID cut -- it is violated, just
                 not necessarily the most violated one -- but it is NOT a certificate,
@@ -380,10 +380,28 @@ class SeparationProblem(LocalEnergyMarket):
         elif self.mipsolver and self.mipsolver.lower() == 'gurobi':
             obj_val, selected_coalition = self._solve_with_gurobi(time_limit)
         else:
-            # Solve with SCIP (default)
+            # Solve with SCIP (default). The budget has to be honoured here as well, not
+            # only on the Gurobi path: this branch is what `check_allocations` reached by
+            # default, so a time limit that existed only for Gurobi was silently no
+            # limit at all -- one 60-prosumer separation ran six hours at a 118% gap
+            # inside a measurement nominally capped at 3600 s.
+            if time_limit is not None:
+                self.model.setRealParam('limits/time', max(1.0, float(time_limit)))
             status = self.solve()
 
-            if status != "optimal":
+            if status == "optimal":
+                pass
+            elif self.model.getNSols() > 0:
+                # Cut off with an incumbent: a violated coalition, just not provably the
+                # most violated one. Same contract as the Gurobi path.
+                self.truncated = True
+                print(f"  SCIP separation cut off at the time limit (status {status}, "
+                      f"{self.model.getNSols()} solution(s)); using the incumbent")
+            else:
+                self.truncated = True
+                print(f"  SCIP separation cut off with no solution (status {status})")
+                if status in ('timelimit', 'userinterrupt'):
+                    return 0.0, []
                 raise RuntimeError(f"Separation problem failed with status: {status}")
 
             obj_val = self.model.getObjVal()
@@ -1273,7 +1291,8 @@ class CoreComputation:
         shift = epsilon / len(self.players)
         return {i: cos_payoffs[i] + shift for i in self.players}
 
-    def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False):
+    def measure_stability_violation(self, payoffs: Dict[str, float], brute_force: bool = False,
+                                        time_limit: Optional[float] = None):
             """
             Measure the WEAK-ε-core violation of a given (fixed) payoff allocation.
 
@@ -1293,6 +1312,12 @@ class CoreComputation:
                         coalitions (small n only). If False (default), find ε(x) by
                         Dinkelbach iteration on the raw-excess separation problem
                         (a handful of separation solves; scalable to large N).
+                time_limit: wall-clock budget in seconds for the whole Dinkelbach
+                        sequence. Without one a single separation MIP can run
+                        indefinitely -- at 15 prosumers with 7 electrolysers one sat at
+                        a 100% gap for a quarter of an hour -- and the caller has no way
+                        to bound the measurement. On expiry the search stops and
+                        `self.last_stability_truncated` is set.
             Returns:
                 tuple (coalition, weak_eps_violation, is_imputation)
 
@@ -1307,13 +1332,16 @@ class CoreComputation:
                 print("Cost allocation is not an imputation")
                 # return [], violation
             if not brute_force:
-                coalition, violation = self._measure_weak_eps_separation(payoffs)
+                coalition, violation = self._measure_weak_eps_separation(
+                    payoffs, time_limit=time_limit)
             else:
+                self.last_stability_truncated = False
                 coalition, violation = self._measure_violation_brute_force(payoffs)
             return coalition, violation, is_imputation
 
     def _measure_weak_eps_separation(self, payoffs: Dict[str, float],
-                                     tolerance: float = 1e-6, max_iter: int = 50):
+                                     tolerance: float = 1e-6, max_iter: int = 50,
+                                     time_limit: Optional[float] = None):
         """
         Weak-ε-core violation ε(x)=max_S (Σx_S−c(S))/|S| via Dinkelbach iteration.
 
@@ -1325,16 +1353,36 @@ class CoreComputation:
         Short-circuit: if the raw max excess ≤ tol the allocation is already in the
         exact core, hence ε(x) ≤ 0 too — report it without iterating (weak-ε only
         differs from strong-ε when there is a genuine positive violation).
+
+        `time_limit` bounds the whole sequence. The asymmetry on expiry matters and is
+        why the flag exists: whatever coalition has been found is genuinely violated, so
+        a POSITIVE result stands, but the search may not have reached the worst one, so
+        the reported value is only a lower bound and a NON-positive result proves
+        nothing. Never read "in the core" off a truncated measurement.
         """
+        import time as _time
+        _t0 = _time.time()
+        _left = (lambda: None if time_limit is None
+                 else max(1.0, time_limit - (_time.time() - _t0)))
+        self.last_stability_truncated = False
+
         # λ = 0: raw (strong) max excess
-        coalition, raw_excess = self.find_violated_coalition(payoffs)
+        coalition, raw_excess = self.find_violated_coalition(payoffs, time_limit=_left())
+        self.last_stability_truncated = bool(self.last_separation_truncated)
         if raw_excess <= tolerance or len(coalition) == 0:
             return coalition, raw_excess          # in core: weak-ε ≤ 0 as well
         lam = raw_excess / len(coalition)
         best_coalition = coalition
         for _ in range(max_iter):
+            if time_limit is not None and _time.time() - _t0 > time_limit:
+                self.last_stability_truncated = True
+                print(f"  Weak-ε measurement stopped at its {time_limit:.0f}s budget; "
+                      f"reported violation is a LOWER bound")
+                break
             shifted = {i: payoffs[i] - lam for i in self.players}
-            S, _f_lam = self.find_violated_coalition(shifted)
+            S, _f_lam = self.find_violated_coalition(shifted, time_limit=_left())
+            if self.last_separation_truncated:
+                self.last_stability_truncated = True
             if len(S) == 0:                       # F(λ) ≤ 0 ⇒ λ is the max ratio
                 break
             ratio = (sum(payoffs[i] for i in S) - self.compute_coalition_cost(S)) / len(S)

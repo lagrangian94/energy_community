@@ -852,3 +852,127 @@ if __name__ == "__main__":
             output_dir=output_dir, time_limit=args.time_limit,
             override_fn=override_fn, mipsolver=args.mipsolver,
         )
+
+
+# =============================================================================
+# 60-player community
+# =============================================================================
+# Built by extending CONFIGURATION_30 with u31-u60. u1-u30 are untouched, so the
+# 30-player instance is literally a sub-configuration of this one.
+#
+# WHAT IS HELD FIXED. Every asset share is identical to the 30-player community,
+# to the member:
+#
+#     renewables 36.7%   wind 10.0%   solar 26.7%   electrolysers 20.0%
+#     heat pumps 13.3%   elec storage 23.3%   H2 storage 10.0%   heat storage 6.7%
+#     nfl elec demand 33.3%   nfl H2 demand 20.0%   nfl heat demand 23.3%
+#
+# so the members carrying commitment binaries -- electrolysers and heat pumps --
+# are 20/60, the 33.3% they are at 30 players and close to the 40% at 15. The size
+# axis therefore varies n alone, which is what the omega^LR flatness claim needs:
+# a share that drifted with n would confound it.
+#
+# WHAT IS NOT A REPLICA. The role structure of u31-u60 mirrors the archetypes of
+# u1-u30 -- that is forced, once the shares are fixed -- but the members are not
+# copies. apply_60player_overrides gives every one of them a capacity multiplier
+# that differs from its archetype twin, so no two members of this community are
+# interchangeable and the game is not a 2-fold replica of the 30-player one. That
+# distinction matters: the core of a replicated game shrinks toward the competitive
+# allocation by Debreu-Scarf, and a reviewer who saw a replica would rightly read
+# the results as an artefact of that rather than as a scaling measurement.
+#
+# NOT RUN. This is the configuration only. At 60 members the grand-coalition MILP
+# and the column generation are the tractable parts; row generation is not -- it
+# already certifies nothing at 30 -- so anything defined against a certified core
+# element is out of reach here by construction.
+
+PLAYERS_60 = [f'u{i}' for i in range(1, 61)]
+
+_NEW_60 = {
+    'players_with_renewables':   ['u31', 'u37', 'u40', 'u41', 'u42', 'u46', 'u47',
+                                  'u51', 'u52', 'u53', 'u56'],
+    'players_with_wind':         ['u31', 'u40', 'u46'],
+    'players_with_solar':        ['u37', 'u41', 'u42', 'u47', 'u51', 'u52', 'u53', 'u56'],
+    'players_with_electrolyzers':['u32', 'u38', 'u40', 'u48', 'u49', 'u51'],
+    'players_with_heatpumps':    ['u33', 'u39', 'u44', 'u50'],
+    'players_with_elec_storage': ['u31', 'u37', 'u40', 'u41', 'u52', 'u54', 'u59'],
+    'players_with_hydro_storage':['u38', 'u40', 'u48'],
+    'players_with_heat_storage': ['u39', 'u50'],
+    'players_with_nfl_elec_demand':  ['u34', 'u41', 'u42', 'u45', 'u52', 'u53', 'u54',
+                                      'u55', 'u58', 'u59'],
+    'players_with_nfl_hydro_demand': ['u35', 'u43', 'u56', 'u57', 'u58', 'u59'],
+    'players_with_nfl_heat_demand':  ['u36', 'u44', 'u45', 'u53', 'u54', 'u55', 'u60'],
+}
+
+CONFIGURATION_60 = {
+    **CONFIGURATION_30,
+    **{k: (CONFIGURATION_30.get(k) or []) + v for k, v in _NEW_60.items()},
+}
+
+# Same scalar baseline as the 30-player community: the point of the 60-player case is
+# the size axis, so nothing else moves.
+BASELINE_CANDIDATES_60 = BASELINE_CANDIDATES_30
+
+# Capacity multipliers for u31-u60, in the 0.5-1.5 band the smaller communities use.
+# Chosen so that each member differs from the u1-u30 member it mirrors -- u49 is an
+# electrolyser at 1.3x where its twin u19 is at 0.6x, u46 is wind at 1.4x where u16 is
+# at 0.8x, and so on. Written as a table rather than as the per-player blocks above
+# because there are thirty of them; the parameter names are the same ones those blocks
+# use.
+_MULT_60 = {
+    'u31': {'renewable': 1.2, 'ess': 0.8},
+    'u32': {'els': 1.4},
+    'u33': {'hp': 0.7},
+    'u37': {'renewable': 0.7, 'ess': 1.3},
+    'u38': {'els': 0.9, 'h2': 1.4},
+    'u39': {'hp': 1.3, 'heat': 0.8},
+    'u40': {'renewable': 0.7, 'els': 1.1, 'ess': 1.2, 'h2': 0.8},
+    'u41': {'renewable': 1.4, 'ess': 0.6},
+    'u42': {'renewable': 0.5},
+    'u44': {'hp': 1.2},
+    'u46': {'renewable': 1.4},
+    'u47': {'renewable': 0.6},
+    'u48': {'els': 0.7, 'h2': 0.9},
+    'u49': {'els': 1.3},
+    'u50': {'hp': 0.9, 'heat': 1.2},
+    'u51': {'renewable': 1.1, 'els': 0.5},
+    'u52': {'renewable': 0.9, 'ess': 1.4},
+    'u53': {'renewable': 1.2},
+    'u54': {'ess': 0.7},
+    'u56': {'renewable': 0.8},
+    'u59': {'ess': 1.1},
+}
+
+
+def apply_60player_overrides(parameters, time_periods):
+    """Per-player capacity differentiation for the 60-player community.
+
+    Applies the 30-player overrides first, so u1-u30 keep exactly the capacities they
+    have in that instance, then scales u31-u60 by `_MULT_60`.
+    """
+    parameters = apply_30player_overrides(parameters, time_periods)
+
+    for p, m in _MULT_60.items():
+        if 'renewable' in m:
+            for t in time_periods:
+                key = f'renewable_cap_{p}_{t}'
+                if key in parameters:
+                    parameters[key] *= m['renewable']
+        if 'els' in m and f'els_cap_{p}' in parameters:
+            parameters[f'els_cap_{p}'] *= m['els']
+        if 'hp' in m and f'hp_cap_{p}' in parameters:
+            parameters[f'hp_cap_{p}'] *= m['hp']
+        # Storage: power and capacity together, then the initial state of charge, which
+        # is a ratio of the capacity and is stale the moment the capacity moves.
+        for tag, carrier in (('ess', 'E'), ('h2', 'G'), ('heat', 'H')):
+            if tag not in m:
+                continue
+            for suffix in (f'storage_power_{carrier}_{p}', f'storage_capacity_{carrier}_{p}'):
+                if suffix in parameters:
+                    parameters[suffix] *= m[tag]
+            cap = f'storage_capacity_{carrier}_{p}'
+            if cap in parameters:
+                parameters[f'initial_soc_{carrier}_{p}'] = (
+                    parameters.get(f'initial_soc_ratio_{carrier}', 0.2) * parameters[cap]
+                )
+    return parameters

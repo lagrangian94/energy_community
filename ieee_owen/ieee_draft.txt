@@ -1049,6 +1049,86 @@ Row generation, certified & $31/31$ & $31/31$ & $0/1$ \\
  
 
  
+\subsection{Fairness of the Proposed Allocation}
+\label{sec:fair}
+$\chi^{\mathrm{LR}}$ is read off a dual. Nothing in its construction asks it to be
+even-handed among members, only stable, and it is worth measuring what that costs. The
+allocation actually executed is the budget-feasible
+$\hat\chi:=\chi^{\mathrm{LR}}-\varepsilon^{\mathrm{LR}}\mathbf{1}$ of
+Section~\ref{sec:num}, and it is $\hat\chi$ that is measured below. We compare it against
+the core element a fairness criterion would select instead, using the spread
+$D(\chi)=\max_j\chi_j-\min_j\chi_j$ and the variance
+$V(\chi)=\ssum_j(\chi_j-\vmip(N)/n)^2$. Both are unchanged by adding a constant to every
+member, so on these two the distinction between $\hat\chi$ and $\chi^{\mathrm{LR}}$ does
+not arise; on the per-member displacement of Table~\ref{tab:fair} it does, and $\hat\chi$
+is the point reported, being the one a community would receive.
+
+The benchmark is the \emph{variance core}~\cite{fioriti2025fair}, the core element closest
+to the equal allocation in the Euclidean sense:
+\begin{subequations}\label{eq:vc}
+\begin{align}
+\chi^{\mathrm{VC}}=\arg\min_{\chi\in\R^{n}}\ \ & \ssum_{j\in N}\Big(\chi_j-\tfrac{\vmip(N)}{n}\Big)^{2} \label{eq:vc_obj}\\
+\text{s.t.}\ \ & \ssum_{j\in N}\chi_j=\vmip(N), \label{eq:vc_eff}\\
+& \ssum_{j\in S}\chi_j\ \ge\ \vmip(S) \quad \forall\,\emptyset\neq S\subsetneq N. \label{eq:vc_core}
+\end{align}
+\end{subequations}
+Efficiency \eqref{eq:vc_eff} pins the mean of $\chi$ at $\vmip(N)/n$, so \eqref{eq:vc_obj}
+is $n$ times the variance of the shares and the equal allocation is the unconstrained
+minimiser; \eqref{eq:vc_core} is what the core keeps of it. The objective is strictly
+convex, so the minimiser is a single point. This is the egalitarian ideal a community would
+name if asked, restricted to the allocations no coalition can block.
+
+Formally \eqref{eq:vc} is a convex quadratic program with exponentially many constraints,
+and it is solved by the row generation of Section~\ref{sec:complexity} with the master
+objective replaced by \eqref{eq:vc_obj}: a master over a subset of \eqref{eq:vc_core}, the
+separation oracle \eqref{eq:rg_sep} evaluated at its solution, the violated coalition
+appended, repeat. The oracle is untouched, since it reads the allocation and never the
+master's objective, so the comparison costs one more run of machinery the paper already
+has.
+
+Table~\ref{tab:fair} reports the comparison. At $n=6$ the gap is real: a quarter more
+spread, two thirds more variance, and individual members up to $480$~\euro{} from where the
+fairness criterion places them. At $n=15$ it is gone. The proposed allocation is then
+within $2$--$3\%$ of the least-dispersed stable allocation on every one of the 31 days, and
+the worst-displaced member is $22$~\euro{} away on shares of order a thousand---this while
+$\chi^{\mathrm{LR}}-\varepsilon^{\mathrm{LR}}\mathbf{1}$ itself lies outside the core on
+most of those days, so being nearly as even as the fairest stable point and being stable
+are separate matters. Whatever fairness the duality route gives up is a small-community
+phenomenon, and at the sizes where the exact route has already stopped being computable it
+is not a reason to prefer one. We report this as an observation over two sizes: the
+comparison needs a certified core element, and row generation returns none at $n=30$.
+
+\begin{table}[!t]
+\caption{Dispersion of the proposed allocation and of the variance core \eqref{eq:vc}, geometric means over 31 daily instances, with the day-to-day range in brackets; the last row is the largest displacement of any single member, taken per day and then averaged. Ratios are formed per day and then averaged, so they are not the quotients of the entries above them. $n=30$ is absent because row generation returns no certified core element there to compare against.}
+\label{tab:fair}
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & \multicolumn{2}{c}{$n=6$} & \multicolumn{2}{c}{$n=15$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+ & $\hat\chi$ & $\chi^{\mathrm{VC}}$ & $\hat\chi$ & $\chi^{\mathrm{VC}}$ \\
+\midrule
+spread $D$ [\euro]                 & $1{,}650$ & $1{,}327$ & $1{,}616$ & $1{,}589$ \\
+variance $V$ [$10^{6}$\,\euro$^2$] & $1.86$ & $1.13$ & $2.55$ & $2.48$ \\
+\midrule
+$D(\hat\chi)/D(\chi^{\mathrm{VC}})$ & \multicolumn{2}{c}{$1.24$ ($1.14$--$1.43$)} & \multicolumn{2}{c}{$1.02$ ($1.00$--$1.04$)} \\
+$V(\hat\chi)/V(\chi^{\mathrm{VC}})$ & \multicolumn{2}{c}{$1.65$ ($1.40$--$2.04$)} & \multicolumn{2}{c}{$1.03$ ($1.00$--$1.07$)} \\
+$\max_j|\hat\chi_j-\chi^{\mathrm{VC}}_j|$ [\euro] & \multicolumn{2}{c}{$258$ ($156$--$480$)} & \multicolumn{2}{c}{$21.8$ ($8.2$--$61.7$)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A caveat on what this establishes. Strict convexity buys uniqueness, not fairness: the
+comparison point is the least dispersed core element and is uniquely defined, but it is not
+fair in the axiomatic sense the Shapley value is, and ``shares should be equal'' is a
+premise rather than a conclusion in a community whose members range from a wind and storage
+owner to a consumer with no assets at all. What the measurement supports without that
+premise is narrower and sufficient: at $n=15$ the proposed allocation is already within a
+few percent of the most even stable allocation that exists, so a community adopting it
+gives up little that a fairness criterion could recover, and it obtains it at the cost of
+Table~\ref{tab:runtime} rather than that of row generation.
+
 \section{Conclusion}
 \label{sec:concl}
  

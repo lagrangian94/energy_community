@@ -53,12 +53,19 @@ def _quiet(fn, *a, **kw):
 
 def check_allocations(players, time_periods, params, sigma, owen, gap,
                       mipsolver=None, brute_force=False, model_type='mip',
-                      verbose=True):
+                      verbose=True, time_limit=3600):
     """Measure the worst-case coalition excess of both Owen points.
 
     sigma : raw Owen allocation (dict, cost convention), sums to v^CHP
     owen  : gap-corrected allocation, sums to v^MIP
     gap   : v^CHP - v^MIP  (negative in cost convention)
+    time_limit : budget in seconds for EACH of the two measurements. The separation MIP
+        underneath has no natural bound -- it ran a quarter of an hour at a 100% gap on a
+        15-prosumer instance with 7 electrolysers -- so without this the whole Owen phase
+        can hang on one day. On expiry `certified` is False for that allocation and its
+        `holds` verdict is only trustworthy when it says VIOLATED: the coalition found is
+        genuinely violating, but the search may not have reached the worst one, so a
+        nonpositive excess proves nothing.
 
     Returns a dict with, for each allocation, the worst coalition and its per-capita
     excess, and the verdict against the corresponding proposition.
@@ -83,7 +90,9 @@ def check_allocations(players, time_periods, params, sigma, owen, gap,
             ('owen', owen, 'prop:eps      excess <= eps^LR', eps_lr)):
         t0 = time.time()
         (coalition, excess, is_imp), _log = _quiet(
-            cc.measure_stability_violation, alloc, brute_force=brute_force)
+            cc.measure_stability_violation, alloc, brute_force=brute_force,
+            time_limit=time_limit)
+        certified = not getattr(cc, 'last_stability_truncated', False)
         dt = time.time() - t0
         # tolerance: separation MIPs are solved to a relative gap, so scale with the
         # coalition value rather than using a flat epsilon
@@ -92,6 +101,7 @@ def check_allocations(players, time_periods, params, sigma, owen, gap,
             'worst_coalition': list(coalition), 'excess': float(excess),
             'is_imputation': bool(is_imp), 'limit': limit,
             'holds': bool(excess <= limit + tol), 'slack': float(limit - excess),
+            'certified': bool(certified),
             'time_s': dt, 'claim': claim,
         }
         if verbose:
@@ -115,5 +125,10 @@ def flatten_for_csv(res, prefix=''):
         f'{prefix}stab_holds_owen': res['owen']['holds'],
         f'{prefix}stab_eps_lr': res['eps_lr'],
         f'{prefix}stab_worst_S_size': len(res['owen']['worst_coalition']),
+        # False = the measurement hit its budget, so `holds` is only meaningful when it
+        # is False. Declared in OWEN_COLS; a key the header does not carry makes
+        # DictWriter reject the whole row.
+        f'{prefix}stab_certified': res['sigma'].get('certified', True)
+                                   and res['owen'].get('certified', True),
         f'{prefix}stab_time_s': round(res['sigma']['time_s'] + res['owen']['time_s'], 2),
     }
