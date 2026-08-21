@@ -18,7 +18,8 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 # run order (matches run_multiday.RUNS); any missing dir is skipped
 ORDER = ['baseline_6p', 'low_h2_margin_6p', 'full_storage_6p',
          'community_size_350_6p', 'community_size_1000_6p', 'export_cap_020_6p',
-         'baseline_15p', 'baseline_30p',
+         'baseline_15p', 'baseline_30p', 'baseline_60p',
+         'nonconvex_15p', 'nonconvex_30p',
          'channel_balance_6p', 'channel_reserve_6p', 'channel_peak_6p',
          'reserve_low_6p', 'peak_200_6p',
          'low_h2_reserve0_6p', 'low_h2_reserve11_6p']

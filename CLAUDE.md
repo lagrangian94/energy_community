@@ -40,8 +40,9 @@ efficiency by exactly the integrality gap, bounded as `O(|T|/n)`.
 ieee_owen/
 ├── ieee_draft.txt          manuscript (LaTeX, IEEEtran)
 ├── reserve.txt             implementation spec for the reserve/peak block
-├── large_community.py      15- and 30-prosumer configurations
+├── large_community.py      15-, 30- and 60-prosumer configurations
 ├── reserve_metrics.py      reserve/peak output schema + derived metrics
+├── config_tables.py/.tex   parameter + member-configuration tables (GENERATED)
 ├── weak_eps_experiment/    the experiment harness (entry points below)
 └── copositive/             exact core existence via Burer lifting (paper Sec. 4.3)
 ```
@@ -52,7 +53,21 @@ Entry points, all run from anywhere:
 python ieee_owen/weak_eps_experiment/run_experiment.py --sizes 6,15,30
 python ieee_owen/weak_eps_experiment/run_multiday.py            # 31 days x scenarios
 python ieee_owen/weak_eps_experiment/summarize.py               # regenerate all tables
+python ieee_owen/weak_eps_experiment/paper_tables.py            # tab:results, tab:runtime
+python ieee_owen/config_tables.py                               # tab:params, tab:config*
 ```
+
+**Paper tables are generated, not typed.** Both table scripts read the CSVs and the
+live `CONFIGURATION_*` objects. This is not a stylistic preference: the hand-typed
+`n=30` column of `tab:results`/`tab:runtime` drifted off its data, carrying `v^MIP`,
+`omega^LR` and both timings from a single instance while the rest of the column came
+from the 31-day sweep. Re-run the scripts rather than editing the numbers.
+
+The separation is the expensive half of the Owen phase (~85% of it at 60 prosumers).
+`--no-stab` defers it and `--phase stab` fills the columns in afterwards, reading the
+allocations back from `cg_day<D>.json` so the MILP and column generation are not
+re-solved. A day whose separation hit its budget carries `stab_certified=False`, and
+its `holds` verdict is then only meaningful when it says VIOLATED.
 
 `run_multiday.py` is the main harness. JSON files are the durable source of
 truth; CSVs are regenerated from them. A run is skipped if its rows already

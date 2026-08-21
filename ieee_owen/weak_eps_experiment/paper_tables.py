@@ -1,160 +1,154 @@
-"""Regenerate every number in `ieee_draft.txt` Sec. `sec:num` from the stored results.
-
-The point is auditability: each figure in the two tables should be traceable to a file on
-disk rather than to a transcript. Run this and diff against the draft.
-
-    python weak_eps_experiment/paper_tables.py            # print both tables
-    python weak_eps_experiment/paper_tables.py --csv      # also write paper_tables.csv
-
-Sources, and what each is good for:
-
-  eps_31day.json     v^MIP, v^CHP, omega, eps^LR and the MIP/CG timings for 30 days at each
-                     size. Extracted from the per-day runs under `maximin_slack1e-7/`; the
-                     (R2) defect recorded in `validation_plan.md` affected only the maximin
-                     selection in those files, not these fields.
-  excess_<n>p.json   per-capita excess of the executed allocation per day (measure_excess.py)
-  cg_<n>p.json       single-instance run of run_experiment.py -- used only for the
-                     row-generation column of the runtime table
-  baseline_<n>p/rowgen.csv
-                     row generation over the day sweep, one row per day. PREFERRED when
-                     present. A `rowgen.csv` in a run folder is by convention current
-                     (4-hour reserve product); the pre-4-hour files are parked next to it
-                     as `rowgen_stale_24h_product.csv` so they cannot be picked up.
-  rowgen_<n>p.json   fallback: row generation on ONE instance, for the sizes that have no
-                     sweep. Convergence, time, coalition cuts.
-
-Row generation reports a geometric mean over the instances that RETURNED A CERTIFICATE,
-alongside how many did. Averaging a censored run in with the rest would report the budget
-rather than the algorithm: a day cut off at 3600 s did not take 3600 s, it took longer
-than that by an unknown margin.
-
-Aggregates are geometric means, which is what the draft reports: the object of interest is
-how a quantity scales in `n`, and a geometric mean is the summary that respects that.
 """
-import os, sys, json, math, argparse, statistics as st, csv as _csv
+Emit the LaTeX bodies of tab:results and tab:runtime from the sweep CSVs.
+
+WHY THIS EXISTS. Both tables were transcribed by hand, and the n=30 column drifted:
+v^MIP(N), omega^LR, eps^LR and the two timings were carried over from a single
+instance (rowgen_30p.json, scenario '30p_reserve_peak') while the rest of the column
+came from the 31-day sweep, and the two disagree by up to a factor of three. One row
+mixed the averaging conventions on top of that -- eps(chi) at n=15 is a geometric
+mean, the n=30 entry beside it an arithmetic one. Generating both tables from the
+CSVs is the only way the captions ("geometric means over 31 daily instances") stay
+true of the numbers underneath them.
+
+CONVENTION. Geometric mean of |x| over days, which reproduces the published n=6 and
+n=15 columns exactly (2555.8, 6275.0, 8.23, 11.07, 1.37, 0.74). Zeros and blanks are
+dropped rather than treated as 1, since log 0 is undefined; a cell whose days are all
+blank prints as `--` rather than as a number that was never measured.
+
+A cell that has no data yet prints `--`, never a stale value: the separation columns
+are blank for any day run under --no-stab, so tab:results shows what is measured and
+nothing more until --phase stab fills them in.
+
+Usage:  python weak_eps_experiment/paper_tables.py [--sizes 6,15,30,60]
+"""
+import os, argparse
+import numpy as np
+import pandas as pd
 
 OUT = os.path.dirname(os.path.abspath(__file__))
-SIZES = (6, 15, 30)
+RUN_OF = {6: 'baseline_6p', 15: 'baseline_15p', 30: 'baseline_30p', 60: 'baseline_60p'}
+# Days on which chi is inside the exact core. The separation is solved to a relative
+# gap, so a flat zero would count numerical noise as a core membership; 1e-6 is the
+# tolerance the row-generation loop itself uses.
+CORE_TOL = 1e-6
 
 
-def gmean(v):
-    return math.exp(sum(math.log(x) for x in v) / len(v))
+def geo(s):
+    """Geometric mean of |s| over the days that carry a value."""
+    s = pd.to_numeric(pd.Series(s), errors='coerce').dropna().abs()
+    s = s[s > 0]
+    return float(np.exp(np.log(s).mean())) if len(s) else float('nan')
 
 
-def load_rowgen(n):
-    """Row generation at size `n`: the day sweep if there is one, else one instance.
-
-    Returns the same keys either way, so the table does not care which it got:
-      days, certified          how many instances, how many returned a certificate
-      time_certified, cuts     geometric means over the CERTIFIED instances only
-      cuts_cutoff              geometric mean cuts over the cut-off instances (None if
-                               there are none) -- a text remark, not a table row
-      budget                   the per-day budget the cut-off instances hit
-    """
-    sweep = os.path.join(OUT, f'baseline_{n}p', 'rowgen.csv')
-    if os.path.exists(sweep):
-        with open(sweep) as fh:
-            rows = list(_csv.DictReader(fh))
-        ok = [r for r in rows if r['converged'] == 'True']
-        no = [r for r in rows if r['converged'] != 'True']
-        return dict(
-            days=len(rows), certified=len(ok),
-            time_certified=gmean([float(r['time_rowgen_s']) for r in ok]) if ok else None,
-            cuts=gmean([int(r['n_coalitions']) for r in ok]) if ok else None,
-            cuts_cutoff=gmean([int(r['n_coalitions']) for r in no]) if no else None,
-            budget=max((float(r['time_rowgen_s']) for r in no), default=None))
-    j = json.load(open(os.path.join(OUT, f'rowgen_{n}p.json')))
-    conv = bool(j['converged'])
-    return dict(days=1, certified=int(conv),
-                time_certified=j['time_rowgen_s'] if conv else None,
-                cuts=j['n_coalitions_generated'] if conv else None,
-                cuts_cutoff=None if conv else j['n_coalitions_generated'],
-                budget=None if conv else j['time_rowgen_s'])
+def fmt(x, nd=2, thousands=False):
+    if x is None or (isinstance(x, float) and not np.isfinite(x)):
+        return '--'
+    if thousands and abs(x) >= 1000:
+        return f'{x:,.{nd}f}'.replace(',', '{,}')
+    return f'{x:.{nd}f}'
 
 
-def load():
-    day = json.load(open(os.path.join(OUT, 'eps_31day.json')))
-    exc = {n: json.load(open(os.path.join(OUT, f'excess_{n}p.json'))) for n in SIZES}
-    cg = {n: json.load(open(os.path.join(OUT, f'cg_{n}p.json'))) for n in SIZES}
-    rg = {n: load_rowgen(n) for n in SIZES}
-    return day, exc, cg, rg
+def load(n):
+    d = os.path.join(OUT, RUN_OF[n])
+    owen = os.path.join(d, 'owen.csv')
+    rg = os.path.join(d, 'rowgen.csv')
+    return (pd.read_csv(owen) if os.path.exists(owen) else pd.DataFrame(),
+            pd.read_csv(rg) if os.path.exists(rg) else pd.DataFrame())
 
 
-def build():
-    day, exc, cg, rg = load()
-    rows = {}
-    for n in SIZES:
-        d = day[str(n)]
-        e = [exc[n][k] for k in sorted(exc[n], key=int) if 'excess' in exc[n][k]]
-        outside = [r for r in e if len(r['coalition']) > 0]
-        share = [max(0.0, r['excess']) / r['eps'] for r in e]
-        rows[n] = dict(
-            days=len(d),
-            v_mip=gmean([abs(x['v_mip']) for x in d]),
-            omega=gmean([x['omega'] for x in d]),
-            eps=gmean([x['eps'] for x in d]),
-            omega_min=min(x['omega'] for x in d), omega_max=max(x['omega'] for x in d),
-            excess_days=len(e), in_core=len(e) - len(outside),
-            excess=gmean([r['excess'] for r in outside]) if outside else None,
-            share_median=st.median(share), share_max=max(share),
-            t_mip=gmean([x['t_mip'] for x in d]), t_cg=gmean([x['t_cg'] for x in d]),
-            rg_days=rg[n]['days'], rg_certified=rg[n]['certified'],
-            rg_time=rg[n]['time_certified'], rg_cuts=rg[n]['cuts'],
-            rg_cuts_cutoff=rg[n]['cuts_cutoff'], rg_budget=rg[n]['budget'],
-        )
-    return rows
+def col_results(n):
+    """The tab:results column for size n, plus the day counts its caption needs."""
+    o, _ = load(n)
+    if o.empty:
+        return {k: '--' for k in ('vmip', 'omega', 'eps_lr', 'incore', 'eps_chi')} | {'days': 0}
+    ex = pd.to_numeric(o.get('stab_excess_owen', pd.Series(dtype=float)), errors='coerce')
+    measured = ex.notna().sum()
+    omega = geo(o['gap'])
+    c = {
+        'days': len(o),
+        'measured': int(measured),
+        'vmip': fmt(geo(o['v_mip']), 1, thousands=True),
+        'omega': fmt(omega, 2),
+        'eps_lr': fmt(omega / n, 2 if omega / n >= 0.1 else 3),
+    }
+    if measured == 0:
+        # --no-stab days: nothing has been measured, so say so rather than print a
+        # count over an empty column that would read as "none were in the core".
+        c['incore'] = '--'
+        c['eps_chi'] = '--'
+    else:
+        n_in = int((ex <= CORE_TOL).sum())
+        c['incore'] = f'${n_in}/{int(measured)}$'
+        rest = ex[ex > CORE_TOL]
+        c['eps_chi'] = '---' if rest.empty else fmt(geo(rest), 2 if geo(rest) >= 0.1 else 3)
+    return c
+
+
+def col_runtime(n):
+    o, rg = load(n)
+    c = {'mip': '--', 'cg': '--', 'certified': '--', 'rg_time': '--', 'rg_cuts': '--'}
+    if not o.empty:
+        c['mip'] = fmt(geo(o['time_mip_s']), 1) + '~s'
+        c['cg'] = fmt(geo(o['time_cg_s']), 1) + '~s'
+    if not rg.empty:
+        conv = rg['converged'].astype(str).str.lower().isin(['true', '1'])
+        c['certified'] = f'${int(conv.sum())}/{len(rg)}$'
+        t = geo(rg['time_rowgen_s'])
+        # A budget-truncated day has no finite runtime to average -- it only says
+        # "> budget" -- so a column with any such day is reported as a bound.
+        c['rg_time'] = (fmt(t, 1) + '~s' if conv.all()
+                        else f'$>{fmt(t, 0)}$~s' if conv.sum() == 0
+                        else fmt(t, 1) + '~s (mixed)')
+        c['rg_cuts'] = fmt(geo(rg['n_coalitions']), 0)
+    return c
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--csv', action='store_true')
-    a = ap.parse_args()
-    r = build()
-    hdr = "".join(f"{'n=' + str(n):>12}" for n in SIZES)
+    ap.add_argument('--sizes', default='6,15,30,60')
+    sizes = [int(x) for x in ap.parse_args().sizes.split(',')]
+    sizes = [n for n in sizes if os.path.isdir(os.path.join(OUT, RUN_OF.get(n, '')))]
 
-    def line(label, fn):
-        print(f"{label:<38}" + "".join(f"{fn(r[n]):>12}" for n in SIZES))
+    R = {n: col_results(n) for n in sizes}
+    T = {n: col_runtime(n) for n in sizes}
+    hdr = ' & '.join(f'$n={n}$' for n in sizes)
 
-    print(f"\ntab:results   (geometric means over {r[6]['days']} daily instances per size)")
-    print(f"{'':<38}" + hdr)
-    line('v^MIP(N)',                lambda x: f"{x['v_mip']:.1f}")
-    line('omega^LR',                lambda x: f"{x['omega']:.2f}")
-    line('eps^LR = omega/n',        lambda x: f"{x['eps']:.2f}")
-    line('days in the exact core',  lambda x: f"{x['in_core']}/{x['excess_days']}")
-    line('eps(chi) on the rest',    lambda x: '---' if x['excess'] is None else f"{x['excess']:.2f}")
-    print("  -- reported in the text or caption, not as table rows --")
-    line('  share of the guarantee spent, median',
-                                    lambda x: f"{x['share_median'] * 100:.0f}%")
-    line('  share of the guarantee spent, max',
-                                    lambda x: f"{x['share_max'] * 100:.0f}%")
-    line('  omega range over the days',
-                                    lambda x: f"[{x['omega_min']:.2f},{x['omega_max']:.1f}]")
+    print('% ---- tab:results (generated by weak_eps_experiment/paper_tables.py) ----')
+    print(f"% day counts per size: " + ', '.join(
+        f"n={n}: {R[n]['days']} days, {R[n].get('measured', 0)} with separation" for n in sizes))
+    print(r'\begin{tabular}{@{}l' + 'c' * len(sizes) + r'@{}}')
+    print(r'\toprule')
+    print(f' & {hdr} \\\\')
+    print(r'\midrule')
+    for key, label in [('vmip', r'$\vmip(N)$'),
+                       ('omega', r'$\omega^{\mathrm{LR}}$'),
+                       ('eps_lr', r'$\varepsilon^{\mathrm{LR}}=\omega^{\mathrm{LR}}/n$')]:
+        print(f'{label:<52}& ' + ' & '.join(f'${R[n][key]}$' if R[n][key] != '--' else '--'
+                                            for n in sizes) + r' \\')
+    print(r'\midrule')
+    print(f'{"days in the exact core":<52}& ' +
+          ' & '.join(R[n]['incore'] for n in sizes) + r' \\')
+    print(f'{"$\\varepsilon(\\chi)$ on the rest":<52}& ' +
+          ' & '.join(f'${R[n]["eps_chi"]}$' if R[n]['eps_chi'] not in ('--', '---')
+                     else R[n]['eps_chi'] for n in sizes) + r' \\')
+    print(r'\bottomrule')
+    print(r'\end{tabular}')
 
-    print(f"\ntab:runtime   (geometric means; row generation over CERTIFIED instances only)")
-    print(f"{'':<38}" + hdr)
-    line('grand-coalition MILP [s]', lambda x: f"{x['t_mip']:.1f}")
-    line('column generation [s]',    lambda x: f"{x['t_cg']:.1f}")
-    line('row gen: certified',       lambda x: f"{x['rg_certified']}/{x['rg_days']}")
-    line('row gen: time, certified [s]',
-         lambda x: '---' if x['rg_time'] is None else
-                   (f"{x['rg_time']:.1f}" if x['rg_time'] < 100 else f"{x['rg_time']:.0f}"))
-    line('  coalition cuts, certified',
-         lambda x: '---' if x['rg_cuts'] is None else f"{x['rg_cuts']:.0f}")
-    print("  -- reported in the text or caption, not as table rows --")
-    line('  coalition cuts, cut off',
-         lambda x: '---' if x['rg_cuts_cutoff'] is None else f"{x['rg_cuts_cutoff']:.0f}")
-    line('  budget the cut-off runs hit [s]',
-         lambda x: '---' if x['rg_budget'] is None else f"{x['rg_budget']:.0f}")
-
-    if a.csv:
-        import csv
-        path = os.path.join(OUT, 'paper_tables.csv')
-        with open(path, 'w', newline='') as fh:
-            w = csv.writer(fh)
-            w.writerow(['quantity'] + [f'n={n}' for n in SIZES])
-            for k in sorted(r[6]):
-                w.writerow([k] + [r[n][k] for n in SIZES])
-        print(f"\n-> {path}")
+    print()
+    print('% ---- tab:runtime (generated by weak_eps_experiment/paper_tables.py) ----')
+    print(r'\begin{tabular}{@{}l' + 'c' * len(sizes) + r'@{}}')
+    print(r'\toprule')
+    print(f' & {hdr} \\\\')
+    print(r'\midrule')
+    print(f'{"Grand-coalition MILP":<28}& ' + ' & '.join(T[n]['mip'] for n in sizes) + r' \\')
+    print(f'{"Column generation":<28}& ' + ' & '.join(T[n]['cg'] for n in sizes) + r' \\')
+    print(r'\midrule')
+    print(f'{"Row generation, certified":<28}& ' +
+          ' & '.join(T[n]['certified'] for n in sizes) + r' \\')
+    print(f'{"\\quad time":<28}& ' + ' & '.join(T[n]['rg_time'] for n in sizes) + r' \\')
+    print(f'{"\\quad coalition cuts":<28}& ' + ' & '.join(T[n]['rg_cuts'] for n in sizes) + r' \\')
+    print(r'\bottomrule')
+    print(r'\end{tabular}')
 
 
 if __name__ == '__main__':

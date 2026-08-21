@@ -338,7 +338,7 @@ ROWGEN_COLS = ['run', 'day', 'n_players', 'converged', 'vstar_is_lower_bound',
                'cost_of_stability_vstar', 'weak_eps', 'time_rowgen_s', 'n_coalitions']
 
 # --------------------------------------------------------------------------- Owen phase
-def owen_day(run, day):
+def owen_day(run, day, do_stab=True):
     players = run['players']
     params = build_params(run, day)
     t0 = time.time()
@@ -365,9 +365,16 @@ def owen_day(run, day):
     # mipsolver=SEP_SOLVER, the same separation oracle row generation uses. Left at the
     # default it fell through to SCIP, which is both slower here and -- until the fix
     # alongside this one -- the path on which the time limit was ignored.
-    stab = check_allocations(players, T, params, owen_res['sigma'], owen_res['owen'],
-                             gap, verbose=False, mipsolver=SEP_SOLVER,
-                             time_limit=STAB_TIME_LIMIT)
+    # --no-stab defers this. At 60 prosumers it is ~85% of the Owen phase (6-60 min a
+    # day, against ~6 min for the MILP and the column generation together) and nothing
+    # else in the row reads it, so deferring it turns a 15-25 h sweep into a ~3 h one.
+    # Both allocations are written to the JSON either way, so --stab-only fills the
+    # columns in afterwards without re-solving anything.
+    stab = None
+    if do_stab:
+        stab = check_allocations(players, T, params, owen_res['sigma'], owen_res['owen'],
+                                 gap, verbose=False, mipsolver=SEP_SOLVER,
+                                 time_limit=STAB_TIME_LIMIT)
 
     # reserve.txt sec.3.2-3.4 schema: primal from the MIP, duals from the master,
     # plus one small MIP per prosumer for the stand-alone pooling baseline
@@ -416,9 +423,59 @@ def owen_day(run, day):
                if isinstance(_rs, dict) else f"{_rs:.4f}")
     print(f"  [Owen] {run['name']} day {day}: v_mip={v_mip:.3f} eps_bound={eps_bound:.5f} "
           f"r_sym={_rs_txt} peak={rp.get('peak_value', 0.0):.4f} "
-          f"checks={row['schema_checks']} stab={'ok' if stab['all_hold'] else 'FAIL'} "
+          f"checks={row['schema_checks']} "
+          f"stab={'skipped' if stab is None else ('ok' if stab['all_hold'] else 'FAIL')} "
           f"({t_mip+t_cg:.0f}s)")
     return row
+
+# ------------------------------------------------------------------ Stab back-fill
+def stab_only_day(run, day):
+    """Measure the two allocations of a day whose Owen row already exists.
+
+    The counterpart to --no-stab. Both allocations were written to cg_day<D>.json when
+    the row was produced, so the measurement can be run against those rather than
+    re-deriving them: the grand-coalition MILP and the column generation cost about six
+    minutes a day at 60 prosumers and neither feeds the separation. Splitting the phase
+    in two therefore costs nothing over having run it in one pass.
+
+    Returns the patched row, or None if the day has no JSON to read.
+    """
+    path = os.path.join(run_dir(run), f"cg_day{day}.json")
+    if not os.path.exists(path):
+        print(f"  !! stab-only {run['name']} day {day}: no {os.path.basename(path)}")
+        return None
+    with open(path) as f:
+        doc = json.load(f)
+    params = build_params(run, day)
+    t0 = time.time()
+    stab = check_allocations(run['players'], T, params, doc['owen_sigma_cost'],
+                             doc['owen_alloc_cost'], doc['gap'], verbose=False,
+                             mipsolver=SEP_SOLVER, time_limit=STAB_TIME_LIMIT)
+    dt = time.time() - t0
+    doc['stability_check'] = stab
+    with open(path, 'w') as f:
+        json.dump(_jsonable(doc), f, indent=2)
+
+    # Upsert onto the row already in owen.csv rather than rebuilding it, so every
+    # non-separation column keeps the value the original solve produced.
+    owen_csv = os.path.join(run_dir(run), 'owen.csv')
+    row = None
+    if os.path.exists(owen_csv):
+        with open(owen_csv, newline='') as f:
+            for r in csv.DictReader(f):
+                if r.get('run') == run['name'] and str(r.get('day')) == str(day):
+                    row = r
+                    break
+    if row is None:
+        print(f"  !! stab-only {run['name']} day {day}: no existing row to patch")
+        return None
+    row.update(stab_for_csv(stab))
+    print(f"  [Stab] {run['name']} day {day}: "
+          f"excess={stab['owen']['excess']:.5f} limit={stab['owen']['limit']:.5f} "
+          f"{'ok' if stab['all_hold'] else 'FAIL'} "
+          f"certified={row['stab_certified']} ({dt:.0f}s)")
+    return row
+
 
 # --------------------------------------------------------------------------- RowGen phase
 def rowgen_day(run, day, budget):
@@ -444,7 +501,12 @@ def rowgen_day(run, day, budget):
 # --------------------------------------------------------------------------- driver
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--phase', choices=['owen', 'rowgen', 'both'], default='both')
+    ap.add_argument('--phase', choices=['owen', 'rowgen', 'stab', 'both'],
+                    default='both', help="'stab' back-fills the separation "
+                         'columns of days whose Owen row already exists')
+    ap.add_argument('--no-stab', action='store_true',
+                    help='skip the separation in the Owen phase; --phase stab '
+                         'fills it in later from the JSON')
     ap.add_argument('--runs', default='', help='comma list of run names (overrides --groups)')
     ap.add_argument('--groups', default='core,param6p',
                     help="run groups: core | param6p | scenario | all "
@@ -485,9 +547,23 @@ def main():
             print(f"\n=== [Owen phase] {run['name']}: {len(todo)} days ===")
             for d in todo:
                 try:
-                    append_row(owen_csv, owen_day(run, d), OWEN_COLS)
+                    append_row(owen_csv, owen_day(run, d, do_stab=not args.no_stab),
+                               OWEN_COLS)
                 except Exception as e:
                     print(f"  !! Owen {run['name']} day {d} FAILED: {e}")
+
+        # Phase 1b: separation only, for days already carrying an Owen row
+        if args.phase == 'stab':
+            have = existing_days(owen_csv)
+            todo = [d for d in days if d in have]
+            print(f"\n=== [Stab phase] {run['name']}: {len(todo)} days ===")
+            for d in todo:
+                try:
+                    r = stab_only_day(run, d)
+                    if r is not None:
+                        append_row(owen_csv, r, OWEN_COLS)
+                except Exception as e:
+                    print(f"  !! Stab {run['name']} day {d} FAILED: {e}")
 
         # Phase 2: RowGen for all days
         if args.phase in ('rowgen', 'both'):
