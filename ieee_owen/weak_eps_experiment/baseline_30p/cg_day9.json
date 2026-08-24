@@ -12612,5 +12612,47 @@
       "23": 0.0
     }
   },
-  "stability_check": null
+  "stability_check": {
+    "n": 30,
+    "brute_force": false,
+    "eps_lr": 0.383547121826147,
+    "gap": -11.50641365478441,
+    "omega": 11.50641365478441,
+    "sigma": {
+      "worst_coalition": [],
+      "excess": 5.056869793062204e-07,
+      "is_imputation": true,
+      "limit": 0.0,
+      "holds": true,
+      "slack": -5.056869793062204e-07,
+      "certified": true,
+      "time_s": 3.1034584045410156,
+      "claim": "prop:opap(i)  excess <= 0"
+    },
+    "owen": {
+      "worst_coalition": [
+        "u2",
+        "u5",
+        "u6",
+        "u8",
+        "u11",
+        "u13",
+        "u18",
+        "u19",
+        "u20",
+        "u21",
+        "u27",
+        "u30"
+      ],
+      "excess": 0.2324809930412357,
+      "is_imputation": true,
+      "limit": 0.383547121826147,
+      "holds": true,
+      "slack": 0.15106612878491127,
+      "certified": true,
+      "time_s": 51.30346870422363,
+      "claim": "prop:eps      excess <= eps^LR"
+    },
+    "all_hold": true
+  }
 }
