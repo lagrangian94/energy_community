@@ -1028,7 +1028,7 @@ size it, and not the column generation, is what the proposed scheme mostly costs
 
 Row generation behaves oppositely. At $n=6$ it is the cheaper method, certifying every
 instance in $6.4$~s after $15$ coalition cuts. At $n=15$ it still certifies every instance,
-but the cost has grown by a factor of $150$, to $982$~s---twelve times the column generation
+but the cost has grown by a factor of $140$, to $886$~s---eleven times the column generation
 it would replace, which over the same interval grew by a factor of $2.7$. At $n=30$ it
 returns no certificate at all within the budget, on any of the $31$ days, and not because
 the stopping test is set too tightly: on the instance examined in detail it fails to
@@ -1058,8 +1058,8 @@ Grand-coalition MILP        & 1.0~s & 5.9~s & 32.2~s & 231.7~s \\
 Column generation           & 28.4~s & 78.2~s & 113.6~s & 164.8~s \\
 \midrule
 Row generation, certified   & $31/31$ & $31/31$ & $0/31$ & -- \\
-\quad time                  & 6.4~s & 982.0~s & $>3614$~s & -- \\
-\quad coalition cuts        & 15 & 234 & 128 & -- \\
+\quad time                  & 6.4~s & 886.1~s & $>3614$~s & -- \\
+\quad coalition cuts        & 15 & 216 & 128 & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
