@@ -556,8 +556,10 @@ def fairness_mode(egalitarian) -> Optional[str]:
     'range'    Kimms MP_I: min (max_i p_i - min_i p_i). An LP, so the objective value
                is determined but the ARGMIN generally is not -- see egalitarian_width.
     'variance' Fioriti et al. (2025) Fair Core with f = -variance, i.e. the Variance
-               Core of eq.(27): min sum_i (p_i - c(N)/n)^2. Efficiency pins the mean at
-               c(N)/n, so this objective IS n times the variance of the shares. Strictly
+               Core of eq.(27): min sum_i (y_i - v(N)/n)^2 over the SURPLUS shares
+               y_i = p_i - kappa_i of the zero-normalized game (Definition `def:game`).
+               Efficiency pins their mean at v(N)/n, so this objective IS n times the
+               variance of the shares. Strictly
                convex, hence a unique minimiser -- which is the whole point: the same
                allocation comes back whatever coalitions row generation happened to
                generate, and it is what makes the per-player numbers reportable.
@@ -685,11 +687,12 @@ class CoreComputation:
                 shares are least spread is selected,
 
                     min  P_hi - P_lo   s.t.  Σ_N p = c(N),  Σ_S p ≤ c(S) ∀S∈𝒮,
-                                             P_hi ≥ p_i,  P_lo ≤ p_i  ∀i.
+                                             P_hi ≥ y_i,  P_lo ≤ y_i  ∀i,
 
-                Minimisation drives P_hi down onto max_i p_i and P_lo up onto min_i p_i,
-                so the objective is the range whatever the sign of the shares -- ours are
-                costs, negative for a member that profits. There is no epsilon anywhere:
+                over the surplus shares y_i = p_i - kappa_i (see the note at the
+                objective). Minimisation drives P_hi down onto max_i y_i and P_lo up onto
+                min_i y_i, so the objective is the range whatever the sign of the shares
+                -- ours are costs, negative for a member that profits. There is no epsilon anywhere:
                 the efficiency row is the exact c(N) and every coalition row is strict, so
                 an infeasible master is not a failure but a proof that the core is empty
                 (the rows present are a subset of the core's, hence a relaxation of it).
@@ -738,23 +741,32 @@ class CoreComputation:
                 quicksum(self.payoff_vars[i] for i in self.players) == grand_coalition_cost,
                 name="efficiency"
             )
+        # BOTH fairness modes measure the dispersion of SURPLUS shares y_i = p_i -
+        # kappa_i, not of the raw bills p_i. Definition `def:game` zero-normalizes the
+        # game -- v(S) = c(S) - sum_{j in S} kappa_j in this cost convention -- so the
+        # egalitarian reference is an equal split of v(N) on top of each member's
+        # stand-alone value. On the raw shares it would instead call two members equally
+        # treated when one brought a wind farm and the other a heat pump. Only the
+        # OBJECTIVE moves: the feasible set is the same polytope in p, re-coordinated.
+        kappa = {i: self.coalition_costs[(i,)] for i in self.players}
+        y = {i: self.payoff_vars[i] - kappa[i] for i in self.players}
         if mode == 'range':
             p_hi, p_lo = self.range_vars
             for i in self.players:
-                self.master_model.addCons(p_hi >= self.payoff_vars[i], name=f"hi_{i}")
-                self.master_model.addCons(p_lo <= self.payoff_vars[i], name=f"lo_{i}")
+                self.master_model.addCons(p_hi >= y[i], name=f"hi_{i}")
+                self.master_model.addCons(p_lo <= y[i], name=f"lo_{i}")
         elif mode == 'variance':
             # SCIP takes no quadratic objective directly, so epigraph it: minimise q
-            # subject to sum_i (p_i - a)^2 <= q. The constraint is convex, so the
+            # subject to sum_i (y_i - a)^2 <= q. The constraint is convex, so the
             # relaxation is tight at the optimum and q equals the true objective.
-            a = grand_coalition_cost / len(self.players)
+            a = (grand_coalition_cost - sum(kappa.values())) / len(self.players)
             q = self.master_model.addVar(vtype="C", name="q", lb=0.0, obj=1.0)
             self.master_model.addCons(
-                quicksum((self.payoff_vars[i] - a) * (self.payoff_vars[i] - a)
-                         for i in self.players) <= q,
+                quicksum((y[i] - a) * (y[i] - a) for i in self.players) <= q,
                 name="variance_epigraph"
             )
-            print(f"Variance Core: minimising sum_i (p_i - {a:.4f})^2 over the core")
+            print(f"Variance Core: minimising sum_i (p_i - kappa_i - {a:.4f})^2 "
+                  f"over the core   [v(N)/n = {a:.4f}]")
         elif cost_of_stability:
             # Cost-of-stability: the epsilon slack v is an external subsidy sitting
             # on the grand coalition ONLY. In cost form the subsidy lowers the total
@@ -1132,10 +1144,11 @@ class CoreComputation:
                     # Both dispersion measures are read off the allocation rather than
                     # the solver's variables, so the two modes report the same pair of
                     # numbers and are directly comparable.
-                    a = self.coalition_costs[_grand] / len(self.players)
-                    self.egalitarian_range = max(payoffs.values()) - min(payoffs.values())
-                    self.egalitarian_variance = sum((payoffs[i] - a) ** 2
-                                                    for i in self.players)
+                    # Surplus shares, the coordinates both objectives are written in.
+                    y = {i: payoffs[i] - self.coalition_costs[(i,)] for i in self.players}
+                    a = sum(y.values()) / len(self.players)   # = v(N)/n by efficiency
+                    self.egalitarian_range = max(y.values()) - min(y.values())
+                    self.egalitarian_variance = sum((y[i] - a) ** 2 for i in self.players)
                     self.egalitarian_converged = True
                     print(f"\n{'='*70}")
                     print("EGALITARIAN CORE ELEMENT FOUND "
@@ -1144,7 +1157,7 @@ class CoreComputation:
                     print(f"Converged after {iteration} iterations")
                     print(f"Range max-min       = {self.egalitarian_range:.6f}")
                     print(f"Sum (p_i - mean)^2  = {self.egalitarian_variance:.6f}")
-                    print(f"Equal split c(N)/n = {a:.4f}")
+                    print(f"Equal split v(N)/n = {a:.4f}")
                     total = 0.0
                     for i in self.players:
                         print(f"  Player {i}: {payoffs[i]:.4f}")

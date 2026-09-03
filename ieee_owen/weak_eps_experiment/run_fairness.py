@@ -15,6 +15,12 @@ dispersion is unchanged by the sign flip to profits (deviations from the mean fl
 the mean), and unchanged by adding a constant to every member -- so chi^LR and the
 executed chi^LR - eps^LR*1 have the same spread and the choice between them is moot.
 
+Dispersion is measured on the SURPLUS shares y_i = p_i - kappa_i, not on the raw bills:
+the game is zero-normalized (Definition `def:game`), so the equal split that egalitarianism
+compares against is an equal split of v(N), not of c(N). That is a per-member shift, NOT
+a constant, so neither invariance above covers it -- both V(chi^LR) and the minimiser
+chi^VC move, and the numbers here supersede any produced before the normalization.
+
     python weak_eps_experiment/run_fairness.py --runs baseline_6p
     python weak_eps_experiment/run_fairness.py --runs baseline_15p --budget 3600
     python weak_eps_experiment/run_fairness.py --runs baseline_6p --modes variance,range
@@ -37,7 +43,7 @@ import run_multiday as RM
 from core import CoreComputation
 
 OUT = os.path.dirname(os.path.abspath(__file__))
-COLS = ['run', 'day', 'n_players', 'mode', 'converged', 'c_N', 'time_s', 'n_coalitions',
+COLS = ['run', 'day', 'n_players', 'mode', 'converged', 'c_N', 'v_N', 'time_s', 'n_coalitions',
         'range_core', 'var_core', 'range_owen', 'var_owen',
         'range_ratio', 'var_ratio', 'max_abs_diff', 'owen_in_core', 'owen_worst_excess']
 
@@ -45,10 +51,12 @@ COLS = ['run', 'day', 'n_players', 'mode', 'converged', 'c_N', 'time_s', 'n_coal
 VINTAGE_TOL = 1e-6
 
 
-def dispersion(alloc, players):
-    a = sum(alloc[i] for i in players) / len(players)
-    return (max(alloc[i] for i in players) - min(alloc[i] for i in players),
-            sum((alloc[i] - a) ** 2 for i in players))
+def dispersion(alloc, players, kappa):
+    """(range, variance) of the surplus shares y_i = p_i - kappa_i."""
+    y = {i: alloc[i] - kappa[i] for i in players}
+    a = sum(y.values()) / len(players)
+    return (max(y.values()) - min(y.values()),
+            sum((y[i] - a) ** 2 for i in players))
 
 
 def fairness_day(run, day, mode, budget):
@@ -68,6 +76,9 @@ def fairness_day(run, day, mode, budget):
     t = time.time() - t0
     converged = bool(getattr(cc, 'egalitarian_converged', False))
     c_N = cc.coalition_costs[tuple(sorted(players))]
+    # Free: CoreComputation solves every singleton in its constructor.
+    kappa = {i: cc.coalition_costs[(i,)] for i in players}
+    v_N = sum(kappa.values()) - c_N          # profit convention, >= 0 by superadditivity
 
     # Vintage guard: the Owen allocation sums to v^MIP(N) in cost form, which is the same
     # c(N) the core master is built on. If they disagree the two sides were computed
@@ -80,11 +91,11 @@ def fairness_day(run, day, mode, budget):
             f"`run_multiday.py --phase owen --runs {run['name']} --force`.")
 
     row = {'run': run['name'], 'day': day, 'n_players': len(players), 'mode': mode,
-           'converged': converged, 'c_N': c_N, 'time_s': round(t, 2),
+           'converged': converged, 'c_N': c_N, 'v_N': v_N, 'time_s': round(t, 2),
            'n_coalitions': len(cc.coalition_costs)}
     if converged:
-        r_c, v_c = dispersion(alloc, players)
-        r_o, v_o = dispersion(owen, players)
+        r_c, v_c = dispersion(alloc, players, kappa)
+        r_o, v_o = dispersion(owen, players, kappa)
         # Is the Owen point itself in the core? Over the coalitions this run generated --
         # a subset, so a nonpositive worst excess here is necessary, not sufficient.
         worst = max(sum(owen[i] for i in S) - c
@@ -95,6 +106,7 @@ def fairness_day(run, day, mode, budget):
                     'max_abs_diff': max(abs(owen[i] - alloc[i]) for i in players),
                     'owen_worst_excess': worst, 'owen_in_core': bool(worst <= 1e-6)})
         json.dump({'run': run['name'], 'day': day, 'mode': mode, 'c_N': c_N,
+                   'v_N': v_N, 'kappa_cost': kappa,
                    'core_alloc_cost': alloc, 'owen_alloc_cost': owen, **{k: row[k] for k in
                    ('range_core', 'var_core', 'range_owen', 'var_owen', 'max_abs_diff')}},
                   open(os.path.join(RM.run_dir(run), f'fair_{mode}_day{day}.json'), 'w'),

@@ -52,15 +52,17 @@ def load(n):
     d = os.path.join(OUT, RUN_OF[n])
     owen = os.path.join(d, 'owen.csv')
     rg = os.path.join(d, 'rowgen.csv')
+    kap = os.path.join(d, 'kappa.csv')
     return (pd.read_csv(owen) if os.path.exists(owen) else pd.DataFrame(),
-            pd.read_csv(rg) if os.path.exists(rg) else pd.DataFrame())
+            pd.read_csv(rg) if os.path.exists(rg) else pd.DataFrame(),
+            pd.read_csv(kap) if os.path.exists(kap) else pd.DataFrame())
 
 
 def col_results(n):
     """The tab:results column for size n, plus the day counts its caption needs."""
-    o, _ = load(n)
+    o, _, kp = load(n)
     if o.empty:
-        return ({k: '--' for k in ('vmip', 'omega', 'eps_lr', 'incore', 'eps_chi')}
+        return ({k: '--' for k in ('valN', 'vN', 'omega', 'eps_lr', 'incore', 'eps_chi')}
                 | {'days': 0, 'measured': 0, 'truncated': 0})
     ex = pd.to_numeric(o.get('stab_excess_owen', pd.Series(dtype=float)), errors='coerce')
     # Budget-truncated days are dropped from both separation rows. The asymmetry is the
@@ -87,7 +89,13 @@ def col_results(n):
         'days': len(o),
         'measured': int(measured),
         'truncated': n_trunc,
-        'vmip': fmt(geo(o['v_mip']), 1, thousands=True),
+        # val(DP_N) and v(N) are two different numbers since Definition `def:game`
+        # zero-normalized the game: v(N) = val(DP_N) - sum_j kappa_j, and kappa comes
+        # from weak_eps_experiment/run_kappa.py. The day-wise difference is taken
+        # BEFORE the geometric mean -- averaging the two rows separately and
+        # subtracting afterwards is a different (and wrong) number.
+        'valN': fmt(geo(o['v_mip']), 1, thousands=True),
+        'vN': fmt(geo(kp['v_N']), 1, thousands=True) if not kp.empty else '--',
         'omega': fmt(omega, 2),
         'eps_lr': fmt(omega / n, 2 if omega / n >= 0.1 else 3),
     }
@@ -105,7 +113,7 @@ def col_results(n):
 
 
 def col_runtime(n):
-    o, rg = load(n)
+    o, rg, _ = load(n)
     c = {'mip': '--', 'cg': '--', 'certified': '--', 'rg_time': '--', 'rg_cuts': '--'}
     if not o.empty:
         c['mip'] = fmt(geo(o['time_mip_s']), 1) + '~s'
@@ -142,7 +150,8 @@ def main():
     print(r'\toprule')
     print(f' & {hdr} \\\\')
     print(r'\midrule')
-    for key, label in [('vmip', r'$\vmip(N)$'),
+    for key, label in [('valN', r'$\vdp{N}$'),
+                       ('vN', r'$v(N)$'),
                        ('omega', r'$\omega^{\mathrm{LR}}$'),
                        ('eps_lr', r'$\varepsilon^{\mathrm{LR}}=\omega^{\mathrm{LR}}/n$')]:
         print(f'{label:<52}& ' + ' & '.join(f'${R[n][key]}$' if R[n][key] != '--' else '--'
