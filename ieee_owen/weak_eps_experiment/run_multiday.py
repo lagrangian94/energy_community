@@ -76,13 +76,18 @@ SEP_SOLVER = 'gurobi'
 # gap-corrected point), so a day costs at most twice this before it gives up and says so.
 STAB_TIME_LIMIT = 3600
 
-# 6-player config (u1..u6) — same as sensitivity_analysis_claude / analysis_mip
+# 6-player config (u1..u6) — as in sensitivity_analysis_claude / analysis_mip, except
+# for the hydrogen/heat storage noted below.
 P6 = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
 C6 = {
     "players_with_renewables": ['u1'], "players_with_solar": [], "players_with_wind": ['u1'],
     "players_with_electrolyzers": ['u2'], "players_with_heatpumps": ['u3'],
-    "players_with_elec_storage": ['u1'], "players_with_hydro_storage": ['u2'],
-    "players_with_heat_storage": ['u3'],
+    # No hydrogen / heat storage here: BASE6 sets storage_capacity_ratio_G = ratio_H =
+    # 0.0, so u2's and u3's units had zero energy capacity and never charged. Dropping
+    # them leaves every coalition value unchanged (v(N) identical to 1e-12 on days 1, 9
+    # and 17) and stops the data tables from claiming an asset the dispatch cannot use.
+    "players_with_elec_storage": ['u1'], "players_with_hydro_storage": [],
+    "players_with_heat_storage": [],
     "players_with_nfl_elec_demand": ['u4'], "players_with_nfl_hydro_demand": ['u5'],
     "players_with_nfl_heat_demand": ['u6'],
     "players_with_fl_elec_demand": ['u2', 'u3'],

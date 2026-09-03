@@ -45,7 +45,7 @@ Parameter & Value & Unit & Note \\
 \multicolumn{4}{@{}l}{\emph{Market and horizon}} \\
 \quad Horizon $|T|$ & 24 & h & hourly resolution \\
 \quad Carriers $|K|$ & 3 & -- & electricity, H$_2$, heat \\
-\quad Coupling rows $m=(|K|+3)|T|$ & 144 & -- & fixed by the market design \\
+\quad Coupling rows $m=(2|K|+3)|T|$ & 216 & -- & fixed by the market design \\
 \quad Households & 700 & -- & demand scaling of the community \\
 \quad Import/export price ratio & 1.5 & -- & $\pi^{\mathrm{imp}}/\pi^{\mathrm{exp}}$ \\
 \quad H$_2$ reference price & 3.33 & \euro/kg & 5000/1500 \\
@@ -70,8 +70,7 @@ Parameter & Value & Unit & Note \\
 \quad Power rating & 0.25 & -- & $\times$ the owner\'s asset capacity \\
 \quad Energy capacity & 3.0 & -- & $\times$ power rating \\
 \quad Initial state of charge & 0.2 & -- & fraction of energy capacity \\
-\quad Round-trip efficiency, E / H$_2$ & 0.95 & -- & charge and discharge \\
-\quad Round-trip efficiency, heat & 0.90 & -- & charge and discharge \\
+\quad Round-trip efficiency & 0.90 & -- & each way, every carrier \\
 \midrule
 \multicolumn{4}{@{}l}{\emph{Reserve and peak coupling}} \\
 \quad Reserve price $\pi^{\mathrm{res}}$ & 56 & \euro/MW$\cdot$h & Nordic FCR-N, DK2 \\
@@ -139,8 +138,8 @@ Solar & -- & 3 (20.0\%) & 8 (26.7\%) & 16 (26.7\%) \\
 ELZ & 1 (16.7\%) & 3 (20.0\%) & 6 (20.0\%) & 12 (20.0\%) \\
 HP & 1 (16.7\%) & 3 (20.0\%) & 4 (13.3\%) & 8 (13.3\%) \\
 E-sto & 1 (16.7\%) & 4 (26.7\%) & 7 (23.3\%) & 14 (23.3\%) \\
-H$_2$-sto & 1 (16.7\%) & 2 (13.3\%) & 3 (10.0\%) & 6 (10.0\%) \\
-Q-sto & 1 (16.7\%) & 1 (6.7\%) & 2 (6.7\%) & 4 (6.7\%) \\
+H$_2$-sto & -- & 2 (13.3\%) & 3 (10.0\%) & 6 (10.0\%) \\
+Q-sto & -- & 1 (6.7\%) & 2 (6.7\%) & 4 (6.7\%) \\
 $D^{E}$ & 1 (16.7\%) & 4 (26.7\%) & 10 (33.3\%) & 20 (33.3\%) \\
 $D^{H_2}$ & 1 (16.7\%) & 2 (13.3\%) & 6 (20.0\%) & 12 (20.0\%) \\
 $D^{Q}$ & 1 (16.7\%) & 3 (20.0\%) & 7 (23.3\%) & 14 (23.3\%) \\
@@ -228,9 +227,9 @@ u34 &  &  &  &  &  &  &  & $\bullet$ &  &  & 1.0 \\
 u35 &  &  &  &  &  &  &  &  & $\bullet$ &  & 1.0 \\
 u36 &  &  &  &  &  &  &  &  &  & $\bullet$ & 1.0 \\
 u37 &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  &  & renewable 0.7, ess 1.3 \\
-u38 &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & els 0.9, h2 1.4 \\
-u39 &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & hp 1.3, heat 0.8 \\
-u40 & $\bullet$ &  & $\bullet$ &  & $\bullet$ & $\bullet$ &  &  &  &  & renewable 0.7, els 1.1, ess 1.2, h2 0.8 \\
+u38 &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & els 0.9 \\
+u39 &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & hp 1.3 \\
+u40 & $\bullet$ &  & $\bullet$ &  & $\bullet$ & $\bullet$ &  &  &  &  & renewable 0.7, els 1.1, ess 1.2 \\
 u41 &  & $\bullet$ &  &  & $\bullet$ &  &  & $\bullet$ &  &  & renewable 1.4, ess 0.6 \\
 u42 &  & $\bullet$ &  &  &  &  &  & $\bullet$ &  &  & renewable 0.5 \\
 u43 &  &  &  &  &  &  &  &  & $\bullet$ &  & 1.0 \\
@@ -238,9 +237,9 @@ u44 &  &  &  & $\bullet$ &  &  &  &  &  & $\bullet$ & hp 1.2 \\
 u45 &  &  &  &  &  &  &  & $\bullet$ &  & $\bullet$ & 1.0 \\
 u46 & $\bullet$ &  &  &  &  &  &  &  &  &  & renewable 1.4 \\
 u47 &  & $\bullet$ &  &  &  &  &  &  &  &  & renewable 0.6 \\
-u48 &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & els 0.7, h2 0.9 \\
+u48 &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  &  & els 0.7 \\
 u49 &  &  & $\bullet$ &  &  &  &  &  &  &  & els 1.3 \\
-u50 &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & hp 0.9, heat 1.2 \\
+u50 &  &  &  & $\bullet$ &  &  & $\bullet$ &  &  &  & hp 0.9 \\
 u51 &  & $\bullet$ & $\bullet$ &  &  &  &  &  &  &  & renewable 1.1, els 0.5 \\
 u52 &  & $\bullet$ &  &  & $\bullet$ &  &  & $\bullet$ &  &  & renewable 0.9, ess 1.4 \\
 u53 &  & $\bullet$ &  &  &  &  &  & $\bullet$ &  & $\bullet$ & renewable 1.2 \\

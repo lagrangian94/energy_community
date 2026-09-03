@@ -37,8 +37,15 @@ import large_community as LC
 CONFIGURATION_6 = {
     'players_with_wind': ['u1'], 'players_with_solar': [],
     'players_with_electrolyzers': ['u2'], 'players_with_heatpumps': ['u3'],
-    'players_with_elec_storage': ['u1'], 'players_with_hydro_storage': ['u2'],
-    'players_with_heat_storage': ['u3'],
+    # u2 and u3 hold NO hydrogen / heat storage. They did once, but the 6-prosumer
+    # parameter set carries storage_capacity_ratio_G = ratio_H = 0.0 (run_multiday.BASE6),
+    # so those units had zero energy capacity and never moved -- the tables reported an
+    # asset the dispatch could not use. Removing them changes no coalition value
+    # (verified: v(N) identical to 1e-12 on days 1, 9 and 17); the larger communities set
+    # the ratios to 3.0 and their hydrogen/heat storage IS active, which is why the counts
+    # are nonzero from n=15 on.
+    'players_with_elec_storage': ['u1'], 'players_with_hydro_storage': [],
+    'players_with_heat_storage': [],
     'players_with_nfl_elec_demand': ['u4'], 'players_with_nfl_hydro_demand': ['u5'],
     'players_with_nfl_heat_demand': ['u6'],
 }
@@ -157,7 +164,13 @@ def tab_parameters():
         (r'\multicolumn{4}{@{}l}{\emph{Market and horizon}}', '', '', ''),
         (r'\quad Horizon $|T|$', '24', 'h', 'hourly resolution'),
         (r'\quad Carriers $|K|$', '3', '--', r'electricity, H$_2$, heat'),
-        (r'\quad Coupling rows $m=(|K|+3)|T|$', '144', '--', 'fixed by the market design'),
+        # (2|K|+3)|T|, not (|K|+3)|T|: the manuscript stacks the coupling rows in
+        # <= form, so each of the |K| carrier balances is a PAIR of inequalities (draft
+        # sec. III-B, and the m of Proposition `prop:eps`). The master in solver.py keeps
+        # them as |K| equalities, which is the same system written differently -- but the
+        # number quoted here has to be the manuscript's, or the O(|T|/n) bound is quoted
+        # against a different m than it was proved for.
+        (r'\quad Coupling rows $m=(2|K|+3)|T|$', '216', '--', 'fixed by the market design'),
         (r'\quad Households', '700', '--', 'demand scaling of the community'),
         (r'\quad Import/export price ratio', '1.5', '--', r'$\pi^{\mathrm{imp}}/\pi^{\mathrm{exp}}$'),
         (r'\quad H$_2$ reference price', '3.33', r'\euro/kg', '5000/1500'),
@@ -184,8 +197,12 @@ def tab_parameters():
         (r'\quad Power rating', '0.25', '--', r'$\times$ the owner\'s asset capacity'),
         (r'\quad Energy capacity', '3.0', '--', r'$\times$ power rating'),
         (r'\quad Initial state of charge', '0.2', '--', 'fraction of energy capacity'),
-        (r'\quad Round-trip efficiency, E / H$_2$', '0.95', '--', 'charge and discharge'),
-        (r'\quad Round-trip efficiency, heat', '0.90', '--', 'charge and discharge'),
+        # 0.90, not the 0.95 that nu_ch_E / nu_ch_G carry. The state-of-charge
+        # balance reads params['nu_ch'] (compact_utility.py, electricity and hydrogen),
+        # a key setup_lem_parameters never sets, so it takes the 0.9 default; heat reads
+        # nu_ch_H, which is 0.9 anyway. The 0.95 entries reach only the throughput cost
+        # terms, and c_sto_E = c_sto_G = c_sto_H = 0, so they touch nothing at all.
+        (r'\quad Round-trip efficiency', '0.90', '--', 'each way, every carrier'),
         (r'\midrule', '', '', ''),
         (r'\multicolumn{4}{@{}l}{\emph{Reserve and peak coupling}}', '', '', ''),
         (r'\quad Reserve price $\pi^{\mathrm{res}}$', '56', r'\euro/MW$\cdot$h',
@@ -259,7 +276,13 @@ def tab_matrix(n, players, cfg, label, caption, mult=None):
         marks = [(r'$\bullet$' if has(cfg, k, p) else '') for k, _, _ in ASSETS]
         row = f'{p} & ' + ' & '.join(marks)
         if mult:
-            m = mult.get(p)
+            # 'h2' and 'heat' are dropped: apply_60player_overrides scales
+            # storage_{power,capacity}_{G,H}_<player>, and setup_lem_parameters creates
+            # those keys for electricity only -- hydrogen and heat storage are sized once
+            # for the whole community. The guard in the override makes the scaling a
+            # silent no-op, so printing it would report a differentiation that the
+            # dispatch never sees.
+            m = {k: v for k, v in (mult.get(p) or {}).items() if k not in ('h2', 'heat')}
             row += ' & ' + (', '.join(f'{k} {v}' for k, v in m.items()) if m else '1.0')
         out.append(row + r' \\')
     out += [r'\bottomrule', r'\end{tabular}', r'\end{table}', '']
