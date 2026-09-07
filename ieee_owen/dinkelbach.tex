@@ -1,0 +1,194 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1in]{geometry}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vmip}{v^{\mathrm{MIP}}}
+\newcommand{\ssum}{\textstyle\sum}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+
+\title{Measuring $\varepsilon(\chi)$: a mixed-integer fractional program\\ and its Dinkelbach solution}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{The quantity to be measured}
+
+Fix an allocation $\chi\in\R^{n}$ of the grand coalition's value among the members
+$N=\{1,\dots,n\}$. Its worst per-capita excess is
+\begin{equation}
+\varepsilon(\chi)\;=\;\max_{\emptyset\neq S\subsetneq N}\
+\frac{\vmip(S)-\ssum_{j\in S}\chi_j}{|S|},
+\label{eq:pcexcess}
+\end{equation}
+so that $\varepsilon(\chi)\le 0$ certifies $\chi\in\mathcal{C}(v)$ and, more generally,
+$\varepsilon(\chi)\le\bar\varepsilon$ certifies $\chi\in\mathcal{C}_{\bar\varepsilon}(v)$.
+
+Two things make \eqref{eq:pcexcess} hard. The feasible set has $2^{n}-2$ elements, and
+each evaluation of the numerator requires $\vmip(S)$, the optimal value of the coalition's
+unit-commitment dispatch. Enumeration is therefore out of reach, and the maximisation
+must be carried out implicitly.
+
+\section{A single mixed-integer fractional program}
+
+Introduce $z\in\{0,1\}^{n}$ with $S(z)=\{j: z_j=1\}$, and let $x$ collect the dispatch
+variables, continuous and binary, of the community model. Write $X(z)$ for the dispatch
+feasible set in which every variable belonging to a member $j$ with $z_j=0$ is forced to
+zero, and $\pi^{\top}x$ for the dispatch objective, so that
+\begin{equation}
+\vmip(S(z))\;=\;\max_{x\in X(z)}\ \pi^{\top}x .
+\label{eq:inner}
+\end{equation}
+
+The nesting in \eqref{eq:pcexcess} collapses. Because the numerator contains
+$\vmip(S)$ with a positive sign, and $\vmip(S)$ is itself a maximum, the outer maximisation
+over $S$ and the inner maximisation over $x$ are maxima of the same expression and may be
+merged into one. Putting
+\begin{equation}
+\mathcal{N}(z,x)\;=\;\pi^{\top}x-\ssum_{j\in N}\chi_j z_j,
+\qquad
+\mathcal{D}(z)\;=\;\ssum_{j\in N} z_j,
+\label{eq:numden}
+\end{equation}
+and
+\begin{equation}
+\Omega\;=\;\Big\{(z,x)\ :\ z\in\{0,1\}^{n},\ \ 1\le\ssum_{j\in N}z_j\le n-1,\ \ x\in X(z)\Big\},
+\label{eq:omega}
+\end{equation}
+we obtain
+\begin{equation}
+\varepsilon(\chi)\;=\;\max_{(z,x)\in\Omega}\ \frac{\mathcal{N}(z,x)}{\mathcal{D}(z)} .
+\label{eq:mifp}
+\end{equation}
+The bounds in \eqref{eq:omega} exclude $S=\emptyset$ and $S=N$ and, incidentally, guarantee
+$\mathcal{D}(z)\ge 1>0$ throughout, which is what the fractional programme requires.
+
+Problem \eqref{eq:mifp} is a \emph{mixed-integer linear fractional program}. Both
+$\mathcal{N}$ and $\mathcal{D}$ are affine, the deactivation of a non-member is expressed by
+big-$M$ inequalities rather than by products $z_j x_j$, and the nonlinear conversion
+efficiencies are represented by a disaggregated piecewise-linear formulation with segment
+binaries. No product of two variables appears anywhere, so $\Omega$ is a mixed-integer
+\emph{linear} set. This is not a matter of convenience: it is what makes the certificate of
+Section~\ref{sec:conv} available, since a global maximum over $\Omega$ is what
+branch-and-bound delivers and what a nonconvex mixed-integer nonlinear formulation would not.
+
+\section{The Dinkelbach transform}
+
+Following Dinkelbach, associate with \eqref{eq:mifp} the parametric problem
+\begin{equation}
+F(\lambda)\;=\;\max_{(z,x)\in\Omega}\ \Big\{\mathcal{N}(z,x)-\lambda\,\mathcal{D}(z)\Big\},
+\qquad \lambda\in\R .
+\label{eq:Flambda}
+\end{equation}
+
+\begin{proposition}\label{prop:F}
+$F$ is convex, strictly decreasing, and has a unique root, which is $\varepsilon(\chi)$:
+\[
+F(\lambda)>0\iff\lambda<\varepsilon(\chi),\qquad
+F(\lambda)=0\iff\lambda=\varepsilon(\chi),\qquad
+F(\lambda)<0\iff\lambda>\varepsilon(\chi).
+\]
+\end{proposition}
+
+\begin{proof}
+For fixed $(z,x)$ the map $\lambda\mapsto\mathcal{N}(z,x)-\lambda\mathcal{D}(z)$ is affine
+with slope $-\mathcal{D}(z)\le-1$. $F$ is the pointwise maximum of these affine functions
+over the finite set $\Omega$, hence convex and strictly decreasing. For the root, note that
+$F(\lambda)\ge 0$ iff some $(z,x)\in\Omega$ has
+$\mathcal{N}(z,x)/\mathcal{D}(z)\ge\lambda$, i.e.\ iff $\varepsilon(\chi)\ge\lambda$, and
+$F(\lambda)\le 0$ iff every $(z,x)$ has
+$\mathcal{N}(z,x)/\mathcal{D}(z)\le\lambda$, i.e.\ iff $\varepsilon(\chi)\le\lambda$.
+\end{proof}
+
+Computing $\varepsilon(\chi)$ is therefore root-finding on $F$, and Newton's method on a
+convex decreasing function is exactly Dinkelbach's iteration:
+
+\begin{enumerate}
+\item Choose any $(z_0,x_0)\in\Omega$ and set
+      $\lambda_1=\mathcal{N}(z_0,x_0)/\mathcal{D}(z_0)$.
+\item For $k=1,2,\dots$ solve \eqref{eq:Flambda} at $\lambda_k$ to global optimality,
+      obtaining a maximiser $(z_k,x_k)$ and the value $F(\lambda_k)$.
+\item If $F(\lambda_k)\le 0$, stop: $\lambda_k=\varepsilon(\chi)$.
+      Otherwise set $\lambda_{k+1}=\mathcal{N}(z_k,x_k)/\mathcal{D}(z_k)$ and repeat.
+\end{enumerate}
+
+\section{The parametric subproblem is the original separation}
+
+The step that makes the scheme practical is that \eqref{eq:Flambda} is not a new model.
+Substituting \eqref{eq:numden},
+\begin{equation}
+\mathcal{N}(z,x)-\lambda\,\mathcal{D}(z)
+\;=\;\pi^{\top}x-\ssum_{j\in N}\chi_j z_j-\lambda\ssum_{j\in N}z_j
+\;=\;\pi^{\top}x-\ssum_{j\in N}\big(\chi_j+\lambda\big)z_j .
+\label{eq:shift}
+\end{equation}
+Because $|S|$ is linear in $z$, the term $\lambda\mathcal{D}(z)$ is absorbed into the
+objective coefficients of the very binaries that define $S$. The parametric problem at
+$\lambda$ is thus the raw-excess separation
+\[
+\max_{S\subseteq N}\ \Big\{\vmip(S)-\ssum_{j\in S}\chi'_j\Big\}
+\qquad\text{with}\qquad \chi'_j=\chi_j+\lambda ,
+\]
+i.e.\ the same mixed-integer program with the same variables, constraints and big-$M$
+structure, differing only in $n$ objective coefficients, each shifted by a common $\lambda$.
+Every Dinkelbach iteration therefore costs one separation solve and no more.
+
+\begin{remark}
+A denominator nonlinear in $z$ would break this. The reduction in \eqref{eq:shift} is
+available precisely because the cardinality $|S|=\ssum_j z_j$ is affine in the incidence
+vector.
+\end{remark}
+
+\section{Convergence and what an early stop yields}\label{sec:conv}
+
+\begin{proposition}
+If every parametric problem \eqref{eq:Flambda} is solved to global optimality, the sequence
+$(\lambda_k)$ is strictly increasing until it stops, satisfies $\lambda_k\le\varepsilon(\chi)$
+for all $k$, and reaches $\varepsilon(\chi)$ after finitely many iterations.
+\end{proposition}
+
+\begin{proof}
+Each $\lambda_{k+1}$ is the ratio attained by the feasible point $(z_k,x_k)$, so
+$\lambda_{k+1}\le\varepsilon(\chi)$ by \eqref{eq:mifp}. If the method does not stop at
+iteration $k$ then $F(\lambda_k)>0$, that is
+$\mathcal{N}(z_k,x_k)-\lambda_k\mathcal{D}(z_k)>0$, and dividing by
+$\mathcal{D}(z_k)\ge 1$ gives $\lambda_{k+1}>\lambda_k$. Since $\Omega$ contains finitely
+many distinct values of $z$, and hence the ratios in \eqref{eq:mifp} take finitely many
+values, a strictly increasing sequence drawn from them terminates; at termination
+$F(\lambda_k)\le 0$, which with $\lambda_k\le\varepsilon(\chi)$ and
+Proposition~\ref{prop:F} forces $\lambda_k=\varepsilon(\chi)$.
+\end{proof}
+
+Two consequences are worth stating separately, because they govern how a computed number
+may be read.
+
+\begin{remark}[One-sidedness]
+Every iterate is the ratio of an explicitly exhibited coalition, so
+$\lambda_k\le\varepsilon(\chi)$ holds whether or not the iteration ran to termination. A
+value returned by an interrupted run is therefore a valid \emph{lower} bound on
+$\varepsilon(\chi)$ and nothing more. Consequently $\lambda_k>\bar\varepsilon$ refutes
+$\chi\in\mathcal{C}_{\bar\varepsilon}(v)$ even from an interrupted run, whereas
+$\lambda_k\le\bar\varepsilon$ establishes membership only if the run terminated. A
+nonpositive value read off a truncated measurement proves nothing.
+\end{remark}
+
+\begin{remark}[Where global optimality is needed]
+The proof uses global optimality of \eqref{eq:Flambda} only in the stopping test: the
+inference $F(\lambda_k)\le 0\Rightarrow\lambda_k=\varepsilon(\chi)$ fails if the reported
+$F(\lambda_k)$ is merely a local or truncated maximum, since some unexplored
+$(z,x)$ may still carry a larger ratio. Monotonicity and the lower-bound property survive
+regardless, because they rest only on feasibility of the iterates.
+\end{remark}
+
+\begin{remark}[Sign convention]
+The formulation above follows the manuscript, in which $\vmip$ is a value to be maximised
+and a coalition blocks when $\vmip(S)>\ssum_{j\in S}\chi_j$. Under the cost convention, in
+which values are negative for profit and a coalition blocks when it is charged more than it
+would pay alone, the numerator reads $\ssum_{j\in S}\chi_j-c(S)$ and the shift in
+\eqref{eq:shift} becomes $\chi'_j=\chi_j-\lambda$. The two statements are equivalent.
+\end{remark}
+
+\end{document}
