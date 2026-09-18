@@ -823,32 +823,57 @@ class StochasticMaster:
         return out
 
 
-def _sar_family(kind, t, omegas, probs):
-    return ('S', kind, t, tuple(omegas)), [((kind, t, w), probs[w]) for w in omegas]
+def _sar_family(kind, ts, omegas, probs):
+    """One aggregated row: sum over the hours ts and scenarios omegas, rho-weighted.
+
+    The weights are the scenario probabilities, not the plain average of Costa et
+    al.: that makes the implied price pi_{k,t,omega} / rho_omega common to the
+    scenarios in the set, which is the smoothness we expect at optimality.
+    """
+    ts, omegas = tuple(sorted(ts)), tuple(sorted(omegas))
+    return (('S', kind, ts, omegas),
+            [((kind, t, w), probs[w]) for t in ts for w in omegas])
 
 
 def solve_dwr_sar(players, T, scenarios, params, init_vals=None, tol=1e-6,
-                  max_phases=100, **kw):
-    """(DWR_N^Omega) by dyn-SAR: start from the probability-weighted average rows.
+                  max_phases=200, sar_block=1, sar_cap=1.0, **kw):
+    """(DWR_N^Omega) by dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022).
 
-    Phase 1 keeps one row per (kind, t), sum_omega rho_omega * row_{kind,t,omega}, a
-    relaxation of the master with |Omega| times fewer linking rows whose duals give
-    every scenario the same price. Each phase is solved by column generation to
-    convergence; the original rows it violates are then grouped per (kind, t) by the
-    sign of their residual and added as new weighted rows, falling back to single
-    scenarios when a group is already present. It stops when no original row is
-    violated: the solution is then feasible for the original master and optimal for
-    a relaxation of it, and pi = sum_S w gamma_S is an optimal dual (eq. 13 of Costa
-    et al.), which is what Algorithm S1 reads.
+    Phase 1 keeps one row per (kind, hour block), rho-weighted over the block's
+    hours and every scenario: a relaxation of the master with far fewer linking
+    rows, whose duals are common to the rows inside a set. Each phase is solved by
+    column generation to convergence; the original rows the solution violates are
+    then grouped and added as finer aggregated rows, and the next phase starts from
+    the columns already generated. It stops when no original row is violated, so
+    the solution is feasible for the original master while optimal for a relaxation
+    of it, and pi = sum_S w gamma_S is an optimal dual (their eq. 13) -- which is
+    what Algorithm S1 reads. The Lagrangian bound and the smoothing center live in
+    the space of the original rows and carry over from phase to phase.
 
-    The Lagrangian bound and the smoothing center live in the space of the original
-    rows, so both carry over from phase to phase.
+    Sets are split gradually, (kind, block) -> (kind, block, one sign) ->
+    (kind, hour, one sign) -> single row, and at most `sar_cap` of the original
+    rows are added per round, largest violation first.
+
+    MEASURED, and the reason this is off by default. On the 6-prosumer instance at
+    |Omega| = 3 (Gurobi pricing, otherwise identical settings), plain column
+    generation took 831 iterations; dyn-SAR with one row per (kind, hour) over the
+    scenarios and every violated row added at once (sar_block=1, sar_cap=1.0, the
+    defaults here) took 6256; the paper's own policy (sar_block=6, sar_cap=0.05)
+    passed 17 772 without finishing, and without smoothing 35 197 while still in
+    phase 3. Each phase re-converges its own column generation, and the last phase
+    still pays the degenerate plateau in full -- 4132 of those 6256 iterations, 99%
+    of them with the RMP value frozen. The paper's gains come from cheaper master
+    reoptimizations, which cannot pay here: the master LP is 4% of the run and the
+    pricing MILPs are 87%, so multiplying the pricing calls is the wrong trade.
     """
     probs = [p for p, _ in scenarios]
-    S = range(len(scenarios))
+    S = list(range(len(scenarios)))
     proto = StochasticMaster(players, T, scenarios, params, **kw)
-    kinds = sorted({(k, t) for k, t, _ in proto.row_keys}, key=str)
-    families = dict(_sar_family(k, t, list(S), probs) for k, t in kinds)
+    blocks = reserve_blocks(T, sar_block)
+    block_of_t = {t: i for i, blk in enumerate(blocks) for t in blk}
+    kinds = sorted({k for k, _, _ in proto.row_keys})
+    families = dict(_sar_family(k, blk, S, probs) for k in kinds for blk in blocks)
+    cap = max(1, int(sar_cap * len(proto.row_keys)))
     subs = proto.subs
     master, cols, phases = None, None, []
     t0 = time.time()
@@ -874,23 +899,28 @@ def solve_dwr_sar(players, T, scenarios, params, init_vals=None, tol=1e-6,
         cols = [c for u in master.players for c in master.columns[u]]
         if not viol:
             break
-        groups = {}
+        # candidate sets, coarsest first; a set already present is split further
+        cand = {}
         for (k, t, w), r in viol.items():
-            groups.setdefault((k, t, r > 0), []).append(w)
-        for (k, t, _), omegas in groups.items():
-            name, members = _sar_family(k, t, sorted(omegas), probs)
-            if name not in families:
-                families[name] = members
-            else:
-                for w in omegas:
-                    n1, m1 = _sar_family(k, t, [w], probs)
-                    families.setdefault(n1, m1)
+            sgn = r > 0
+            for name, members in (_sar_family(k, blocks[block_of_t[t]], 
+                                              [x for x in S], probs),
+                                  _sar_family(k, blocks[block_of_t[t]], [w], probs),
+                                  _sar_family(k, [t], [w], probs)):
+                if name not in families:
+                    key = (name, sgn)
+                    cur = cand.get(key)
+                    cand[key] = (max(cur[0], abs(r)) if cur else abs(r), name, members)
+                    break
+        for _, name, members in sorted(cand.values(), reverse=True)[:cap]:
+            families[name] = members
     else:
         raise RuntimeError(f'dyn-SAR: rows still violated after {max_phases} phases')
     res['time'] = time.time() - t0
     res['iterations'] = master.iteration
     res['sar'] = {'phases': phases, 'final_rows': len(families),
-                  'original_rows': len(proto.row_keys)}
+                  'original_rows': len(proto.row_keys), 'block': sar_block,
+                  'cap': cap}
     res['doi'] = {'used': False}
     return res, master
 
@@ -1050,7 +1080,8 @@ def run(args):
 
     print('\n[2] column generation (DWR_N^Omega)')
     solver = solve_dwr_sar if args.sar else solve_dwr
-    extra = {} if args.sar else {'doi': args.doi}
+    extra = ({'sar_block': args.sar_block, 'sar_cap': args.sar_cap} if args.sar
+             else {'doi': args.doi})
     dw, master = solver(players, T, scen, base, **extra,
                            init_vals=None if args.cold_start else ef['vals'],
                            time_limit=args.cg_time_limit,
@@ -1142,7 +1173,12 @@ def main():
     ap.add_argument('--cg-gap', type=float, default=1e-6,
                     help='relative CG tolerance (column admission and LB >= RMP stop)')
     ap.add_argument('--sar', action='store_true',
-                    help='dyn-SAR: start from probability-weighted scenario rows')
+                    help='dyn-SAR: start from aggregated (block, scenario) rows')
+    ap.add_argument('--sar-block', type=int, default=1,
+                    help='hours per aggregated row in the first dyn-SAR phase '
+                         '(6 with --sar-cap 0.05 is the policy of Costa et al.)')
+    ap.add_argument('--sar-cap', type=float, default=1.0,
+                    help='rows added per dyn-SAR round, as a share of the original rows')
     ap.add_argument('--skip-standalone', action='store_true',
                     help='stop after Algorithm S1 (no stand-alone solves)')
     ap.add_argument('--no-smoothing', action='store_true',
