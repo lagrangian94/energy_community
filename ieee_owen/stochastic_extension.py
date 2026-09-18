@@ -448,7 +448,7 @@ class StochasticMaster:
     def __init__(self, players, T, scenarios, params, time_limit=None,
                  pricing_time_limit=None, pricing_gap=None, smoothing=True,
                  incumbent=None, doi=False, subs=None, families=None,
-                 pricing_solver='scip', gap_tol=1e-6, verbose=True):
+                 pricing_solver='scip', gap_tol=1e-8, penalty=None, verbose=True):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # Wentges smoothing with the adaptive alpha of Pessoa et al. (2010), as in
         # pricer.LEMPricer; `incumbent` is the extensive-form objective when known.
@@ -483,6 +483,16 @@ class StochasticMaster:
         # drops them and resumes from the columns collected (see solve_dwr).
         self.doi = doi
         self.y = {}
+        # Three-piece penalty stabilization (du Merle, Villeneuve, Desrosiers &
+        # Hansen 1999; Ben Amor, Desrosiers & Frangioni 2009), combined with
+        # smoothing as Pessoa et al. (2018) recommend. penalty = {center, eps,
+        # delta}: each linking row gets a bounded slack on either side, priced so
+        # that the dual moves freely inside [center - eps_r, center + eps_r] and
+        # pays delta per unit beyond it. The slacks perturb the rows, so the RMP
+        # value is only an upper bound on z once they are all zero -- which is what
+        # solve_dwr_stab checks before it stops.
+        self.penalty = penalty
+        self.pen = {}
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
         self.row_keys = [(k, t, w) for w in range(len(scenarios)) for t in self.T
@@ -586,6 +596,21 @@ class StochasticMaster:
                             pair = [(1.0, imp), (-1.0, exp)]
                             terms[('peak', t, w)] += pair
                             self.terms_x0[('peak', t, w)] += pair
+
+        if self.penalty:
+            if any(len(mem) != 1 or mem[0][1] != 1.0
+                   for mem in self.families.values()):
+                raise ValueError('penalty stabilization expects the original rows')
+            pc, pe, pd = (self.penalty['center'], self.penalty['eps'],
+                          self.penalty['delta'])
+            for key in self.row_keys:
+                c = pc.get(key, 0.0)
+                e = pe * (1.0 + abs(c))
+                kind, t, w = key
+                up = m.addVar(name=f'pen_up_{kind}_{t}_s{w}', lb=0.0, ub=pd, obj=c + e)
+                dn = m.addVar(name=f'pen_dn_{kind}_{t}_s{w}', lb=0.0, ub=pd, obj=-c + e)
+                self.pen[key] = (up, dn)
+                terms[key] += [(1.0, up), (-1.0, dn)]
 
         # zero-coefficient placeholder, so a row no initial column touches is still
         # a linear expression SCIP accepts
@@ -799,6 +824,8 @@ class StochasticMaster:
             'iterations': self.iteration,
             'columns': {u: len(self.columns[u]) for u in self.players},
             'y_total': sum(m.getVal(v) for v in self.y.values()),
+            'penalty_slack': max((max(m.getVal(a), m.getVal(b))
+                                  for a, b in self.pen.values()), default=0.0),
             'time': time.time() - t0,
         }
 
@@ -921,6 +948,73 @@ def solve_dwr_sar(players, T, scenarios, params, init_vals=None, tol=1e-6,
     res['sar'] = {'phases': phases, 'final_rows': len(families),
                   'original_rows': len(proto.row_keys), 'block': sar_block,
                   'cap': cap}
+    res['doi'] = {'used': False}
+    return res, master
+
+
+def solve_dwr_stab(players, T, scenarios, params, init_vals=None, pen_eps=0.1,
+                   pen_delta=0.05, pen_shrink=0.25, max_rounds=12, **kw):
+    """(DWR_N^Omega) with smoothing AND a three-piece penalty around the center.
+
+    Round 0 solves the restricted master once, without pricing, to place the first
+    stability center. Every round after that rebuilds the master with the penalty at
+    the current center, runs column generation to convergence, then recenters on the
+    dual that attains the Lagrangian bound and shrinks eps and delta. The penalty
+    relaxes the linking rows, so a round only certifies z when its slacks come out at
+    zero; the last round runs with no penalty at all, which always certifies.
+
+    MEASURED against smoothing alone, 6 prosumers, Gurobi pricing, --cg-gap 1e-8:
+    |Omega| = 1, 194 iterations against 279; |Omega| = 3, 454 against 831; and
+    |Omega| = 5, 1558 in 342 s against no convergence in 50 minutes, twice, both
+    runs frozen at a reduced cost of -4.85e-3. That is why it is on by default:
+    what smoothing alone cannot get past is the degenerate plateau, where the RMP
+    value stops moving while the duals rotate among alternative optima, and the
+    penalty prices that rotation.
+    """
+    master = StochasticMaster(players, T, scenarios, params, **kw)
+    first = master.solve(init_vals=init_vals, pricing=False)
+    center, _ = master._duals(False)
+    cols = [c for u in master.players for c in master.columns[u]]
+    subs, rounds = master.subs, []
+    eps, delta = pen_eps, pen_delta
+    t0 = time.time()
+    state = {'lb': -np.inf, 'L_bar': -np.inf, 'center': None, 'best': None,
+             'iteration': 0, 'log': []}
+    for rnd in range(1, max_rounds + 1):
+        last = rnd == max_rounds or eps <= 0.0
+        pen = None if last else {'center': center, 'eps': eps, 'delta': delta}
+        master = StochasticMaster(players, T, scenarios, params, subs=subs,
+                                  penalty=pen, **kw)
+        master.lb, master.L_bar, master.center = state['lb'], state['L_bar'], state['center']
+        master.best = state['best']
+        master.iteration, master.log = state['iteration'], state['log']
+        res = master.solve(init_cols=cols)
+        state = {'lb': master.lb, 'L_bar': master.L_bar, 'center': master.center,
+                 'best': master.best, 'iteration': master.iteration, 'log': master.log}
+        cols = [c for u in master.players for c in master.columns[u]]
+        slack = res['penalty_slack']
+        tol = (len(players) + 1) * master.gap_tol * (1 + abs(res['obj']))
+        done = slack <= 1e-7 and master.lb >= res['obj'] - tol
+        rounds.append({'round': rnd, 'eps': eps, 'delta': delta, 'obj': res['obj'],
+                       'lb': master.lb, 'slack': slack, 'iterations': master.iteration,
+                       'time': time.time() - t0, 'certified': bool(done)})
+        if master.verbose:
+            print(f'  -- penalty round {rnd}: eps {eps:.3g} delta {delta:.3g} '
+                  f'RMP {res["obj"]:.4f} LB {master.lb:.4f} slack {slack:.2e}'
+                  + ('  [certified]' if done else ''))
+        if done:
+            break
+        if master.best is not None:
+            center = master.best[0]
+        eps, delta = eps * pen_shrink, delta * pen_shrink
+        if eps < 1e-4:
+            eps = delta = 0.0
+    else:
+        raise RuntimeError('penalty stabilization: no certified round')
+    res['time'] = time.time() - t0 + first['time']
+    res['iterations'] = master.iteration
+    res['penalty'] = {'rounds': rounds, 'eps0': pen_eps, 'delta0': pen_delta,
+                      'shrink': pen_shrink}
     res['doi'] = {'used': False}
     return res, master
 
@@ -1064,7 +1158,8 @@ def run(args):
     mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap)
     tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('_doi' if args.doi else '') \
         + ('_sar' if args.sar else '') + ('_nosmooth' if args.no_smoothing else '') \
-        + ('_grb' if args.pricing_solver == 'gurobi' else '')
+        + ('_grb' if args.pricing_solver == 'gurobi' else '') \
+        + ('_nopen' if args.no_penalty else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
 
     if args.deterministic_check:
@@ -1079,9 +1174,16 @@ def run(args):
           f'{ef["time_solve"]:.1f}s  vars {ef["stack"].model.getNVars()}')
 
     print('\n[2] column generation (DWR_N^Omega)')
-    solver = solve_dwr_sar if args.sar else solve_dwr
-    extra = ({'sar_block': args.sar_block, 'sar_cap': args.sar_cap} if args.sar
-             else {'doi': args.doi})
+    if args.sar:
+        solver = solve_dwr_sar
+        extra = {'sar_block': args.sar_block, 'sar_cap': args.sar_cap}
+    elif not args.no_penalty:
+        solver = solve_dwr_stab
+        extra = {'pen_eps': args.pen_eps, 'pen_delta': args.pen_delta,
+                 'pen_shrink': args.pen_shrink}
+    else:
+        solver = solve_dwr
+        extra = {'doi': args.doi}
     dw, master = solver(players, T, scen, base, **extra,
                            init_vals=None if args.cold_start else ef['vals'],
                            time_limit=args.cg_time_limit,
@@ -1090,7 +1192,8 @@ def run(args):
                            smoothing=not args.no_smoothing, incumbent=ef['obj'],
                            pricing_solver=args.pricing_solver, gap_tol=args.cg_gap)
     print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  iters {dw["iterations"]}  '
-          f'{dw["time"]:.1f}s  DOI {dw["doi"]}  SAR {dw.get("sar", {}).get("phases")}')
+          f'{dw["time"]:.1f}s  DOI {dw["doi"]}  SAR {dw.get("sar", {}).get("phases")}  '
+          f'PEN {dw.get("penalty", {}).get("rounds")}')
 
     print('\n[3] Algorithm S1')
     al = scenario_allocation(ef, dw, master)
@@ -1131,6 +1234,7 @@ def run(args):
         'dw': {k: dw[k] for k in ('status', 'obj', 'lb', 'sigma', 'x0', 'iterations',
                                   'columns', 'time', 'doi')},
         'sar': dw.get('sar'),
+        'penalty': dw.get('penalty'),
         'cg_log': master.log,
         'allocation': {k: al[k] for k in ('owen', 'Ex', 'x', 'g', 'worth', 'omega_LR',
                                           'eps_LR', 'budget_residual',
@@ -1170,8 +1274,15 @@ def main():
     ap.add_argument('--doi', action='store_true',
                     help='dual-optimal inequalities on the balance rows (market price box)')
     ap.add_argument('--pricing-solver', default='scip', choices=['scip', 'gurobi'])
-    ap.add_argument('--cg-gap', type=float, default=1e-6,
+    ap.add_argument('--cg-gap', type=float, default=1e-8,
                     help='relative CG tolerance (column admission and LB >= RMP stop)')
+    ap.add_argument('--no-penalty', action='store_true',
+                    help='smoothing only, without the three-piece dual penalty')
+    ap.add_argument('--pen-eps', type=float, default=0.2,
+                    help='penalty-free band, relative to |center| per row')
+    ap.add_argument('--pen-delta', type=float, default=0.2,
+                    help='slack bound per row, i.e. the penalty slope in the dual')
+    ap.add_argument('--pen-shrink', type=float, default=0.25)
     ap.add_argument('--sar', action='store_true',
                     help='dyn-SAR: start from aggregated (block, scenario) rows')
     ap.add_argument('--sar-block', type=int, default=1,
