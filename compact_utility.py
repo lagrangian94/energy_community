@@ -432,7 +432,8 @@ class LocalEnergyMarket:
                  model_type: str = 'mip',
                  dwr: bool = False,
                  binary_values: Optional[Dict] = None,
-                 mipsolver: str = None):
+                 mipsolver: str = None,
+                 model=None):
         """
         Initialize the Local Energy Market optimization model
 
@@ -442,11 +443,14 @@ class LocalEnergyMarket:
             parameters: Dictionary containing all model parameters
             model_type: 'mip': Mixed-integer Community Games, 'lp': Linear Community Games, 'mip_fix_binaries': MIP game with fixed binary variables
             mipsolver: None for SCIP (default), 'highs' to export MPS and solve with HiGHS
+            model: build into this model instead of a fresh one. Used by the two-stage
+                extension (ieee_owen/stochastic_extension.py), which stacks one block
+                per scenario into a single model; None keeps the usual behaviour.
         """
         self.players = players
         self.time_periods = time_periods
         self.params = parameters
-        self.model = Model("LocalEnergyMarket")
+        self.model = Model("LocalEnergyMarket") if model is None else model
         if model_type not in ('mip', 'mip_fix_binaries','lp'):
             raise ValueError("model_type must be either 'mip' or 'mip_fix_binaries' or 'lp', got: {}".format(model_type))
         self.model_type = model_type

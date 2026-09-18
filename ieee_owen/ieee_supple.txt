@@ -20,12 +20,15 @@
 \usepackage{textcomp}
 \usepackage{stfloats}
 \usepackage{url}
+\usepackage{algorithmic}
+\usepackage{algorithm}
 \newcommand{\euro}{\texteuro}
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\vdp}[1]{\mathrm{val}(\mathrm{DP}_{#1})}
 \newcommand{\hchi}{\hat\chi}
 \newcommand{\ssum}{\textstyle\sum}
 \newtheorem{proposition}{Proposition}
+\newtheorem{definition}[proposition]{Definition}
 \theoremstyle{remark}
 \newtheorem{remark}[proposition]{Remark}
 \newtheorem{lemma}[proposition]{Lemma}
@@ -42,6 +45,7 @@
 \renewcommand{\thefigure}{S\arabic{figure}}
 \renewcommand{\theequation}{S\arabic{equation}}
 \renewcommand{\theproposition}{S\arabic{proposition}}
+\renewcommand{\thealgorithm}{S\arabic{algorithm}}
 \begin{document}
 \title{Supplementary Material for\\
 ``Payoff Allocation in Energy Community Games under Non-convex
@@ -373,11 +377,19 @@ Remark~\ref{rmk:stoch} of the main paper states that relaxing
 Assumption~\ref{as:env}(iv) leaves the construction of
 Section~\ref{sec:duality} intact. This section writes out the dispatch
 problem and the Dantzig--Wolfe reformulation to which that remark refers,
-and verifies the claim.
-\subsection{Staging}
-Let $\Omega$ be a finite set of scenarios of the renewable and load
-forecasts, with probabilities $\pi_{\omega}>0$ and
-$\ssum_{\omega\in\Omega}\pi_{\omega}=1$. The electrolyzer states
+constructs from them an allocation that settles scenario by scenario, and
+verifies the claim.
+\subsection{Decision Stages}
+\label{sec:sup_stages}
+Let $\Omega$ be a finite set of scenarios of the renewable production,
+the load, and the external market prices, with probabilities
+$\rho_{\omega}>0$ and $\ssum_{\omega\in\Omega}\rho_{\omega}=1$. Every
+parameter the scenario carries is indexed accordingly: the production
+and load bounds of \eqref{eq:bnd_pd} are read as
+$\underline p_{jt}^{k,\omega},\overline p_{jt}^{k,\omega}$ and
+$\underline d_{jt}^{k,load,\omega},\overline d_{jt}^{k,load,\omega}$,
+the first of these carrying the renewable availability and the second
+the load. The electrolyzer states
 $z_{jt}^{G,on},z_{jt}^{G,sb},z_{jt}^{G,off}$ with their transition
 indicators, and the community reserve capacities $r_i^{sym}$, are decided
 before the realization. Every remaining decision is taken after it: the
@@ -386,41 +398,71 @@ segment selectors $\hat z_{jlt}^{\omega}$ and the segment inputs
 $\hat d_{jlt}^{\omega}$ carry a scenario index, and so do the heat pump
 input, the storage schedule, the reserve contributions, the community
 exchanges, and the peak $p^{\omega}$.
+
+Prices are revealed with the rest of the scenario. Import and export
+prices therefore carry a scenario index, $\pi_t^{k,imkt,\omega}$ and
+$\pi_t^{k,emkt,\omega}$, and so does the willingness to pay
+$\bar u_{jt}^{k,\omega}$, which in Section~\ref{sec:setup} is the avoided
+cost of buying the carrier outside and so moves with the import price.
+Production costs $\bar c_{jt}^{k}$ and the peak tariff $\delta^{peak}$
+are technology and network parameters and stay deterministic.
+Assumption~\ref{as:env}(iii) is read scenario by scenario,
+$\pi_t^{k,imkt,\omega}\ge\pi_t^{k,emkt,\omega}$ for every $\omega$,
+which is what \eqref{eq:bnd_size} needs in order to keep
+$\mathcal{X}_j^{\mathrm{MIP}}$ bounded while leaving every coalition
+value unchanged. We further take the scenario prices to lie in a compact
+set fixed in advance, so that refining the scenario set adds outcomes
+without widening the range of prices any single outcome may take;
+Proposition~\ref{prop:sup_stoch}(c) is stated under this reading.
+ 
+The reserve capacity price is a special case. Since $r_i^{sym}$ is sold
+before the realization and cannot be revised, a scenario-dependent
+$\pi_i^{res,\omega}$ enters the objective only through its mean
+$\bar\pi_i^{res}:=\ssum_{\omega\in\Omega}\rho_{\omega}\pi_i^{res,\omega}$,
+and its dispersion is immaterial to the model. We write $\bar\pi_i^{res}$
+from here on.
+ 
 Market trades are treated as recourse, which is the price-taking
 counterpart of Assumption~\ref{as:env}(ii): the community adjusts its
-external position after the realization at the prices it faces. A
-day-ahead position settled against a separate balancing price is the
-sharper alternative. It adds a first-stage trade block to each prosumer
-and an imbalance term to the objective, and leaves every structural
-statement below unchanged, so we keep the simpler form.
+external position after the realization at the prices it faces. Its
+exposure to price uncertainty is therefore carried by the two first-stage
+decisions alone, the unit being committed and the reserve capacity sold
+before any price is known. Within a scenario the second stage sees the
+whole day at once, so the trading value it reports is an upper bound on
+what a multistage model would return. A day-ahead position settled
+against a separate balancing price is the sharper alternative. It adds a
+first-stage trade block to each prosumer and an imbalance term to the
+objective, and leaves every structural statement below unchanged, so we
+keep the simpler form.
 \subsection{Dispatch Problem}
 For a coalition $S\subseteq N$,
 \begin{subequations}\label{eq:sup_dp}
 \begin{align}
 &(\mathrm{DP}_S^{\Omega}):\ \max\
-\ssum_{\omega\in\Omega}\pi_{\omega}\Big[\ssum_{j\in S}\ssum_{k\in K}\ssum_{t\in T}
-\big(\pi_t^{k,emkt}e_{jt}^{k,mkt,\omega} \nonumber\\
-&\quad-\pi_t^{k,imkt}i_{jt}^{k,mkt,\omega}
-+\bar u_{jt}^{k}d_{jt}^{k,load,\omega}-\bar c_{jt}^{k}p_{jt}^{k,\omega}\big)
+\ssum_{\omega\in\Omega}\rho_{\omega}\Big[\ssum_{j\in S}\ssum_{k\in K}\ssum_{t\in T}
+\big(\pi_t^{k,emkt,\omega}e_{jt}^{k,mkt,\omega} \nonumber\\
+&\quad-\pi_t^{k,imkt,\omega}i_{jt}^{k,mkt,\omega}
++\bar u_{jt}^{k,\omega}d_{jt}^{k,load,\omega}-\bar c_{jt}^{k}p_{jt}^{k,\omega}\big)
 -\delta^{peak}p^{\omega}\Big] \nonumber\\
 &\quad-\ssum_{j\in S}\ssum_{t\in T}c_j^{G,su}z_{jt}^{G,su}
-+\ssum_{i\in I}\pi_i^{res}r_i^{sym}
++\ssum_{i\in I}\bar\pi_i^{res}r_i^{sym}
 \label{eq:sup_dp_obj}
 \end{align}
 subject to the community-level linking constraints, imposed in every
 scenario,
 \begin{align}
 &\ssum_{j\in S}\big(i_{jt}^{k,com,\omega}-e_{jt}^{k,com,\omega}\big)=0,
-&&\forall t,k,\omega \dual{\pi_t^{k,com,\omega}} \label{eq:sup_bal}\\
+&&\forall t,k,\omega \label{eq:sup_bal}\\
 &r_i^{sym}\le\ssum_{j\in S}r_{jt}^{u,\omega},\quad
  r_i^{sym}\le\ssum_{j\in S}r_{jt}^{d,\omega},
-&&\forall i,\,t\in T_i,\,\omega \dual{\mu_t^{u/d,\omega}} \label{eq:sup_res}\\
+&&\forall i,\,t\in T_i,\,\omega \label{eq:sup_res}\\
 &\ssum_{j\in S}\big(i_{jt}^{E,mkt,\omega}-e_{jt}^{E,mkt,\omega}\big)\le p^{\omega},
-&&\forall t,\omega \dual{\xi_t^{\omega}} \label{eq:sup_peak}
+&&\forall t,\omega  \label{eq:sup_peak}
 \end{align}
 and, for every $j\in S$, to the prosumer-level constraints
 \eqref{eq:pb_E}--\eqref{eq:bin} of the main paper, written for each
-$\omega$ with the first-stage indicators shared across scenarios. Four of
+$\omega$ with the first-stage indicators shared across scenarios and the
+bounds of \eqref{eq:bnd_pd} taken at their scenario values. Four of
 them couple the two stages,
 \begin{align}
 &d_{jt}^{G,sc,\omega}=\tilde d_{jt}^{G,sc,\omega}+c_G^{sb}z_{jt}^{G,sb},
@@ -456,17 +498,21 @@ block-diagonal over $\Omega$ and with the rows
 is bounded, since \eqref{eq:bnd_trade} bounds each scenario block, and
 mixed-integer linear representable. The objective terms of prosumer $j$,
 \begin{equation}
-f_j(x_j,y_j)=\ssum_{\omega\in\Omega}\pi_{\omega}f_j^{\omega}
+f_j(x_j,y_j)=\ssum_{\omega\in\Omega}\rho_{\omega}f_j^{\omega}
 \big(x_j^{\omega},\hat z_j^{\omega}\big)
 -\ssum_{t\in T}c_j^{G,su}z_{jt}^{G,su},
 \label{eq:sup_fj}
 \end{equation}
-are linear. The community-level variables and costs are
-\begin{equation}
-x_0=\big((r_i^{sym})_{i\in I},(p^{\omega})_{\omega\in\Omega}\big)\ge0,\quad
-c_0=\big((\pi_i^{res})_{i},(-\pi_{\omega}\delta^{peak})_{\omega}\big),
+are linear. Within a scenario each price multiplies a variable carrying
+the same scenario index, so no product of two variables appears; the
+objective would become bilinear only if the community set the prices,
+which Assumption~\ref{as:env}(ii) excludes. The community-level variables
+and costs are
+\begin{align}
+&x_0=\big((r_i^{sym})_{i\in I},(p^{\omega})_{\omega\in\Omega}\big)\ge0 \nonumber,\\
+&c_0=\big((\bar\pi_i^{res})_{i},(-\rho_{\omega}\delta^{peak})_{\omega}\big),
 \label{eq:sup_x0}
-\end{equation}
+\end{align}
 and $x_0$ appears on the left-hand side of
 \eqref{eq:sup_bal}--\eqref{eq:sup_peak} only. Stacking those rows, each
 equality as a pair of inequalities, gives
@@ -479,18 +525,20 @@ m=\underbrace{2|K||T||\Omega|}_{\eqref{eq:sup_bal}}
 \label{eq:sup_m}
 \end{equation}
 Both sides are additive over the members, so Assumption~\ref{as:pool}
-holds.
+holds. No price appears in \eqref{eq:sup_bal}--\eqref{eq:sup_peak}. The
+linking rows, and with them $A_j$, $A_0$ and the count $m$, are the same
+whether prices are known or not.
 \subsection{Relaxation and Reformulation}
 Dualizing \eqref{eq:sup_bal}--\eqref{eq:sup_peak} with $\theta\ge0$, the
 contribution of $x_0$ is finite only on
 $\Theta=\{\theta\ge0:A_0^{\top}\theta\ge c_0\}$, which reads
-\begin{equation}
-\ssum_{\omega\in\Omega}\ssum_{t\in T_i}
-\big(\mu_t^{u,\omega}+\mu_t^{d,\omega}\big)\ge\pi_i^{res}\ \ \forall i,
-\qquad
-\ssum_{t\in T}\xi_t^{\omega}\le\pi_{\omega}\delta^{peak}\ \ \forall\omega .
+\begin{align}
+&\ssum_{\omega\in\Omega}\ssum_{t\in T_i}
+\big(\mu_t^{u,\omega}+\mu_t^{d,\omega}\big)\ge\bar\pi_i^{res}\ \ \forall i,
+\nonumber \\
+&\ssum_{t\in T}\xi_t^{\omega}\le\rho_{\omega}\delta^{peak}\ \ \forall\omega .
 \label{eq:sup_Theta}
-\end{equation}
+\end{align}
 The relaxation then separates as in \eqref{eq:vlr_sep}, with
 \begin{equation}
 \vlr_j(\theta)=\max_{(x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}}
@@ -507,35 +555,238 @@ $a_j^{q}=A_jx_j^{q}\in\R^{m}$. The relaxed master is
 \begin{align}
 &(\mathrm{DWR}_S^{\Omega}):\ \max\
 \ssum_{j\in S}\ssum_{q\in Q_j}w_j^{q}\lambda_j^{q}
-+\ssum_{i\in I}\pi_i^{res}r_i^{sym} \nonumber\\
-&\hspace{10.5em}-\ssum_{\omega\in\Omega}\pi_{\omega}\delta^{peak}p^{\omega}
++\ssum_{i\in I}\bar\pi_i^{res}r_i^{sym} \nonumber\\
+&\hspace{10.5em}-\ssum_{\omega\in\Omega}\rho_{\omega}\delta^{peak}p^{\omega}
 \label{eq:sup_dwr_obj}\\
 &\mathrm{s.t.}\ \ssum_{j\in S}\ssum_{q\in Q_j}
-\big(i_{jt}^{k,com,\omega,q}-e_{jt}^{k,com,\omega,q}\big)\lambda_j^{q}=0
-\dual{\pi_t^{k,com,\omega}} \label{eq:sup_dwr_bal}\\
+\big(i_{jt}^{k,com,\omega,q}-e_{jt}^{k,com,\omega,q}\big)\lambda_j^{q}=0,
+\ \ \forall t,k,\omega
+\label{eq:sup_dwr_bal}\\
 &\hspace{1.7em} r_i^{sym}\le\ssum_{j\in S}\ssum_{q\in Q_j}
- r_{jt}^{u/d,\omega,q}\lambda_j^{q}
-\dual{\mu_t^{u/d,\omega}} \label{eq:sup_dwr_res}\\
+ r_{jt}^{u/d,\omega,q}\lambda_j^{q},
+\ \ \forall i,\,t\in T_i,\,\omega
+\label{eq:sup_dwr_res}\\
 &\hspace{1.7em} \ssum_{j\in S}\ssum_{q\in Q_j}
- \big(i_{jt}^{E,mkt,\omega,q}-e_{jt}^{E,mkt,\omega,q}\big)\lambda_j^{q}\le p^{\omega}
-\dual{\xi_t^{\omega}} \label{eq:sup_dwr_peak}\\
+ \big(i_{jt}^{E,mkt,\omega,q}-e_{jt}^{E,mkt,\omega,q}\big)\lambda_j^{q}\le p^{\omega},
+\nonumber\\
+&\hspace{12em}\forall t,\omega
+\label{eq:sup_dwr_peak}\\
 &\hspace{1.7em} \ssum_{q\in Q_j}\lambda_j^{q}=1,\quad \forall j\in S
 \dual{\sigma_j} \label{eq:sup_dwr_conv}\\
 &\hspace{1.7em} \lambda_j^{q}\ge0,\quad x_0\ge0, \label{eq:sup_dwr_nn}
 \end{align}
 \end{subequations}
 the first three rows holding for every index of
-\eqref{eq:sup_bal}--\eqref{eq:sup_peak}.
+\eqref{eq:sup_bal}--\eqref{eq:sup_peak}. A column is a contingent plan,
+so no non-anticipativity row is needed and the plan priced out at the
+optimal duals can serve as a settlement basis, which the next subsection
+uses.
+
+\subsection{Allocations under Uncertainty}
+\label{sec:sup_alloc}
+An allocation of expected surplus leaves open what each member is paid
+once a scenario is realized, and need not balance the community's books
+in any single scenario. The stochastic cooperative game of Suijs
+\emph{et al.}~\cite{suijs1999cooperative}, in the form of
+Uhan~\cite{uhan2015stochastic}, separates the two questions.
+
+\begin{definition}[\cite{uhan2015stochastic}]
+\label{def:sup_uhan}
+An \emph{allocation} for $S\subseteq N$ is a pair
+$(x,a)\in\R^{S\times\Omega}\times A_S$, with $A_S$ the first-stage
+actions of $S$ and $v(S,a,\omega)$ its worth in scenario $\omega$, such
+that
+\begin{equation}
+\ssum_{j\in S}x_j(\omega)\le v(S,a,\omega),\qquad\forall\omega\in\Omega ;
+\label{eq:sup_uhan_feas}
+\end{equation}
+$Z_S$ denotes the set of such pairs. With member $j$ ranking random
+payoffs by a certainty equivalent $\phi_j$, the \emph{certainty
+equivalent game} is
+$v^{\phi}(S)=\max_{(x,a)\in Z_S}\ssum_{j\in S}\phi_j\big((x,a)_j\big)$,
+and the \emph{weak $\varepsilon$-core} of the stochastic game is the set
+of $(x,a)\in Z_N$ with
+\begin{equation}
+\ssum_{j\in S}\phi_j\big((x,a)_j\big)\ \ge\ v^{\phi}(S)-|S|\varepsilon
+\quad\forall S\subseteq N,
+\label{eq:sup_stochcore}
+\end{equation}
+with equality at $S=N$; at $\varepsilon=0$ this is the core
+of~\cite{uhan2015stochastic}.
+\end{definition}
+
+The payment may depend on the scenario arbitrarily and the budget must
+balance in each scenario, but the deviation test is taken once, before
+the realization. Imposing it at every stage instead gives the strong
+sequential core of~\cite{toriello2017dynamic}, which we do not address.
+
+Write $SU_j(z_j)=\ssum_{t\in T}c_j^{G,su}z_{jt}^{G,su}$ and
+$a=\big((z_j)_{j\in S},(r_i^{sym})_{i\in I}\big)$. Under
+\eqref{eq:sup_uhan_feas} the first-stage terms enter the worth of every
+scenario in full, so
+\begin{align}
+&v^{\Omega}(S,a,\omega):=\ssum_{i\in I}\bar\pi_i^{res}r_i^{sym}
+-\ssum_{j\in S}SU_j(z_j) \nonumber\\
+&+\max\Big\{\ssum_{j\in S}f_j^{\omega}\big(x_j^{\omega},\hat z_j^{\omega}\big)
+-\delta^{peak}p^{\omega}:\eqref{eq:sup_bal}\text{--}\eqref{eq:sup_peak}
+\nonumber\\
+&\hspace{5.4em}\text{at }\omega,\ \text{recourse feasible given }a\Big\},
+\label{eq:sup_worth}
+\end{align}
+and, the recourse decoupling across scenarios once $a$ is fixed,
+$\max_{a\in A_S}\ssum_{\omega}\rho_{\omega}v^{\Omega}(S,a,\omega)
+=\mathrm{val}(\mathrm{DP}_S^{\Omega})$. The first-stage terms are thus
+carried in full by each scenario rather than apportioned over them. Note
+that $v^{\Omega}$ is a gross worth while $\Gamma^{\mathrm{MIP}}$ is
+normalized by \eqref{eq:v0}, a constant per member.
+
+Since \eqref{eq:sup_vlrj} is a mixed-integer program it returns no
+multipliers of its own, only an integer contingent plan; the prices are
+the master's. The two together determine a scenario-dependent
+allocation.
+
+\begin{lemma}\label{lem:sup_scen}
+Let $\theta^{*},\{\sigma_j^{*}\}$ be optimal duals of \eqref{eq:sup_dwr}
+with $S=N$, let $q_j^{*}$ attain \eqref{eq:sup_vlrj} at $\theta^{*}$, and
+let $\hat a$ be the first-stage part of an optimal solution of
+$(\mathrm{DP}_N^{\Omega})$. With
+$\bar\theta^{\omega}=\theta^{*\omega}/\rho_{\omega}$, put
+\begin{align}
+\chi_j^{\Omega}(\omega)&=f_j^{\omega}\big(x_j^{\omega,q^{*}},\hat z_j^{\omega,q^{*}}\big)
+-\bar\theta^{\omega\top}A_j^{\omega}x_j^{\omega,q^{*}}-SU_j\big(z_j^{q^{*}}\big),
+\label{eq:sup_chiscen}\\
+g^{\omega}&=\ssum_{j\in N}\chi_j^{\Omega}(\omega)-v^{\Omega}(N,\hat a,\omega),
+\qquad
+x_j^{*}=\chi_j^{\Omega}-g^{\omega}/n .
+\label{eq:sup_resid}
+\end{align}
+If the members are risk neutral, $\phi_j=\mathbb{E}$, then
+\begin{enumerate}
+\item[(a)] $v^{\phi}(S)=\mathrm{val}(\mathrm{DP}_S^{\Omega})$, so the
+certainty equivalent game is $\Gamma^{\mathrm{MIP}}$ up to the
+normalization \eqref{eq:v0};
+\item[(b)] $(x^{*},\hat a)\in Z_N$ with equality in
+\eqref{eq:sup_uhan_feas} in every scenario, and
+$\mathbb{E}[x_j^{*}]=\sigma_j^{*}-\omega^{\mathrm{LR}}/n$;
+\item[(c)] if
+$\chi_j:=\mathbb{E}[x_j^{*}]-\mathrm{val}(\mathrm{DP}_{\{j\}}^{\Omega})$
+lies in the weak $\varepsilon$-core of $\Gamma^{\mathrm{MIP}}$, then
+$(x^{*},\hat a)$ lies in the weak $\varepsilon$-core of the stochastic
+game.
+\end{enumerate}
+\end{lemma}
+\begin{IEEEproof}
+(a) With $\phi_j=\mathbb{E}$ the objective of the certainty equivalent
+game is $\ssum_{\omega}\rho_{\omega}\ssum_{j\in S}x_j(\omega)$, which
+\eqref{eq:sup_uhan_feas} bounds by
+$\ssum_{\omega}\rho_{\omega}v^{\Omega}(S,a,\omega)$ and which saturating
+it attains; maximizing over $a$ gives the claim.
+
+(b) $T_j,W_j,A_j$ are block diagonal over $\Omega$ and $SU_j$ carries no
+scenario index, so $\ssum_{\omega}\rho_{\omega}\chi_j^{\Omega}(\omega)
+=f_j(\cdot^{q^{*}})-\theta^{*\top}A_jx_j^{q^{*}}=\vlr_j(\theta^{*})
+=\sigma_j^{*}$. Hence
+$\ssum_{\omega}\rho_{\omega}g^{\omega}
+=\mathrm{val}(\mathrm{DWR}_N^{\Omega})-\mathrm{val}(\mathrm{DP}_N^{\Omega})
+=\omega^{\mathrm{LR}}$, which gives the expectation, and summing
+\eqref{eq:sup_resid} over $j$ gives the scenario-wise equality.
+
+(c) Adding $\ssum_{j\in S}\mathrm{val}(\mathrm{DP}_{\{j\}}^{\Omega})$ to
+both sides of the weak $\varepsilon$-core inequality for $\chi$ turns it,
+by (a), into \eqref{eq:sup_stochcore}; equality at $S=N$ is (b) in
+expectation. The passage from the certainty equivalent game to the
+stochastic game is \cite[Prop.~2.2(b)]{uhan2015stochastic}, which uses
+nothing beyond translation invariance of $\phi_j$ and so tolerates the
+relaxation by $|S|\varepsilon$.
+\end{IEEEproof}
+
+Algorithm~\ref{alg:sup_scen} collects the construction. Lines~1--3 are
+the procedure of Section~\ref{sec:complexity} unchanged, the plans
+$q_j^{*}$ being the columns priced out in its terminal iteration; the
+rest is $O(n|\Omega|)$ arithmetic on quantities already returned.
+
+\begin{algorithm}[t]
+\caption{Scenario-dependent allocation}
+\label{alg:sup_scen}
+\begin{algorithmic}[1]
+\REQUIRE $\Omega$, $\{\rho_{\omega}\}$,
+ $\{\mathcal{X}_j^{\mathrm{MIP}},f_j\}_{j\in N}$, linking rows
+ \eqref{eq:sup_bal}--\eqref{eq:sup_peak}
+\ENSURE $\{x_j^{*}(\omega)\}$, $\varepsilon^{\mathrm{LR}}$
+\STATE Solve $(\mathrm{DWR}_N^{\Omega})$ by column generation; retain
+ $\theta^{*}$ and $\{\sigma_j^{*}\}$
+\STATE Retain, for each $j$, the terminal priced column $q_j^{*}$
+ attaining \eqref{eq:sup_vlrj} at $\theta^{*}$
+\STATE Solve $(\mathrm{DP}_N^{\Omega})$; retain its first-stage part
+ $\hat a$
+\STATE $\bar\theta^{\omega}\leftarrow\theta^{*\omega}/\rho_{\omega}$
+\FOR{$\omega\in\Omega$}
+  \STATE $\chi_j^{\Omega}(\omega)\leftarrow$ \eqref{eq:sup_chiscen},
+   $j\in N$
+  \STATE $g^{\omega}\leftarrow\ssum_{j\in N}\chi_j^{\Omega}(\omega)
+   -v^{\Omega}(N,\hat a,\omega)$
+  \STATE $x_j^{*}(\omega)\leftarrow\chi_j^{\Omega}(\omega)-g^{\omega}/n$,
+   $j\in N$
+\ENDFOR
+\STATE $\varepsilon^{\mathrm{LR}}\leftarrow
+ \ssum_{\omega\in\Omega}\rho_{\omega}g^{\omega}/n$
+\end{algorithmic}
+\end{algorithm}
+
+One hypothesis is left open, that $\chi$ lies in the weak
+$\varepsilon$-core of $\Gamma^{\mathrm{MIP}}$ for an $\varepsilon$ worth
+reporting. By part~(b),
+$\chi_j=\sigma_j^{*}-\mathrm{val}(\mathrm{DP}_{\{j\}}^{\Omega})
+-\omega^{\mathrm{LR}}/n$, which is the allocation $\chi^{\mathrm{LR}}$ of
+the main paper; the rest of this section discharges the hypothesis.
+
+\subsection{Stability of the Allocation}
+\label{sec:sup_stab}
+The constant $\bar\gamma$ of Proposition~\ref{prop:eps} is measured on
+the scenario-expanded loss. For $j\in N$ and
+$\bar x_j\in\conv(\mathcal{X}_j^{\mathrm{MIP}})$, let
+$\bar a_j^{\mathrm{bal}}=(\bar a_{jt}^{k,bal,\omega})_{k,t,\omega}$ be
+its net community position in every carrier, period and scenario, let
+$\mathcal{X}_j(\bar a_j^{\mathrm{bal}})$ be the schedules of $j$
+attaining that position in every $(k,t,\omega)$, and write
+$\bar w_j$, $\bar r_{jt}^{u,\omega},\bar r_{jt}^{d,\omega}$ and
+$\bar n_{jt}^{E,\omega}$ for the expected objective value, the reserve
+contributions and the net market imports of $\bar x_j$, and
+$w_j(x)$, $r_{jt}^{u,\omega}(x),r_{jt}^{d,\omega}(x)$,
+$n_{jt}^{E,\omega}(x)$ for the same quantities at $x$. With
+$\bar\Pi^{res}:=\ssum_{i\in I}\bar\pi_i^{res}$, put
+\begin{align}
+&L_j^{\Omega}(x):=\big(\bar w_j-w_j(x)\big)^{+} \nonumber\\
+&+\bar\Pi^{res}\max_{t\in T,\,\omega\in\Omega}\max\big\{
+ \big(\bar r_{jt}^{u,\omega}-r_{jt}^{u,\omega}(x)\big)^{+},\,
+ \big(\bar r_{jt}^{d,\omega}-r_{jt}^{d,\omega}(x)\big)^{+}\big\} \nonumber\\
+&+\delta^{peak}\ssum_{\omega\in\Omega}\rho_{\omega}\max_{t\in T}
+ \big(n_{jt}^{E,\omega}(x)-\bar n_{jt}^{E,\omega}\big)^{+},
+\label{eq:sup_Lj}
+\end{align}
+and define $\tilde\gamma_j$ and $\bar\gamma$ by \eqref{eq:gammatilde}
+with $L_j^{\Omega}$ in place of $L_j$ and
+$\mathcal{X}_j(\bar a_j^{\mathrm{bal}})$ as above. The reserve rows
+\eqref{eq:sup_res} are imposed in every scenario, so a shortfall
+anywhere in $T_i\times\Omega$ caps $r_i^{sym}$ for the whole block,
+which is why that term is a maximum over $t$ and $\omega$ and not a sum;
+the peak enters once per scenario and is charged in expectation, which
+is why the last term is.
+
 \begin{proposition}\label{prop:sup_stoch}
 For the model \eqref{eq:sup_dp}, Assumption~\ref{as:pool} holds, and
 \begin{enumerate}
 \item[(a)] Lemma~\ref{lem:lpg} applies to \eqref{eq:sup_dwr}, so the
-Lagrangian sub-game is a linear production game and its Owen solution is
-$\chi_j^{\mathrm{OW}}=\sigma_j^{*}$;
-\item[(b)] Proposition~\ref{prop:opap} and Corollary~\ref{cor:eps} hold
-verbatim;
+Lagrangian sub-game is a linear production game, and since $b_j=0$ its
+Owen solution is $\sigma_j^{*}$. The allocation \eqref{eq:chi_ow} of
+$\Gamma^{\mathrm{MIP}}$ is then
+$\chi_j^{\mathrm{OW}}=\sigma_j^{*}-\mathrm{val}(\mathrm{DP}_{\{j\}}^{\Omega})$,
+the stand-alone term being the scenario-expanded single-member problem;
+\item[(b)] Proposition~\ref{prop:opap} and Corollary~\ref{cor:eps} hold.
 \item[(c)] Proposition~\ref{prop:eps} holds with $m$ given by
-\eqref{eq:sup_m} and with $\bar\gamma$ independent of $|\Omega|$, so
+\eqref{eq:sup_m} and with $\bar\gamma$ measured on \eqref{eq:sup_Lj},
+which is independent of $|\Omega|$ under the price support fixed in
+Section~\ref{sec:sup_stages}, so
 \begin{equation}
 \varepsilon^{\mathrm{LR}}\le\frac{(m+1)\bar\gamma}{n}
 =O\!\left(\frac{|T||\Omega|}{n}\right).
@@ -547,34 +798,76 @@ verbatim;
 Assumption~\ref{as:pool} was verified after \eqref{eq:sup_m}, and
 \eqref{eq:sup_Xmip}--\eqref{eq:sup_x0} place the model in the form the
 proofs of the main paper use, so (a) and (b) follow with no change of
-argument. For (c), only the finiteness and the scaling of $\bar\gamma$
-require comment. Each term of $L_j$ in \eqref{eq:gammatilde} is bounded
-independently of $|\Omega|$: the objective enters as the expectation
-\eqref{eq:sup_fj}, whose value is bounded by the capacities of $j$
-because $\ssum_{\omega}\pi_{\omega}=1$; the reserve term is the largest
-shortfall of $r_{jt}^{u,\omega},r_{jt}^{d,\omega}$ over $t$, over the two directions and
-over $\omega$, a maximum and not a sum, bounded by the reserve capacity
-of $j$; and the peak term is the expectation over $\omega$ of a maximum
-over $t$, bounded by the trade bounds \eqref{eq:bnd_trade}. The
-Shapley--Folkman argument is then applied in $\R^{m+1}$ with $m$ as in
-\eqref{eq:sup_m}.
+argument. For (c), the construction of Proposition~\ref{prop:eps} is
+repeated with $L_j^{\Omega}$, and only two points require comment.
+
+First, $\mathcal{X}_j(\bar a_j^{\mathrm{bal}})$ is nonempty. Take any
+$(x_j,y_j)\in\mathcal{X}_j^{\mathrm{MIP}}$, keep its first-stage
+indicators and its physical variables, and in each scenario set the
+community trades to $\bar a_j^{\mathrm{bal}}$ and close
+\eqref{eq:pb_E}--\eqref{eq:pb_GH} with the market trades, which
+\eqref{eq:bnd_size} admits scenario by scenario. Neither the community
+nor the market trades enter the commitment rows
+\eqref{eq:sup_decomp}--\eqref{eq:sup_pwl}, so feasibility is preserved.
+
+Second, each term of \eqref{eq:sup_Lj} is bounded independently of
+$|\Omega|$. The objective enters as the expectation \eqref{eq:sup_fj},
+whose value is bounded by the capacities of $j$ and by
+$\max_{t,k,\omega}\pi_t^{k,imkt,\omega}$ because
+$\ssum_{\omega}\rho_{\omega}=1$ and the prices lie in a fixed compact
+set, so refining the scenario set enlarges neither. The reserve term is
+a maximum over $t$, over the two directions and over $\omega$, and not a
+sum, hence bounded by the reserve capacity of $j$. The peak term is an
+expectation over $\omega$ of a maximum over $t$, bounded by the trade
+bounds \eqref{eq:bnd_trade} for the same reason. Hence $\bar\gamma$ is
+finite and depends on the assets of $j$ alone. The Shapley--Folkman
+argument is then applied in $\R^{m+1}$ with $m$ as in \eqref{eq:sup_m}.
 \end{IEEEproof}
-\begin{remark}[Why non-anticipativity is not dualized]
-The decomposition is by prosumer and not by scenario, so every column of
-\eqref{eq:sup_dwr} is a plan that is non-anticipative by construction,
-and a convex combination of such plans is again non-anticipative. The
-master therefore cannot return a schedule that commits differently in
-different scenarios, and no non-anticipativity constraint has to be
-added. Scenario-based decompositions of the same model, such as
-progressive hedging, dualize those constraints instead.
+
+Part~(b) is the hypothesis of Lemma~\ref{lem:sup_scen}(c) at
+$\varepsilon=\varepsilon^{\mathrm{LR}}$. The pair $(x^{*},\hat a)$ of
+\eqref{eq:sup_resid} therefore settles in every scenario and lies in the
+weak $\varepsilon^{\mathrm{LR}}$-core of the stochastic game, with
+$\varepsilon^{\mathrm{LR}}$ bounded by \eqref{eq:sup_bound}.
+
+\begin{remark}[The bound is one-sided in $|\Omega|$]
+The factor $|\Omega|$ in \eqref{eq:sup_bound} enters through $m$, the
+number of linking rows, and bounds the number of members that
+Shapley--Folkman leaves at a fractional schedule. It should not be read
+as a statement about $\omega^{\mathrm{LR}}$ itself. A finite $\Omega$ is
+a discretization of an underlying distribution, and refining it makes
+$(\mathrm{DP}_S^{\Omega})$ and $(\mathrm{DWR}_S^{\Omega})$ approach the
+problems it approximates, so the gap between them has no reason to grow
+with the number of scenarios while the bound does. What
+\eqref{eq:sup_bound} supports is the same structural statement as in the
+deterministic case, that the count of fractional members is set by the
+linking rows and not by $n$, and the decay in $n$ that follows from it.
 \end{remark}
+
+\begin{remark}[Scope of the allocation]
+\label{rem:sup_scen}
+Settling scenario by scenario strengthens no stability statement.
+Definition~\ref{def:sup_uhan} tests deviation before the realization, so
+a coalition preferring to leave after observing $\omega$ is not ruled
+out, and \eqref{eq:sup_bound} bounds a tolerance in expectation: the
+residuals $g^{\omega}$ are individually unsigned and admit no
+per-scenario counterpart. Nor is the construction unique, as
+\eqref{eq:sup_vlrj} may have several maximizers at $\theta^{*}$, each
+giving a different $\chi_j^{\Omega}$ of the same expectation. Under risk
+neutrality the choice is immaterial, only the expectation entering
+$v^{\phi}$; for risk-averse members it would have to be made, $v^{\phi}$
+then departing from $\Gamma^{\mathrm{MIP}}$.
+\end{remark}
+
 \begin{remark}[Cost of the extension]
 The pricing problem \eqref{eq:sup_vlrj} remains one mixed-integer program
 per prosumer, of $|\Omega|$ times the size of its deterministic
 counterpart, and the $n$ of them stay independent. The separation
 \eqref{eq:rg_sep} of the row generation grows by the same factor while
 remaining a single monolithic program, so the comparison of
-Table~\ref{tab:complexity} is unaffected.
+Table~\ref{tab:complexity} is unaffected. Algorithm~\ref{alg:sup_scen}
+adds nothing to either column of that table, reusing the duals and
+columns the reformulation has already produced.
 \end{remark}
 
 %% =====================================================================
@@ -772,5 +1065,17 @@ Table~\ref{tab:complexity} is unaffected.
 \bibitem{dinkelbach1967}
 W.~Dinkelbach, ``On nonlinear fractional programming,'' \emph{Manage. Sci.},
 vol.~13, no.~7, pp.~492--498, 1967.
+\bibitem{suijs1999cooperative}
+J.~Suijs, P.~Borm, A.~De~Waegenaere, and S.~Tijs, ``Cooperative games
+with stochastic payoffs,'' \emph{Eur. J. Oper. Res.}, vol.~113, no.~1,
+pp.~193--205, 1999.
+\bibitem{uhan2015stochastic}
+N.~A.~Uhan, ``Stochastic linear programming games with concave
+preferences,'' \emph{Eur. J. Oper. Res.}, vol.~243, no.~2,
+pp.~637--646, 2015.
+\bibitem{toriello2017dynamic}
+A.~Toriello and N.~A.~Uhan, ``Dynamic linear programming games with
+risk-averse players,'' \emph{Math. Program.}, vol.~163, no.~1--2,
+pp.~25--56, 2017.
 \end{thebibliography}
 \end{document}
