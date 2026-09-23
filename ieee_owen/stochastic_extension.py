@@ -963,13 +963,20 @@ def solve_dwr_stab(players, T, scenarios, params, init_vals=None, pen_eps=0.1,
     relaxes the linking rows, so a round only certifies z when its slacks come out at
     zero; the last round runs with no penalty at all, which always certifies.
 
-    MEASURED against smoothing alone, 6 prosumers, Gurobi pricing, --cg-gap 1e-8:
-    |Omega| = 1, 194 iterations against 279; |Omega| = 3, 454 against 831; and
-    |Omega| = 5, 1558 in 342 s against no convergence in 50 minutes, twice, both
-    runs frozen at a reduced cost of -4.85e-3. That is why it is on by default:
-    what smoothing alone cannot get past is the degenerate plateau, where the RMP
-    value stops moving while the duals rotate among alternative optima, and the
-    penalty prices that rotation.
+    MEASURED, 6 prosumers, Gurobi pricing, --cg-gap 1e-8, in iterations:
+
+        |Omega|      1      3         5
+        both       194    454      1558  (5.8 s / 50 s / 343 s)
+        smoothing  279    831         -  (two runs, neither converged in 50 min,
+        penalty    357   1424         -   both frozen at a reduced cost of -4.8e-3)
+
+    Neither half works on its own, which is the combination Pessoa et al. (2018)
+    recommend. The penalty only bounds where the duals may go; inside the band of
+    width eps_r they still jump between extreme points, and the relaxed early rounds
+    price columns against a master far from z (RMP -3560 against z -2733 at
+    |Omega| = 3, where smoothing holds the same round at -3094). Smoothing damps the
+    jumps but cannot price the rotation among alternative optima that freezes the
+    RMP value late on. Hence both, on by default.
     """
     master = StochasticMaster(players, T, scenarios, params, **kw)
     first = master.solve(init_vals=init_vals, pricing=False)
