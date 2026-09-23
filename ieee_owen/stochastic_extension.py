@@ -26,11 +26,14 @@ never reads). SCIP duals are raw, and the pricing objective is c - pi^T a exactl
 solver.PlayerSubproblem. Row (k, t, omega) has coefficient 1 on the scenario block, so
 its dual is rho_omega times a price; Algorithm S1 divides it back out.
 
-ENGINES. --engine scip is the SCIP master driven by its pricer plugin, as in chp.py.
---engine direct runs the loop here instead, on a HiGHS or Gurobi LP (--lp-solver),
+ENGINES. --engine direct runs the loop here, on a HiGHS or Gurobi LP (--lp-solver),
 following the column generation in zonal_consistency/containment_bp.py: the master is
 built once and columns are added into it, so a penalty round only changes slack
-bounds instead of rebuilding. Pricing is SCIP, Gurobi or HiGHS (--pricing-solver).
+bounds instead of rebuilding. Pricing is Gurobi or HiGHS (--pricing-solver), and so
+are the extensive form and stand-alone MILPs (--mip-solver). SCIP builds the models
+but solves none of them: --engine scip (the SCIP master with its pricer plugin, as in
+chp.py, and with it --sar and --doi) and SCIP as a pricing or MIP solver now raise.
+The code for them is kept only so the numbers below stay traceable.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
 give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
 
@@ -54,6 +57,9 @@ from pyscipopt import Model, Pricer, SCIP_RESULT, SCIP_PARAMSETTING, quicksum
 from compact_utility import LocalEnergyMarket, reserve_blocks
 
 OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
+# relative MIP gap for every MILP here (extensive form, stand-alone, pricing) when
+# --mip-gap is not given: Gurobi's and HiGHS's own default; SCIP's would be 0
+MIP_GAP = 1e-4
 
 # Names LocalEnergyMarket gives the first-stage variables (f"{prefix}{u}_{t}" and
 # f"r_sym_{i}"). Heat-pump commitment is deliberately absent: it is redispatched.
@@ -261,19 +267,30 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
         m.hideOutput()
     if time_limit:
         m.setParam('limits/time', float(time_limit))
-    if gap is not None:
-        m.setParam('limits/gap', float(gap))
+    m.setParam('limits/gap', MIP_GAP if gap is None else float(gap))
 
 
 # =============================================================================
 # Extensive form
 # =============================================================================
-def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True):
-    """Solve (DP_S^Omega). Returns a dict; objective in the cost convention."""
+def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
+                         solver='highs'):
+    """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
+
+    solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
+    gurobipy copy of it.
+    """
+    if solver not in ('highs', 'gurobi'):
+        raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
     t0 = time.time()
     st = ScenarioStack('DP_Omega', players, T, scenarios, dwr=False)
     build = time.time() - t0
     m = st.model
+    if solver in ('highs', 'gurobi'):
+        fn = _solve_extensive_highs if solver == 'highs' else _solve_extensive_gurobi
+        return fn(st, build, time_limit, gap, quiet)
+    if solver != 'scip':
+        raise ValueError(f"MIP solver must be 'scip', 'highs' or 'gurobi', got {solver!r}")
     _set_mip_params(m, time_limit, gap, quiet=quiet)
     m.optimize()
     status = m.getStatus()
@@ -310,7 +327,7 @@ class Column:
         self.fs = {n: round(vals.get(n, 0.0)) for n in names if n in stack.first_stage}
 
 
-def _to_gurobi(scip_model, name, time_limit=None, gap=None, threads=1):
+def _to_gurobi(scip_model, name, time_limit=None, gap=None, env=None):
     """Copy a pyscipopt model that has only linear constraints into gurobipy.
 
     Built from the constraint data rather than through an MPS file: LocalEnergyMarket
@@ -320,10 +337,9 @@ def _to_gurobi(scip_model, name, time_limit=None, gap=None, threads=1):
     import gurobipy as gp
     from gurobipy import GRB
     inf = scip_model.infinity()
-    g = gp.Model(name)
+    g = gp.Model(name, env=env) if env is not None else gp.Model(name)
     g.Params.OutputFlag = 0
-    g.Params.Threads = threads
-    g.Params.MIPGap = 0.0 if gap is None else gap
+    g.Params.MIPGap = MIP_GAP if gap is None else gap
     if time_limit:
         g.Params.TimeLimit = time_limit
     vt = {'CONTINUOUS': GRB.CONTINUOUS, 'BINARY': GRB.BINARY, 'INTEGER': GRB.INTEGER,
@@ -353,7 +369,7 @@ def _to_gurobi(scip_model, name, time_limit=None, gap=None, threads=1):
     return g, gv
 
 
-def _to_highs(scip_model, time_limit=None, gap=None, threads=1):
+def _to_highs(scip_model, time_limit=None, gap=None):
     """Copy a pyscipopt model that has only linear constraints into highspy.
 
     Same contract as _to_gurobi: the columns come out in the order of
@@ -363,8 +379,7 @@ def _to_highs(scip_model, time_limit=None, gap=None, threads=1):
     INF, inf = highspy.kHighsInf, scip_model.infinity()
     h = highspy.Highs()
     h.setOptionValue('output_flag', False)
-    h.setOptionValue('threads', threads)
-    h.setOptionValue('mip_rel_gap', 0.0 if gap is None else gap)
+    h.setOptionValue('mip_rel_gap', MIP_GAP if gap is None else gap)
     if time_limit:
         h.setOptionValue('time_limit', float(time_limit))
     names = [v.name for v in scip_model.getVars()]
@@ -392,6 +407,74 @@ def _to_highs(scip_model, time_limit=None, gap=None, threads=1):
     return h, names
 
 
+def _solve_extensive_highs(st, build, time_limit, gap, quiet):
+    """solve_extensive_form on a highspy copy of the stacked SCIP model."""
+    import highspy
+    m = st.model
+    if m.getObjectiveSense() != 'minimize':
+        raise ValueError('extensive form is expected to minimise')
+    h, names = _to_highs(m, time_limit, gap)
+    if not quiet:
+        h.setOptionValue('output_flag', True)
+    by_name = {v.name: v for v in m.getVars()}
+    cost = np.array([by_name[n].getObj() for n in names])
+    h.changeColsCost(len(names), np.arange(len(names), dtype=np.int32), cost)
+    t0 = time.time()
+    h.run()
+    solve = time.time() - t0
+    status = h.modelStatusToString(h.getModelStatus()).lower()
+    info = h.getInfo()
+    if info.primal_solution_status != 2:            # kSolutionStatusFeasible
+        raise RuntimeError(f'extensive form ({len(st.players)} players, highs): '
+                           f'no solution, status {status}')
+    x = np.array(h.getSolution().col_value)
+    vals = dict(zip(names, x))
+    vals = {n: vals[n] for n in st.vars}
+    obj = float(cost @ x) + m.getObjoffset()
+    bound = info.mip_dual_bound + m.getObjoffset() if m.getNVars() and \
+        any(v.vtype() in ('BINARY', 'INTEGER') for v in m.getVars()) else obj
+    first, per = st.cost_split(vals)
+    return {
+        'stack': st, 'status': status, 'obj': obj,
+        'dual_bound': min(bound, obj), 'gap': max(info.mip_gap, 0.0) if bound != obj else 0.0,
+        'vals': vals, 'first_cost': first, 'scen_cost': per,
+        'worth_cost': [first + c for c in per],
+        'time_build': build, 'time_solve': solve,
+    }
+
+
+def _solve_extensive_gurobi(st, build, time_limit, gap, quiet):
+    """solve_extensive_form on a gurobipy copy of the stacked SCIP model."""
+    m = st.model
+    if m.getObjectiveSense() != 'minimize':
+        raise ValueError('extensive form is expected to minimise')
+    g, gv = _to_gurobi(m, 'DP_Omega', time_limit, gap)
+    g.Params.OutputFlag = 0 if quiet else 1
+    names = list(gv)
+    by_name = {v.name: v for v in m.getVars()}
+    gvars = [gv[n] for n in names]
+    g.setAttr('Obj', gvars, [by_name[n].getObj() for n in names])
+    g.ObjCon = m.getObjoffset()
+    g.optimize()
+    if g.SolCount == 0:
+        raise RuntimeError(f'extensive form ({len(st.players)} players, gurobi): '
+                           f'no solution, status {g.Status}')
+    vals = dict(zip(names, g.getAttr('X', gvars)))
+    vals = {n: vals[n] for n in st.vars}
+    obj = g.ObjVal
+    is_mip = g.IsMIP
+    bound = g.ObjBound if is_mip else obj
+    first, per = st.cost_split(vals)
+    return {
+        'stack': st, 'status': {2: 'optimal', 9: 'timelimit'}.get(g.Status, str(g.Status)),
+        'obj': obj, 'dual_bound': min(bound, obj),
+        'gap': g.MIPGap if is_mip else 0.0,
+        'vals': vals, 'first_cost': first, 'scen_cost': per,
+        'worth_cost': [first + c for c in per],
+        'time_build': build, 'time_solve': g.Runtime,
+    }
+
+
 class PlayerPricing:
     """eq:sup_vlrj for one prosumer: a two-stage stochastic MILP of its own.
 
@@ -399,14 +482,24 @@ class PlayerPricing:
     solve a copy of it (same variables, same rows) built through gurobipy or
     highspy, changing only the objective between calls.
     """
-    def __init__(self, player, T, scenarios, time_limit=None, gap=None, solver='scip'):
+    def __init__(self, player, T, scenarios, time_limit=None, gap=None, solver='highs',
+                 env=None):
+        if solver not in ('highs', 'gurobi'):
+            raise ValueError(f"pricing solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
         self.player = player
         self.stack = ScenarioStack(f'price_{player}', [player], T, scenarios, dwr=True)
         self.model = self.stack.model
         _set_mip_params(self.model, time_limit, gap)
         self.solver = solver
+        self.gap = MIP_GAP if gap is None else gap
+        self.time, self.calls = 0.0, 0
         if solver == 'gurobi':
-            self.g, self.gv = _to_gurobi(self.model, f'price_{player}', time_limit, gap)
+            # env: a Gurobi environment is never used from two threads at once, so
+            # DirectMaster hands one per worker and prices each env's prosumers in
+            # sequence. Without one, the default environment.
+            self.env = env
+            self.g, self.gv = _to_gurobi(self.model, f'price_{player}', time_limit, gap,
+                                         env=self.env)
             self.g_names = list(self.gv)
             self.g_vars = [self.gv[n] for n in self.g_names]
         elif solver == 'highs':
@@ -437,8 +530,29 @@ class PlayerPricing:
         m.freeTransform()
         m.setObjective(quicksum(c * v[n] for n, c in coef.items() if c), 'minimize')
 
+    def set_gap(self, gap):
+        """Relative MIP gap of this prosumer's pricing MILP."""
+        self.gap = gap
+        if self.solver == 'gurobi':
+            self.g.Params.MIPGap = gap
+        else:
+            self.h.setOptionValue('mip_rel_gap', gap)
+
+    def set_threads(self, k):
+        """Solver threads for this prosumer's MILP (None: the solver's default)."""
+        if self.solver == 'gurobi':
+            self.g.Params.Threads = 0 if k is None else int(k)
+
     def price(self, duals, farkas=False):
         """min_x c(x) - pi^T A_j x over X_j. Returns (objective, dual bound, Column)."""
+        t0 = time.time()
+        try:
+            return self._price(duals, farkas)
+        finally:
+            self.time += time.time() - t0
+            self.calls += 1
+
+    def _price(self, duals, farkas=False):
         if self.solver == 'gurobi':
             obj, bound, vals = self._price_gurobi(duals, farkas)
         elif self.solver == 'highs':
@@ -460,7 +574,14 @@ class PlayerPricing:
         coef = self._coef(duals, farkas)
         g = self.g
         g.setAttr('Obj', self.g_vars, [coef.get(n, 0.0) for n in self.g_names])
-        g.optimize()
+        for attempt in range(5):
+            try:
+                g.optimize()
+                break
+            except Exception as e:      # WLS token renewal hiccup: wait and retry
+                if 'license' not in str(e).lower() or attempt == 4:
+                    raise
+                time.sleep(2.0 * (attempt + 1))
         if g.SolCount == 0:
             raise RuntimeError(f'pricing {self.player} (gurobi): no solution, status {g.Status}')
         x = g.getAttr('X', self.g_vars)
@@ -479,7 +600,20 @@ class PlayerPricing:
                          np.array([coef.get(n, 0.0) for n in self.h_names]))
         h.run()
         st = h.getModelStatus()
-        if st not in (highspy.HighsModelStatus.kOptimal,):
+        if st != highspy.HighsModelStatus.kOptimal:
+            # HiGHS sometimes ends an LP in kUnknown (a numerical clean-up failure):
+            # retry from scratch, then once more without presolve
+            h.clearSolver()
+            h.run()
+            st = h.getModelStatus()
+            if st != highspy.HighsModelStatus.kOptimal:
+                h.clearSolver()
+                h.setOptionValue('presolve', 'off')
+                h.run()
+                st = h.getModelStatus()
+                h.setOptionValue('presolve', 'choose')
+            self.retries = getattr(self, 'retries', 0) + 1
+        if st != highspy.HighsModelStatus.kOptimal:
             raise RuntimeError(f'pricing {self.player} (highs): status {st}')
         vals = dict(zip(self.h_names, h.getSolution().col_value))
         obj = sum(c * vals[n] for n, c in coef.items() if c)
@@ -518,6 +652,7 @@ class StochasticMaster:
                  pricing_time_limit=None, pricing_gap=None, smoothing=True,
                  incumbent=None, doi=False, subs=None, families=None,
                  pricing_solver='scip', gap_tol=1e-8, penalty=None, verbose=True):
+        raise RuntimeError(f"--engine scip: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # Wentges smoothing with the adaptive alpha of Pessoa et al. (2010), as in
         # pricer.LEMPricer; `incumbent` is the extensive-form objective when known.
@@ -1028,26 +1163,43 @@ class _LP:
     what lets the loop keep one model from the first iteration to the last: a
     penalty round only changes bounds and costs. Both backends use the convention
     reduced cost = c - pi^T a, with pi <= 0 on a <= row of a minimization.
+
+    Columns are addressed by handles that survive remove_cols(): handle j sits at
+    position pos[j] of the solver's column list, -1 once removed.
     """
-    def __init__(self, backend='highs', name='master'):
-        self.backend = backend
+    def __init__(self, backend='highs', name='master', method='primal', presolve='auto'):
+        # method: simplex variant for the master LP. Columns only ever get added, so
+        # the previous basis stays primal feasible and primal simplex warm starts
+        # from it; 'auto' leaves the choice to the solver (Gurobi: concurrent).
+        self.backend, self.method = backend, method
+        self.pos, self.handle_at = [], []
         if backend == 'highs':
             import highspy
             self.INF = highspy.kHighsInf
             self.h = highspy.Highs()
             self.h.setOptionValue('output_flag', False)
-            self.h.setOptionValue('threads', 1)
             self._st = highspy.HighsModelStatus.kOptimal
-            self.ncol = self.nrow = 0
+            self.nrow = 0
         elif backend == 'gurobi':
             import gurobipy as gp
             self.gp, self.INF = gp, gp.GRB.INFINITY
             self.m = gp.Model(name)
             self.m.Params.OutputFlag = 0
-            self.m.Params.Threads = 1
+            if presolve == 'off':
+                self.m.Params.Presolve = 0
             self.rows, self.cols = [], []
         else:
             raise ValueError(f"lp solver must be 'highs' or 'gurobi', got {backend!r}")
+        if backend == 'highs' and presolve == 'off':
+            self.h.setOptionValue('presolve', 'off')
+        self._apply_method()
+
+    def _apply_method(self):
+        if self.backend == 'highs':
+            self.h.setOptionValue('simplex_strategy',
+                                  {'primal': 4, 'dual': 1, 'auto': 0}[self.method])
+        else:
+            self.m.Params.Method = {'primal': 0, 'dual': 1, 'auto': -1}[self.method]
 
     def add_row(self, lo, hi):
         if self.backend == 'highs':
@@ -1068,23 +1220,62 @@ class _LP:
         if self.backend == 'highs':
             self.h.addCol(obj, lb, ub, len(rows), np.array(rows, dtype=np.int32),
                           np.array(coefs, dtype=float))
-            self.ncol += 1
-            return self.ncol - 1
-        col = self.gp.Column(list(coefs), [self.rows[r] for r in rows])
-        self.cols.append(self.m.addVar(lb=lb, ub=ub, obj=obj, column=col))
-        return len(self.cols) - 1
+        else:
+            col = self.gp.Column(list(coefs), [self.rows[r] for r in rows])
+            self.cols.append(self.m.addVar(lb=lb, ub=ub, obj=obj, column=col))
+        j = len(self.pos)
+        self.pos.append(len(self.handle_at))
+        self.handle_at.append(j)
+        return j
+
+    def remove_cols(self, handles):
+        """Delete columns; the remaining handles stay valid."""
+        drop = sorted(self.pos[j] for j in handles if self.pos[j] >= 0)
+        if not drop:
+            return
+        if self.backend == 'highs':
+            self.h.deleteCols(len(drop), np.array(drop, dtype=np.int32))
+        else:
+            self.m.remove([self.cols[p] for p in drop])
+            gone = set(drop)
+            self.cols = [v for p, v in enumerate(self.cols) if p not in gone]
+        gone = set(drop)
+        for p in drop:
+            self.pos[self.handle_at[p]] = -1
+        self.handle_at = [j for p, j in enumerate(self.handle_at) if p not in gone]
+        for p, j in enumerate(self.handle_at):
+            self.pos[j] = p
+
+    def set_cols(self, js, obj=None, ub=None):
+        """Batch version of set_col for costs and upper bounds (lower bounds kept)."""
+        ps = [self.pos[j] for j in js]
+        if self.backend == 'highs':
+            idx = np.array(ps, dtype=np.int32)
+            if obj is not None:
+                self.h.changeColsCost(len(ps), idx, np.asarray(obj, dtype=float))
+            if ub is not None:
+                cur = self.h.getCols(len(ps), idx)
+                self.h.changeColsBounds(len(ps), idx, np.asarray(cur[3]),
+                                        np.asarray(ub, dtype=float))
+            return
+        vs = [self.cols[p] for p in ps]
+        if obj is not None:
+            self.m.setAttr('Obj', vs, list(obj))
+        if ub is not None:
+            self.m.setAttr('UB', vs, list(ub))
 
     def set_col(self, j, obj=None, lb=None, ub=None):
+        p = self.pos[j]
         if self.backend == 'highs':
             if obj is not None:
-                self.h.changeColCost(j, obj)
+                self.h.changeColCost(p, obj)
             if lb is not None or ub is not None:
-                cur = self.h.getCols(1, np.array([j], dtype=np.int32))
+                cur = self.h.getCols(1, np.array([p], dtype=np.int32))
                 lo = cur[3][0] if lb is None else lb
                 up = cur[4][0] if ub is None else ub
-                self.h.changeColBounds(j, lo, up)
+                self.h.changeColBounds(p, lo, up)
             return
-        v = self.cols[j]
+        v = self.cols[p]
         if obj is not None:
             v.Obj = obj
         if lb is not None:
@@ -1092,27 +1283,98 @@ class _LP:
         if ub is not None:
             v.UB = ub
 
-    def solve(self):
+    def solve(self, method=None):
+        """Solve; `method` overrides the simplex variant for this one solve."""
+        if method is not None and method != self.method:
+            saved, self.method = self.method, method
+            self._apply_method()
+            try:
+                return self.solve()
+            finally:
+                self.method = saved
+                self._apply_method()
         if self.backend == 'highs':
+            t0 = time.time()
             self.h.run()
+            info = self.h.getInfo()
+            self.stats = (time.time() - t0, info.simplex_iteration_count,
+                          self.h.getNumCol(), self.h.getNumNz())
             if self.h.getModelStatus() != self._st:
                 raise RuntimeError(f'master LP (highs): {self.h.getModelStatus()}')
             sol = self.h.getSolution()
             self._x = np.asarray(sol.col_value)
+            self._rc = np.asarray(sol.col_dual)
             self._pi = np.asarray(sol.row_dual)
             return float(self.h.getObjectiveValue())
         self.m.optimize()
+        self.stats = (self.m.Runtime, self.m.IterCount, self.m.NumVars, self.m.NumNZs)
         if self.m.Status != self.gp.GRB.OPTIMAL:
             raise RuntimeError(f'master LP (gurobi): status {self.m.Status}')
         self._x = np.array(self.m.getAttr('X', self.cols))
+        self._rc = np.array(self.m.getAttr('RC', self.cols))
         self._pi = np.array(self.m.getAttr('Pi', self.rows))
         return float(self.m.ObjVal)
 
     def x(self, j):
-        return float(self._x[j])
+        return float(self._x[self.pos[j]])
+
+    def rc(self, j):
+        return float(self._rc[self.pos[j]])
 
     def pi(self, r):
         return float(self._pi[r])
+
+
+class _TwinLP:
+    """The penalized master plus an unpenalized shadow of it, for the upper bound.
+
+    Rows and columns go into both, so indices agree; cost and bound changes (the
+    penalty) go into the main LP only, so the shadow's slacks stay closed. The
+    shadow keeps its own basis and warm starts from it when asked for the bound.
+    """
+    def __init__(self, backend, method, presolve='auto'):
+        self.main = _LP(backend, method=method, presolve=presolve)
+        self.shadow = _LP(backend, name='master_ub', method=method, presolve=presolve)
+        self.INF = self.main.INF
+
+    def add_row(self, lo, hi):
+        r = self.main.add_row(lo, hi)
+        assert self.shadow.add_row(lo, hi) == r
+        return r
+
+    def add_col(self, obj, lb, ub, rows=(), coefs=()):
+        j = self.main.add_col(obj, lb, ub, rows, coefs)
+        assert self.shadow.add_col(obj, lb, ub, rows, coefs) == j
+        return j
+
+    def set_cols(self, js, obj=None, ub=None):
+        self.main.set_cols(js, obj=obj, ub=ub)
+
+    def set_col(self, j, obj=None, lb=None, ub=None):
+        self.main.set_col(j, obj=obj, lb=lb, ub=ub)
+
+    def solve(self, method=None):
+        return self.main.solve(method)
+
+    def solve_shadow(self):
+        return self.shadow.solve()
+
+    def remove_cols(self, handles):
+        self.main.remove_cols(handles)
+        self.shadow.remove_cols(handles)
+
+    def rc(self, j):
+        return self.main.rc(j)
+
+    @property
+    def stats(self):
+        return self.main.stats
+
+    def x(self, j):
+        return self.main.x(j)
+
+    def pi(self, r):
+        return self.main.pi(r)
 
 
 class DirectMaster:
@@ -1127,17 +1389,48 @@ class DirectMaster:
     """
     def __init__(self, players, T, scenarios, params, lp_solver='highs',
                  pricing_solver='highs', pricing_time_limit=None, pricing_gap=None,
-                 smoothing=True, incumbent=None, gap_tol=1e-8, pen_eps=0.2,
+                 smoothing=True, incumbent=None, gap_tol=MIP_GAP, pen_eps=0.2,
                  pen_delta=0.2, pen_shrink=0.25, max_rounds=12, max_iter=100000,
-                 subs=None, verbose=True):
+                 subs=None, verbose=True, pricing_workers=1, round_tol=None,
+                 ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
+                 purge_cap=40, lp_presolve='auto'):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
+        # pricing_workers > 1 prices that many prosumers at once (threads; Gurobi
+        # releases the GIL while it solves). round_tol, if set, is the column
+        # admission tolerance of every penalty round but the last, which always uses
+        # gap_tol: an intermediate round only has to move the center, not converge.
+        self.round_tol = round_tol
+        self._pool = None
+        self.ub, self._pen_state = np.inf, None
+        self.ub_every, self.pricing_gap_floor, self.pricing_tightened = ub_every, 1e-9, 0
+        # column management: every purge_every iterations, drop the prosumer columns
+        # that have been out of the RMP solution for purge_age iterations and price
+        # out at the current duals (0: keep every column)
+        self.purge_every, self.purge_age, self.purge_cap = purge_every, purge_age, purge_cap
+        self.last_used, self.purged = {}, 0
+        self.protected = set()      # the seed columns: they keep every penalty feasible
         self.probs = [p for p, _ in scenarios]
         self.params, self.verbose, self.gap_tol = params, verbose, gap_tol
         self.smoothing, self.incumbent = smoothing, np.inf if incumbent is None else incumbent
         self.pen_eps, self.pen_delta = pen_eps, pen_delta
         self.pen_shrink, self.max_rounds, self.max_iter = pen_shrink, max_rounds, max_iter
+        self.pricing_workers = os.cpu_count() if pricing_workers == 0 else pricing_workers
+        self.pricing_workers = max(1, min(self.pricing_workers, len(self.players)))
+        # one Gurobi environment (one WLS session) per worker; prosumer u is priced
+        # by worker u mod k, in sequence with that worker's other prosumers
+        k = self.pricing_workers
+        self._envs = [None] * k
+        if subs is None and pricing_solver == 'gurobi':
+            import gurobipy as gp
+            for i in range(k):
+                e = gp.Env(empty=True)
+                e.setParam('OutputFlag', 0)
+                e.start()
+                self._envs[i] = e
+        self._group = {u: i % k for i, u in enumerate(self.players)}
         self.subs = subs or {u: PlayerPricing(u, T, scenarios, pricing_time_limit,
-                                              pricing_gap, pricing_solver)
+                                              pricing_gap, pricing_solver,
+                                              env=self._envs[self._group[u]])
                              for u in self.players}
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
@@ -1148,7 +1441,18 @@ class DirectMaster:
                               for d in ('up', 'dn')]
         if self.enable_peak:
             self.row_keys += [('peak', t, w) for w in range(len(scenarios)) for t in self.T]
-        self.lp = _LP(lp_solver)
+        if self.pricing_workers > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            self._pool = ThreadPoolExecutor(self.pricing_workers)
+            per = max(1, (os.cpu_count() or 1) // self.pricing_workers)
+            for s in self.subs.values():
+                s.set_threads(per)
+        self.t_lp = self.t_price = 0.0
+        self.t_ub_split, self.n_ub = [0.0, 0.0], 0
+        # with a penalty, the upper bound comes from an unpenalized twin of the master
+        self.lp_backend = lp_solver
+        self.lp = (_TwinLP(lp_solver, lp_method, lp_presolve) if pen_eps > 0.0
+                   else _LP(lp_solver, method=lp_method, presolve=lp_presolve))
         self.columns = {u: [] for u in self.players}
         self.col_idx = {u: [] for u in self.players}
         self.iteration, self.lb, self.L_bar = 0, -np.inf, -np.inf
@@ -1210,15 +1514,50 @@ class DirectMaster:
         u = col.player
         rows = [self.conv[u]] + [self.row[k] for k in col.coef]
         coefs = [1.0] + list(col.coef.values())
-        self.col_idx[u].append(self.lp.add_col(col.cost, 0.0, self.lp.INF, rows, coefs))
+        h = self.lp.add_col(col.cost, 0.0, self.lp.INF, rows, coefs)
+        self.col_idx[u].append(h)
         self.columns[u].append(col)
+        self.last_used[h] = self.iteration
+
+    def _purge(self, ref):
+        """Remove prosumer columns unused for purge_age iterations with reduced cost
+        above a numerical zero at the current duals. Call right after an LP solve
+        and before the next one: positions shift."""
+        tol = 1e-9 * (1.0 + abs(ref))
+        ncol = sum(len(v) for v in self.col_idx.values())
+        cap = self.purge_cap * len(self.players)
+        if ncol <= cap:
+            return 0
+        # candidates: unused for purge_age iterations and pricing out now, the
+        # longest-unused first, until the column count is back under the cap. The
+        # master is primal degenerate here -- a new plan only pays off together with
+        # other prosumers' plans -- so columns must be given time to find partners.
+        cand = sorted(((self.last_used[h], h) for u in self.players for h in self.col_idx[u]
+                       if h not in self.protected
+                       and self.iteration - self.last_used[h] >= self.purge_age
+                       and self.lp.rc(h) > tol))
+        drop = set(h for _, h in cand[:ncol - cap])
+        for u in self.players:
+            keep = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u]) if h not in drop]
+            self.col_idx[u] = [h for h, _ in keep]
+            self.columns[u] = [c for _, c in keep]
+        drop = list(drop)
+        if drop:
+            self.lp.remove_cols(drop)
+            for h in drop:
+                del self.last_used[h]
+            self.purged += len(drop)
+        return len(drop)
 
     def _set_penalty(self, center, eps, delta):
+        self._pen_state = (center, eps, delta)
+        js, obj = [], []
         for key, (up, dn) in self.pen.items():
             c = center.get(key, 0.0) if center else 0.0
             e = eps * (1.0 + abs(c))
-            self.lp.set_col(up, obj=c + e, lb=0.0, ub=delta)
-            self.lp.set_col(dn, obj=-c + e, lb=0.0, ub=delta)
+            js += [up, dn]
+            obj += [c + e, -c + e]
+        self.lp.set_cols(js, obj=obj, ub=[delta] * len(js))
 
     # --- duals and bound -----------------------------------------------------
     def _duals(self):
@@ -1252,93 +1591,270 @@ class DirectMaster:
             min(1.0, 0.1 * (self.incumbent - self.L_bar) / gap)
             if lp_obj > self.incumbent and self.incumbent - self.L_bar > 1e-6 else 0.1)
 
+    def _price_group(self, members, duals):
+        return {u: self.subs[u].price(duals) for u in members}
+
+    def _price_all(self, duals):
+        t0 = time.time()
+        if self._pool is None:
+            res = {u: s.price(duals) for u, s in self.subs.items()}
+        else:
+            groups = {}
+            for u in self.players:
+                groups.setdefault(self._group[u], []).append(u)
+            futs = [self._pool.submit(self._price_group, m, duals) for m in groups.values()]
+            res = {}
+            for f in futs:
+                res.update(f.result())
+            res = {u: res[u] for u in self.players}
+        dt = time.time() - t0
+        self.t_price += dt
+        self._it_price += dt
+        return res
+
+    # --- bounds --------------------------------------------------------------
+    def _penalized(self):
+        return self._pen_state is not None and self._pen_state[2] > 0.0
+
+    def _gap_tol(self, ref):
+        return self.gap_tol * (1.0 + abs(ref))
+
+    def _update_ub(self, lp_obj=None):
+        """Upper bound on z_MP: the value of the RMP without the penalty slacks.
+
+        Unpenalized, that is the LP just solved. Penalized, it is the twin LP that has
+        every column but never the slacks: the restricted master over every column so
+        far bounds z_MP from above whatever the stabilization is doing.
+        """
+        t0 = time.time()
+        if not self._penalized():
+            ub = lp_obj if lp_obj is not None else self.lp.solve()
+        else:
+            t1 = time.time()
+            try:
+                ub = self.lp.solve_shadow()
+            except RuntimeError:        # not yet feasible without the slacks
+                ub = np.inf
+            self.t_ub_split[0] += time.time() - t1
+            self.n_ub += 1
+        self.t_lp += time.time() - t0
+        if ub < self.ub:
+            self.ub = ub
+        return ub
+
+    def _converged(self):
+        return np.isfinite(self.ub) and self.ub - self.lb <= self._gap_tol(self.ub)
+
+    def _tighten_pricing(self, res):
+        """No column prices, yet LB is short of the RMP value: only the pricing MILPs'
+        own gaps can be holding the Lagrangian bound down. Tighten them tenfold for
+        the prosumers whose bound is loose; False once all of those are at the floor."""
+        changed = False
+        for u, (obj, bound, _) in res.items():
+            sub = self.subs[u]
+            if obj - bound > 1e-9 * (1.0 + abs(obj)) and sub.gap > self.pricing_gap_floor:
+                sub.set_gap(max(sub.gap / 10.0, self.pricing_gap_floor))
+                changed = True
+        if changed:
+            self.pricing_tightened += 1
+        return changed
+
     # --- the loop ------------------------------------------------------------
-    def _cg(self, tag):
-        """Column generation until the bound reaches the LP value or nothing prices."""
+    def _cg(self, tag, last=True):
+        """Column generation for one penalty setting.
+
+        Returns ('done', v) as soon as the Lagrangian bound LB is within gap_tol of an
+        upper bound UB on z_MP -- the unpenalized RMP value -- whatever round this is:
+        the whole problem is then solved (Lagrangian-bound early termination).
+        Returns ('round', v) once LB has reached this round's penalized RMP value,
+        i.e. the stabilized problem is solved and the center can move. Any column
+        with negative reduced cost is admitted: termination never rests on reduced
+        costs, which an inexactly solved pricing MILP cannot certify, only on LB,
+        which is built from the pricing MILPs' dual bounds and so stays valid.
+        """
+        rel = self.gap_tol if (last or self.round_tol is None) else self.round_tol
+        since_ub = 0
         while True:
+            t0 = time.time()
             lp_obj = self.lp.solve()
+            t_lp = time.time() - t0
+            self.t_lp += t_lp
+            self._it_price = 0.0
             duals, conv = self._duals()
-            tol = self.gap_tol * (1.0 + abs(lp_obj))
+            if self.purge_every:
+                for u in self.players:
+                    for h in self.col_idx[u]:
+                        if self.lp.x(h) > 1e-9:
+                            self.last_used[h] = self.iteration
+            if not self._penalized():
+                self._update_ub(lp_obj)
+            tol = rel * (1.0 + abs(lp_obj))
+            adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
             self.iteration += 1
             if self.iteration > self.max_iter:
                 raise RuntimeError('column generation: iteration limit')
             alpha, added, min_rc, mode = 1.0, 0, 0.0, 'std'
-            if self.smoothing:
+            status = None
+            if self._converged():
+                status = 'done'
+            elif self.lb >= lp_obj - tol:
+                status = 'round'
+            if status is None and self.smoothing:
                 if self.center is None:
                     self.center = dict(duals)
                 alpha = self._alpha(lp_obj)
                 if alpha < 1.0:
                     st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
                           for k in set(duals) | set(self.center)}
-                    res = {u: s.price(st) for u, s in self.subs.items()}
+                    res = self._price_all(st)
                     self._record(st, res)
                     mode = 'smooth'
-                    if self.lb < lp_obj - tol:
-                        for u, (_, _, col) in res.items():
-                            rc = col.cost - sum(duals.get(k, 0.0) * a
-                                                for k, a in col.coef.items()) - conv[u]
-                            min_rc = min(min_rc, rc)
-                            if rc < -tol:
-                                self.add_column(col)
-                                added += 1
-                        if not added:
-                            mode = 'misprice'
-            if not added and self.lb < lp_obj - tol:
-                res = {u: s.price(duals) for u, s in self.subs.items()}
-                self._record(duals, res)
-                for u, (obj, _, col) in res.items():
-                    rc = obj - conv[u]
-                    min_rc = min(min_rc, rc)
-                    if rc < -tol:
-                        self.add_column(col)
-                        added += 1
+                    for u, (_, _, col) in res.items():
+                        rc = col.cost - sum(duals.get(k, 0.0) * a
+                                            for k, a in col.coef.items()) - conv[u]
+                        min_rc = min(min_rc, rc)
+                        if rc < -adm:
+                            self.add_column(col)
+                            added += 1
+                    if not added:
+                        mode = 'misprice'
+            if status is None and not added:
+                if self._converged():
+                    status = 'done'
+                elif self.lb >= lp_obj - tol:
+                    status = 'round'
+                else:
+                    res = self._price_all(duals)
+                    self._record(duals, res)
+                    for u, (obj, _, col) in res.items():
+                        rc = obj - conv[u]
+                        min_rc = min(min_rc, rc)
+                        if rc < -adm:
+                            self.add_column(col)
+                            added += 1
+                    if not added:
+                        if self._converged():
+                            status = 'done'
+                        elif self.lb >= lp_obj - tol:
+                            status = 'round'
+                        elif self._tighten_pricing(res):
+                            mode = 'tighten'
+                        else:
+                            status = 'stalled'
+            since_ub += 1
+            if status is None and self._penalized() and since_ub >= self.ub_every:
+                self._update_ub()
+                since_ub = 0
+                if self._converged():
+                    status = 'done'
             self.log.append({'iter': self.iteration, 'lp': lp_obj, 'lb': self.lb,
-                             'alpha': alpha, 'mode': mode, 'min_rc': min_rc,
-                             'added': added, 'round': tag})
-            if self.verbose and (self.iteration % 25 == 0 or not added):
+                             'ub': self.ub, 'alpha': alpha, 'mode': mode,
+                             'min_rc': min_rc, 'added': added, 'round': tag,
+                             't_lp': t_lp, 't_price': self._it_price,
+                             'lp_stats': getattr(self.lp, 'stats', None)})
+            if self.verbose and (self.iteration % 25 == 0 or status or mode == 'tighten'):
                 print(f'  CG {self.iteration:4d} | RMP {lp_obj:13.4f} | LB {self.lb:13.4f} '
-                      f'| a {alpha:.2f} {mode:8s} | min rc {min_rc:11.4e} | +{added}')
-            if not added:
-                return lp_obj
+                      f'| UB {self.ub:13.4f} | a {alpha:.2f} {mode:8s} '
+                      f'| min rc {min_rc:11.4e} | +{added}' + (f'  [{status}]' if status else '')
+                      + (f' | lp {t_lp:.2f}s solver {self.lp.stats[0]:.2f}s '
+                         f'{self.lp.stats[1]:.0f} it {self.lp.stats[2]} cols {self.lp.stats[3]} nz'
+                         if getattr(self.lp, 'stats', None) else ''))
+            if status:
+                return status, lp_obj
+            if self.purge_every and self.iteration % self.purge_every == 0:
+                self._purge(lp_obj)         # the next pass re-solves the LP first
 
     def solve(self, init_vals=None, init_cols=None):
         t0 = time.time()
         cols = list(init_cols) if init_cols is not None else [
             self.subs[u].column_from(init_vals) for u in self.players]
+        # The seed plans come from a MIP solved to its feasibility tolerance, so they
+        # balance the carrier rows only to ~1e-7. With every prosumer on its single
+        # seed column those equality rows are then feasible or not at the LP's own
+        # tolerance, and Gurobi has been seen to call the plain master infeasible on
+        # a re-solve. Put each row's residual on the prosumer with the largest term
+        # there: community trade carries no cost, so column costs are unchanged.
+        res = {}
+        for c in cols:
+            for k, a in c.coef.items():
+                if k[0] in CARRIERS:
+                    res[k] = res.get(k, 0.0) + a
+        self.seed_residual = max((abs(v) for v in res.values()), default=0.0)
+        if init_cols is None:
+            for k, r in res.items():
+                if r == 0.0:
+                    continue
+                c = max(cols, key=lambda c: abs(c.coef.get(k, 0.0)))
+                c.coef[k] = c.coef.get(k, 0.0) - r
+        if self.verbose:
+            print(f'  seed columns: largest carrier-row residual {self.seed_residual:.2e}'
+                  + (' (repaired)' if init_cols is None and self.seed_residual else ''))
         for c in cols:
             self.add_column(c)
+        self.protected = {h for u in self.players for h in self.col_idx[u]}
+        if self.lp_backend == 'gurobi' and isinstance(self.lp, _LP):
+            m = self.lp.m
+            m.optimize()
+            if m.Status in (3, 4):          # diagnose an infeasible seed master
+                m.computeIIS()
+                inv = {r: k for k, r in self.row.items()}
+                inv.update({r: ('conv', u) for u, r in self.conv.items()})
+                rows = [inv.get(i) for i, c in enumerate(self.lp.rows) if c.IISConstr]
+                bnds = sum(1 for v in self.lp.cols if v.IISLB or v.IISUB)
+                print(f'  seed master infeasible; IIS rows {rows[:30]} '
+                      f'({len(rows)} rows, {bnds} bounds)')
         eps, delta, rounds = self.pen_eps, self.pen_delta, []
+        status = None
         for rnd in range(1, self.max_rounds + 1):
             last = rnd == self.max_rounds or eps <= 0.0
             self._set_penalty(self.center if not last else None,
                               0.0 if last else eps, 0.0 if last else delta)
-            obj = self._cg(rnd)
+            status, obj = self._cg(rnd, last)
+            if status != 'done':
+                self._update_ub()
+                if self._converged():
+                    status = 'done'
             slack = max((max(self.lp.x(a), self.lp.x(b)) for a, b in self.pen.values()),
                         default=0.0)
-            tol = (len(self.players) + 1) * self.gap_tol * (1 + abs(obj))
-            done = slack <= 1e-7 and self.lb >= obj - tol
             rounds.append({'round': rnd, 'eps': eps, 'delta': delta, 'obj': obj,
-                           'lb': self.lb, 'slack': slack, 'iterations': self.iteration,
-                           'time': time.time() - t0, 'certified': bool(done)})
+                           'lb': self.lb, 'ub': self.ub, 'slack': slack,
+                           'iterations': self.iteration, 'time': time.time() - t0,
+                           'certified': status == 'done', 'status': status})
             if self.verbose:
                 print(f'  -- penalty round {rnd}: eps {eps:.3g} delta {delta:.3g} '
-                      f'RMP {obj:.4f} LB {self.lb:.4f} slack {slack:.2e}'
-                      + ('  [certified]' if done else ''))
-            if done:
+                      f'RMP {obj:.4f} LB {self.lb:.4f} UB {self.ub:.4f} '
+                      f'gap {(self.ub - self.lb) / (1 + abs(self.ub)):.2e} '
+                      f'[{status}] {time.time() - t0:.0f}s')
+            if status == 'done' or last:
                 break
             eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
             if eps < 1e-4:
                 eps = delta = 0.0
-        else:
-            raise RuntimeError('direct master: no certified round')
+        # report the unpenalized restricted master
+        self._set_penalty(None, 0.0, 0.0)
+        obj = self.lp.solve()
+        if obj < self.ub:
+            self.ub = obj
         duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
-        return {'status': 'optimal', 'obj': obj, 'lb': self.lb, 'duals': duals,
+        return {'status': 'optimal' if status == 'done' else status,
+                'obj': obj, 'lb': self.lb, 'ub': self.ub,
+                'gap': (self.ub - self.lb) / (1.0 + abs(self.ub)), 'duals': duals,
                 'sigma': sigma, 'iterations': self.iteration,
                 'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.players},
                 'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
                 'columns': {u: len(self.columns[u]) for u in self.players},
                 'y_total': 0.0, 'penalty': {'rounds': rounds}, 'doi': {'used': False},
-                'time': time.time() - t0}
+                'time': time.time() - t0,
+                'timing': {'lp': self.t_lp, 'pricing': self.t_price,
+                           'pricing_by_player': {u: s.time for u, s in self.subs.items()},
+                           'pricing_calls': sum(s.calls for s in self.subs.values()),
+                           'pricing_tightened': self.pricing_tightened,
+                           'purged': self.purged,
+                           'seed_residual': self.seed_residual,
+                           'ub_checks': self.n_ub, 'ub_solve': self.t_ub_split[0],
+                           'ub_restore': self.t_ub_split[1],
+                           'pricing_gap_final': {u: s.gap for u, s in self.subs.items()},
+                           'workers': self.pricing_workers}}
 
     def terminal_columns(self, duals):
         if self.best is not None and duals is self.best[0]:
@@ -1558,6 +2074,11 @@ def _jsonable(x):
 
 
 def run(args):
+    if args.engine != 'direct':
+        raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
+    if args.sar or args.doi:
+        raise SystemExit('--sar and --doi exist only on the SCIP engine, which is no '
+                         'longer supported')
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n)
@@ -1566,12 +2087,13 @@ def run(args):
                           load_sigma=args.load_sigma, price_sigma=args.price_sigma,
                           rho=args.rho,
                           price_carriers=tuple(args.price_carriers.split(',')))
-    mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap)
+    mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap,
+                  solver=args.mip_solver)
     tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('_doi' if args.doi else '') \
         + ('_sar' if args.sar else '') + ('_nosmooth' if args.no_smoothing else '') \
         + ('_grb' if args.pricing_solver == 'gurobi' else '') \
         + ('_nopen' if args.no_penalty else '') \
-        + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '')
+        + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '')         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
 
     if args.deterministic_check:
@@ -1591,13 +2113,22 @@ def run(args):
             players, T, scen, base,
             init_vals=None if args.cold_start else ef['vals'],
             lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
-            pricing_time_limit=args.mip_time_limit, pricing_gap=args.mip_gap,
+            pricing_time_limit=args.mip_time_limit,
+            pricing_gap=args.mip_gap if args.pricing_gap is None else args.pricing_gap,
             smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
             pen_eps=0.0 if args.no_penalty else args.pen_eps,
             pen_delta=0.0 if args.no_penalty else args.pen_delta,
-            pen_shrink=args.pen_shrink)
-        print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  iters {dw["iterations"]}  '
-              f'{dw["time"]:.1f}s  rounds {len(dw["penalty"]["rounds"])}')
+            pen_shrink=args.pen_shrink, max_rounds=args.max_rounds,
+            pricing_workers=args.pricing_workers, round_tol=args.round_tol,
+            ub_every=args.ub_every, lp_method=args.lp_method,
+            purge_every=args.purge_every, purge_age=args.purge_age,
+            purge_cap=args.purge_cap, lp_presolve=args.lp_presolve)
+        tm = dw['timing']
+        print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  gap {dw["gap"]:.2e}  '
+              f'iters {dw["iterations"]}  {dw["time"]:.1f}s  '
+              f'rounds {len(dw["penalty"]["rounds"])}  status {dw["status"]}')
+        print(f'  time: master LP {tm["lp"]:.1f}s  pricing {tm["pricing"]:.1f}s '
+              f'({tm["pricing_calls"]} MILPs, {tm["workers"]} worker(s))')
     elif args.sar:
         solver = solve_dwr_sar
         extra = {'sar_block': args.sar_block, 'sar_cap': args.sar_cap}
@@ -1656,8 +2187,13 @@ def run(args):
         'ef': {k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
                                   'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
         'ef_first_stage': {k: v for k, v in first.items() if abs(v) > 1e-9},
-        'dw': {k: dw[k] for k in ('status', 'obj', 'lb', 'sigma', 'x0', 'iterations',
-                                  'columns', 'time', 'doi')},
+        'dw': {k: dw.get(k) for k in ('status', 'obj', 'lb', 'ub', 'gap', 'sigma', 'x0',
+                                      'iterations', 'columns', 'time', 'doi', 'timing')},
+        'cg_options': {k: getattr(args, k) for k in (
+            'lp_solver', 'pricing_solver', 'mip_solver', 'cg_gap', 'pricing_gap',
+            'no_penalty', 'no_smoothing', 'pen_eps', 'pen_delta', 'pen_shrink',
+            'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
+            'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
@@ -1673,14 +2209,17 @@ def run(args):
     path = os.path.join(args.out, f'{tag}.json')
     with open(path, 'w') as f:
         json.dump(_jsonable(out), f, indent=1)
-    print(f'\nwrote {os.path.relpath(path, _ROOT)}')
+    try:
+        print(f'\nwrote {os.path.relpath(path, _ROOT)}')
+    except ValueError:              # another drive on Windows
+        print(f'\nwrote {path}')
     return out
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--n', type=int, default=6, help='community size (6, 15, 30)')
+    ap.add_argument('--n', type=int, default=6, help='community size (6, 15, 30, 60)')
     ap.add_argument('--scenarios', type=int, default=5)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--wind-sigma', type=float, default=0.25,
@@ -1691,22 +2230,45 @@ def main():
     ap.add_argument('--price-carriers', default='E',
                     help='carriers whose prices are uncertain, e.g. E or E,H,G')
     ap.add_argument('--mip-gap', type=float, default=None,
-                    help='relative gap for every MILP (SCIP default 0)')
+                    help=f'relative gap for every MILP (default {MIP_GAP})')
     ap.add_argument('--mip-time-limit', type=float, default=None)
+    ap.add_argument('--mip-solver', default='highs', choices=['highs', 'gurobi'],
+                    help='extensive form and stand-alone MILPs (DP_S^Omega)')
     ap.add_argument('--cg-time-limit', type=float, default=None)
     ap.add_argument('--cold-start', action='store_true',
                     help='seed the master from zero-dual pricing instead of the EF solution')
     ap.add_argument('--doi', action='store_true',
                     help='dual-optimal inequalities on the balance rows (market price box)')
-    ap.add_argument('--engine', default='scip', choices=['scip', 'direct'],
-                    help="'scip': SCIP master with its pricer plugin; 'direct': our "
-                         'own loop on a HiGHS or Gurobi LP')
+    ap.add_argument('--engine', default='direct', choices=['scip', 'direct'],
+                    help="'direct': our own loop on a HiGHS or Gurobi LP; 'scip' "
+                         '(SCIP master with its pricer plugin) is no longer supported')
     ap.add_argument('--lp-solver', default='highs', choices=['highs', 'gurobi'],
                     help='master LP solver for --engine direct')
-    ap.add_argument('--pricing-solver', default='scip',
-                    choices=['scip', 'gurobi', 'highs'])
-    ap.add_argument('--cg-gap', type=float, default=1e-8,
-                    help='relative CG tolerance (column admission and LB >= RMP stop)')
+    ap.add_argument('--pricing-solver', default='highs', choices=['highs', 'gurobi'])
+    ap.add_argument('--pricing-gap', type=float, default=None,
+                    help='relative gap of the pricing MILPs only (default: --mip-gap)')
+    ap.add_argument('--pricing-workers', type=int, default=0,
+                    help='prosumers priced in parallel (0: one per core)')
+    ap.add_argument('--round-tol', type=float, default=None,
+                    help='column admission tolerance of the penalty rounds before the '
+                         'last (default: --cg-gap)')
+    ap.add_argument('--max-rounds', type=int, default=12)
+    ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--cg-gap', type=float, default=MIP_GAP,
+                    help='relative CG gap: stop once (UB - LB) <= cg_gap (1 + |UB|), UB the '
+                         'unpenalized RMP value and LB the Lagrangian bound')
+    ap.add_argument('--purge-every', type=int, default=10,
+                    help='column management: purge every k iterations (0: never)')
+    ap.add_argument('--purge-age', type=int, default=50,
+                    help='iterations a column may sit unused before it can be purged')
+    ap.add_argument('--purge-cap', type=int, default=40,
+                    help='purge only while there are more than this many columns per prosumer')
+    ap.add_argument('--lp-presolve', default='auto', choices=['auto', 'off'],
+                    help='presolve of the master LP')
+    ap.add_argument('--lp-method', default='primal', choices=['primal', 'dual', 'auto'],
+                    help='simplex variant of the master LP')
+    ap.add_argument('--ub-every', type=int, default=30,
+                    help='iterations between upper-bound checks inside a penalty round')
     ap.add_argument('--no-penalty', action='store_true',
                     help='smoothing only, without the three-piece dual penalty')
     ap.add_argument('--pen-eps', type=float, default=0.2,
