@@ -26,6 +26,14 @@ never reads). SCIP duals are raw, and the pricing objective is c - pi^T a exactl
 solver.PlayerSubproblem. Row (k, t, omega) has coefficient 1 on the scenario block, so
 its dual is rho_omega times a price; Algorithm S1 divides it back out.
 
+ENGINES. --engine scip is the SCIP master driven by its pricer plugin, as in chp.py.
+--engine direct runs the loop here instead, on a HiGHS or Gurobi LP (--lp-solver),
+following the column generation in zonal_consistency/containment_bp.py: the master is
+built once and columns are added into it, so a penalty round only changes slack
+bounds instead of rebuilding. Pricing is SCIP, Gurobi or HiGHS (--pricing-solver).
+Every combination returns the same numbers -- checked at |Omega| = 1, where all four
+give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
+
 Usage (from anywhere):
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 5
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 3 --check-core
@@ -345,12 +353,51 @@ def _to_gurobi(scip_model, name, time_limit=None, gap=None, threads=1):
     return g, gv
 
 
+def _to_highs(scip_model, time_limit=None, gap=None, threads=1):
+    """Copy a pyscipopt model that has only linear constraints into highspy.
+
+    Same contract as _to_gurobi: the columns come out in the order of
+    scip_model.getVars(), which is how values are matched back by name.
+    """
+    import highspy
+    INF, inf = highspy.kHighsInf, scip_model.infinity()
+    h = highspy.Highs()
+    h.setOptionValue('output_flag', False)
+    h.setOptionValue('threads', threads)
+    h.setOptionValue('mip_rel_gap', 0.0 if gap is None else gap)
+    if time_limit:
+        h.setOptionValue('time_limit', float(time_limit))
+    names = [v.name for v in scip_model.getVars()]
+    if len(set(names)) != len(names):
+        raise ValueError('duplicate variable names: cannot map to HiGHS')
+    idx = {n: j for j, n in enumerate(names)}
+    lo = np.array([-INF if v.getLbOriginal() <= -inf else v.getLbOriginal()
+                   for v in scip_model.getVars()])
+    up = np.array([INF if v.getUbOriginal() >= inf else v.getUbOriginal()
+                   for v in scip_model.getVars()])
+    h.addVars(len(names), lo, up)
+    ints = [j for j, v in enumerate(scip_model.getVars())
+            if v.vtype() in ('BINARY', 'INTEGER')]
+    if ints:
+        h.changeColsIntegrality(len(ints), np.array(ints, dtype=np.int32),
+                                np.array([highspy.HighsVarType.kInteger] * len(ints)))
+    for c in scip_model.getConss():
+        if c.getConshdlrName() != 'linear':
+            raise ValueError(f'constraint {c.name} is {c.getConshdlrName()}, not linear')
+        row = scip_model.getValsLinear(c)
+        lhs, rhs = scip_model.getLhs(c), scip_model.getRhs(c)
+        h.addRow(-INF if lhs <= -inf else lhs, INF if rhs >= inf else rhs, len(row),
+                 np.array([idx[n] for n in row], dtype=np.int32),
+                 np.array(list(row.values())))
+    return h, names
+
+
 class PlayerPricing:
     """eq:sup_vlrj for one prosumer: a two-stage stochastic MILP of its own.
 
-    solver='scip' solves the stacked SCIP model directly; solver='gurobi' solves a
-    gurobipy copy of it (same variables, same rows), changing only the objective
-    between calls.
+    solver='scip' solves the stacked SCIP model directly; 'gurobi' and 'highs'
+    solve a copy of it (same variables, same rows) built through gurobipy or
+    highspy, changing only the objective between calls.
     """
     def __init__(self, player, T, scenarios, time_limit=None, gap=None, solver='scip'):
         self.player = player
@@ -362,8 +409,12 @@ class PlayerPricing:
             self.g, self.gv = _to_gurobi(self.model, f'price_{player}', time_limit, gap)
             self.g_names = list(self.gv)
             self.g_vars = [self.gv[n] for n in self.g_names]
+        elif solver == 'highs':
+            self.h, self.h_names = _to_highs(self.model, time_limit, gap)
+            self.h_idx = np.arange(len(self.h_names), dtype=np.int32)
         elif solver != 'scip':
-            raise ValueError(f"pricing solver must be 'scip' or 'gurobi', got {solver!r}")
+            raise ValueError("pricing solver must be 'scip', 'gurobi' or 'highs', "
+                             f'got {solver!r}')
         self.rows = self.stack.link_terms(player)
         self.names = list(self.stack.vars)
         self.base = {n: self.stack.scaled_cost(n) for n in self.names}
@@ -390,6 +441,8 @@ class PlayerPricing:
         """min_x c(x) - pi^T A_j x over X_j. Returns (objective, dual bound, Column)."""
         if self.solver == 'gurobi':
             obj, bound, vals = self._price_gurobi(duals, farkas)
+        elif self.solver == 'highs':
+            obj, bound, vals = self._price_highs(duals, farkas)
         else:
             self._objective(duals, farkas)
             m = self.model
@@ -416,6 +469,22 @@ class PlayerPricing:
         # agree to the last digit whatever Gurobi reports internally
         obj = sum(c * vals[n] for n, c in coef.items() if c)
         bound = min(g.ObjBound, obj)
+        return obj, bound, vals
+
+    def _price_highs(self, duals, farkas):
+        import highspy
+        coef = self._coef(duals, farkas)
+        h = self.h
+        h.changeColsCost(len(self.h_names), self.h_idx,
+                         np.array([coef.get(n, 0.0) for n in self.h_names]))
+        h.run()
+        st = h.getModelStatus()
+        if st not in (highspy.HighsModelStatus.kOptimal,):
+            raise RuntimeError(f'pricing {self.player} (highs): status {st}')
+        vals = dict(zip(self.h_names, h.getSolution().col_value))
+        obj = sum(c * vals[n] for n, c in coef.items() if c)
+        info = h.getInfo()
+        bound = min(getattr(info, 'mip_dual_bound', obj) or obj, obj)
         return obj, bound, vals
 
     def column_from(self, ef_vals):
@@ -952,6 +1021,341 @@ def solve_dwr_sar(players, T, scenarios, params, init_vals=None, tol=1e-6,
     return res, master
 
 
+class _LP:
+    """The restricted master LP, as little as column generation needs of a solver.
+
+    Rows are created empty and columns are added into them one at a time, which is
+    what lets the loop keep one model from the first iteration to the last: a
+    penalty round only changes bounds and costs. Both backends use the convention
+    reduced cost = c - pi^T a, with pi <= 0 on a <= row of a minimization.
+    """
+    def __init__(self, backend='highs', name='master'):
+        self.backend = backend
+        if backend == 'highs':
+            import highspy
+            self.INF = highspy.kHighsInf
+            self.h = highspy.Highs()
+            self.h.setOptionValue('output_flag', False)
+            self.h.setOptionValue('threads', 1)
+            self._st = highspy.HighsModelStatus.kOptimal
+            self.ncol = self.nrow = 0
+        elif backend == 'gurobi':
+            import gurobipy as gp
+            self.gp, self.INF = gp, gp.GRB.INFINITY
+            self.m = gp.Model(name)
+            self.m.Params.OutputFlag = 0
+            self.m.Params.Threads = 1
+            self.rows, self.cols = [], []
+        else:
+            raise ValueError(f"lp solver must be 'highs' or 'gurobi', got {backend!r}")
+
+    def add_row(self, lo, hi):
+        if self.backend == 'highs':
+            self.h.addRow(lo, hi, 0, np.array([], dtype=np.int32), np.array([]))
+            self.nrow += 1
+            return self.nrow - 1
+        expr = self.gp.LinExpr()
+        if lo == hi:
+            c = self.m.addLConstr(expr, self.gp.GRB.EQUAL, lo)
+        elif lo <= -self.INF:
+            c = self.m.addLConstr(expr, self.gp.GRB.LESS_EQUAL, hi)
+        else:
+            c = self.m.addLConstr(expr, self.gp.GRB.GREATER_EQUAL, lo)
+        self.rows.append(c)
+        return len(self.rows) - 1
+
+    def add_col(self, obj, lb, ub, rows=(), coefs=()):
+        if self.backend == 'highs':
+            self.h.addCol(obj, lb, ub, len(rows), np.array(rows, dtype=np.int32),
+                          np.array(coefs, dtype=float))
+            self.ncol += 1
+            return self.ncol - 1
+        col = self.gp.Column(list(coefs), [self.rows[r] for r in rows])
+        self.cols.append(self.m.addVar(lb=lb, ub=ub, obj=obj, column=col))
+        return len(self.cols) - 1
+
+    def set_col(self, j, obj=None, lb=None, ub=None):
+        if self.backend == 'highs':
+            if obj is not None:
+                self.h.changeColCost(j, obj)
+            if lb is not None or ub is not None:
+                cur = self.h.getCols(1, np.array([j], dtype=np.int32))
+                lo = cur[3][0] if lb is None else lb
+                up = cur[4][0] if ub is None else ub
+                self.h.changeColBounds(j, lo, up)
+            return
+        v = self.cols[j]
+        if obj is not None:
+            v.Obj = obj
+        if lb is not None:
+            v.LB = lb
+        if ub is not None:
+            v.UB = ub
+
+    def solve(self):
+        if self.backend == 'highs':
+            self.h.run()
+            if self.h.getModelStatus() != self._st:
+                raise RuntimeError(f'master LP (highs): {self.h.getModelStatus()}')
+            sol = self.h.getSolution()
+            self._x = np.asarray(sol.col_value)
+            self._pi = np.asarray(sol.row_dual)
+            return float(self.h.getObjectiveValue())
+        self.m.optimize()
+        if self.m.Status != self.gp.GRB.OPTIMAL:
+            raise RuntimeError(f'master LP (gurobi): status {self.m.Status}')
+        self._x = np.array(self.m.getAttr('X', self.cols))
+        self._pi = np.array(self.m.getAttr('Pi', self.rows))
+        return float(self.m.ObjVal)
+
+    def x(self, j):
+        return float(self._x[j])
+
+    def pi(self, r):
+        return float(self._pi[r])
+
+
+class DirectMaster:
+    """(DWR_N^Omega) with the column generation loop written out, no SCIP pricer.
+
+    Same master as StochasticMaster -- linking rows per (kind, hour, scenario), the
+    shared block x0 = (r_sym, p^omega), one convexity row per prosumer -- and the
+    same stabilization: Wentges smoothing with the adaptive alpha, plus the
+    three-piece penalty of du Merle et al. around the stability center. What differs
+    is that the loop is ours and the LP is HiGHS or Gurobi, so the penalty rounds
+    change slack bounds in place instead of rebuilding the model.
+    """
+    def __init__(self, players, T, scenarios, params, lp_solver='highs',
+                 pricing_solver='highs', pricing_time_limit=None, pricing_gap=None,
+                 smoothing=True, incumbent=None, gap_tol=1e-8, pen_eps=0.2,
+                 pen_delta=0.2, pen_shrink=0.25, max_rounds=12, max_iter=100000,
+                 subs=None, verbose=True):
+        self.players, self.T, self.scenarios = list(players), list(T), scenarios
+        self.probs = [p for p, _ in scenarios]
+        self.params, self.verbose, self.gap_tol = params, verbose, gap_tol
+        self.smoothing, self.incumbent = smoothing, np.inf if incumbent is None else incumbent
+        self.pen_eps, self.pen_delta = pen_eps, pen_delta
+        self.pen_shrink, self.max_rounds, self.max_iter = pen_shrink, max_rounds, max_iter
+        self.subs = subs or {u: PlayerPricing(u, T, scenarios, pricing_time_limit,
+                                              pricing_gap, pricing_solver)
+                             for u in self.players}
+        self.enable_reserve = bool(params.get('enable_reserve', False))
+        self.enable_peak = bool(params.get('enable_peak', False))
+        self.row_keys = [(k, t, w) for w in range(len(scenarios)) for t in self.T
+                         for k in CARRIERS]
+        if self.enable_reserve:
+            self.row_keys += [(d, t, w) for w in range(len(scenarios)) for t in self.T
+                              for d in ('up', 'dn')]
+        if self.enable_peak:
+            self.row_keys += [('peak', t, w) for w in range(len(scenarios)) for t in self.T]
+        self.lp = _LP(lp_solver)
+        self.columns = {u: [] for u in self.players}
+        self.col_idx = {u: [] for u in self.players}
+        self.iteration, self.lb, self.L_bar = 0, -np.inf, -np.inf
+        self.center, self.best, self.log = None, None, []
+        self._build()
+
+    # --- model ---------------------------------------------------------------
+    def _build(self):
+        p, lp, INF = self.params, self.lp, self.lp.INF
+        self.row = {}
+        for key in self.row_keys:
+            self.row[key] = lp.add_row(0.0, 0.0) if key[0] in CARRIERS \
+                else lp.add_row(-INF, 0.0)
+        self.conv = {u: lp.add_row(1.0, 1.0) for u in self.players}
+        # shared block x0
+        self.x0, self.x0_rows = {}, {}
+        blocks = reserve_blocks(self.T, p.get('reserve_block_hours', 24))
+        block_of_t = {t: i for i, blk in enumerate(blocks) for t in blk}
+        sym = p.get('reserve_product', 'symmetric') == 'symmetric'
+        if self.enable_reserve:
+            pi_res = p.get('pi_res', 0.0)
+            for i, blk in enumerate(blocks):
+                names = [('r_sym', i)] if sym else [('r_up', i), ('r_dn', i)]
+                for nm in names:
+                    rows = [self.row[(d, t, w)] for w in range(len(self.scenarios))
+                            for t in self.T for d in ('up', 'dn')
+                            if block_of_t[t] == i
+                            and (sym or d == nm[0].split('_')[1])]
+                    price = pi_res if sym else p.get(f'pi_{nm[0][2:]}', pi_res)
+                    self.x0[nm] = lp.add_col(-len(blk) * price, 0.0, INF, rows,
+                                             [1.0] * len(rows))
+                    self.x0_rows[nm] = [(k, 1.0) for k in self.row_keys
+                                        if k[0] in ('up', 'dn')
+                                        and block_of_t[k[1]] == i
+                                        and (sym or k[0] == nm[0].split('_')[1])]
+        if self.enable_peak:
+            for w, rho in enumerate(self.probs):
+                rows = [self.row[('peak', t, w)] for t in self.T]
+                self.x0[('p', w)] = lp.add_col(rho * p.get('pi_E_peak', 0.0), 0.0, INF,
+                                               rows, [-1.0] * len(rows))
+                self.x0_rows[('p', w)] = [(('peak', t, w), -1.0) for t in self.T]
+        self.x0_obj = {('r_sym', i): -len(blk) * p.get('pi_res', 0.0)
+                       for i, blk in enumerate(blocks)} if (self.enable_reserve and sym) else {}
+        if self.enable_peak:
+            self.x0_obj.update({('p', w): rho * p.get('pi_E_peak', 0.0)
+                                for w, rho in enumerate(self.probs)})
+        if self.enable_reserve and not sym:
+            for i, blk in enumerate(blocks):
+                self.x0_obj[('r_up', i)] = -len(blk) * p.get('pi_up', 0.0)
+                self.x0_obj[('r_dn', i)] = -len(blk) * p.get('pi_dn', 0.0)
+        # penalty slacks, created disabled (ub 0)
+        self.pen = {}
+        for key in self.row_keys:
+            up = lp.add_col(0.0, 0.0, 0.0, [self.row[key]], [1.0])
+            dn = lp.add_col(0.0, 0.0, 0.0, [self.row[key]], [-1.0])
+            self.pen[key] = (up, dn)
+
+    def add_column(self, col):
+        u = col.player
+        rows = [self.conv[u]] + [self.row[k] for k in col.coef]
+        coefs = [1.0] + list(col.coef.values())
+        self.col_idx[u].append(self.lp.add_col(col.cost, 0.0, self.lp.INF, rows, coefs))
+        self.columns[u].append(col)
+
+    def _set_penalty(self, center, eps, delta):
+        for key, (up, dn) in self.pen.items():
+            c = center.get(key, 0.0) if center else 0.0
+            e = eps * (1.0 + abs(c))
+            self.lp.set_col(up, obj=c + e, lb=0.0, ub=delta)
+            self.lp.set_col(dn, obj=-c + e, lb=0.0, ub=delta)
+
+    # --- duals and bound -----------------------------------------------------
+    def _duals(self):
+        duals = {k: self.lp.pi(r) for k, r in self.row.items()}
+        conv = {u: self.lp.pi(r) for u, r in self.conv.items()}
+        return duals, conv
+
+    def _lagrangian(self, duals, bounds):
+        for k, rows in self.x0_rows.items():
+            rc = self.x0_obj[k] - sum(duals.get(r, 0.0) * a for r, a in rows)
+            if rc < -1e-9 * (1.0 + abs(self.x0_obj[k])):
+                return -np.inf
+        if any(v > 1e-9 for (kind, _, _), v in duals.items() if kind not in CARRIERS):
+            return -np.inf
+        return sum(bounds)
+
+    def _record(self, duals, res):
+        L = self._lagrangian(duals, [r[1] for r in res.values()])
+        if L > self.lb:
+            self.lb = L
+            self.best = (dict(duals), {u: r[0] for u, r in res.items()},
+                         {u: r[2] for u, r in res.items()})
+        if L > self.L_bar:
+            self.L_bar, self.center = L, dict(duals)
+
+    def _alpha(self, lp_obj):
+        gap = lp_obj - self.L_bar
+        if not np.isfinite(gap):
+            return 0.1
+        return 1.0 if gap <= self.gap_tol * (1.0 + abs(lp_obj)) else (
+            min(1.0, 0.1 * (self.incumbent - self.L_bar) / gap)
+            if lp_obj > self.incumbent and self.incumbent - self.L_bar > 1e-6 else 0.1)
+
+    # --- the loop ------------------------------------------------------------
+    def _cg(self, tag):
+        """Column generation until the bound reaches the LP value or nothing prices."""
+        while True:
+            lp_obj = self.lp.solve()
+            duals, conv = self._duals()
+            tol = self.gap_tol * (1.0 + abs(lp_obj))
+            self.iteration += 1
+            if self.iteration > self.max_iter:
+                raise RuntimeError('column generation: iteration limit')
+            alpha, added, min_rc, mode = 1.0, 0, 0.0, 'std'
+            if self.smoothing:
+                if self.center is None:
+                    self.center = dict(duals)
+                alpha = self._alpha(lp_obj)
+                if alpha < 1.0:
+                    st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
+                          for k in set(duals) | set(self.center)}
+                    res = {u: s.price(st) for u, s in self.subs.items()}
+                    self._record(st, res)
+                    mode = 'smooth'
+                    if self.lb < lp_obj - tol:
+                        for u, (_, _, col) in res.items():
+                            rc = col.cost - sum(duals.get(k, 0.0) * a
+                                                for k, a in col.coef.items()) - conv[u]
+                            min_rc = min(min_rc, rc)
+                            if rc < -tol:
+                                self.add_column(col)
+                                added += 1
+                        if not added:
+                            mode = 'misprice'
+            if not added and self.lb < lp_obj - tol:
+                res = {u: s.price(duals) for u, s in self.subs.items()}
+                self._record(duals, res)
+                for u, (obj, _, col) in res.items():
+                    rc = obj - conv[u]
+                    min_rc = min(min_rc, rc)
+                    if rc < -tol:
+                        self.add_column(col)
+                        added += 1
+            self.log.append({'iter': self.iteration, 'lp': lp_obj, 'lb': self.lb,
+                             'alpha': alpha, 'mode': mode, 'min_rc': min_rc,
+                             'added': added, 'round': tag})
+            if self.verbose and (self.iteration % 25 == 0 or not added):
+                print(f'  CG {self.iteration:4d} | RMP {lp_obj:13.4f} | LB {self.lb:13.4f} '
+                      f'| a {alpha:.2f} {mode:8s} | min rc {min_rc:11.4e} | +{added}')
+            if not added:
+                return lp_obj
+
+    def solve(self, init_vals=None, init_cols=None):
+        t0 = time.time()
+        cols = list(init_cols) if init_cols is not None else [
+            self.subs[u].column_from(init_vals) for u in self.players]
+        for c in cols:
+            self.add_column(c)
+        eps, delta, rounds = self.pen_eps, self.pen_delta, []
+        for rnd in range(1, self.max_rounds + 1):
+            last = rnd == self.max_rounds or eps <= 0.0
+            self._set_penalty(self.center if not last else None,
+                              0.0 if last else eps, 0.0 if last else delta)
+            obj = self._cg(rnd)
+            slack = max((max(self.lp.x(a), self.lp.x(b)) for a, b in self.pen.values()),
+                        default=0.0)
+            tol = (len(self.players) + 1) * self.gap_tol * (1 + abs(obj))
+            done = slack <= 1e-7 and self.lb >= obj - tol
+            rounds.append({'round': rnd, 'eps': eps, 'delta': delta, 'obj': obj,
+                           'lb': self.lb, 'slack': slack, 'iterations': self.iteration,
+                           'time': time.time() - t0, 'certified': bool(done)})
+            if self.verbose:
+                print(f'  -- penalty round {rnd}: eps {eps:.3g} delta {delta:.3g} '
+                      f'RMP {obj:.4f} LB {self.lb:.4f} slack {slack:.2e}'
+                      + ('  [certified]' if done else ''))
+            if done:
+                break
+            eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
+            if eps < 1e-4:
+                eps = delta = 0.0
+        else:
+            raise RuntimeError('direct master: no certified round')
+        duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
+        return {'status': 'optimal', 'obj': obj, 'lb': self.lb, 'duals': duals,
+                'sigma': sigma, 'iterations': self.iteration,
+                'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.players},
+                'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
+                'columns': {u: len(self.columns[u]) for u in self.players},
+                'y_total': 0.0, 'penalty': {'rounds': rounds}, 'doi': {'used': False},
+                'time': time.time() - t0}
+
+    def terminal_columns(self, duals):
+        if self.best is not None and duals is self.best[0]:
+            return {u: (self.best[1][u], self.best[2][u]) for u in self.players}
+        out = {}
+        for u, sub in self.subs.items():
+            obj, _, col = sub.price(duals)
+            out[u] = (obj, col)
+        return out
+
+
+def solve_dwr_direct(players, T, scenarios, params, init_vals=None, **kw):
+    """(DWR_N^Omega) through DirectMaster: our own loop, HiGHS or Gurobi, no SCIP."""
+    master = DirectMaster(players, T, scenarios, params, **kw)
+    return master.solve(init_vals=init_vals), master
+
+
 def solve_dwr_stab(players, T, scenarios, params, init_vals=None, pen_eps=0.1,
                    pen_delta=0.05, pen_shrink=0.25, max_rounds=12, **kw):
     """(DWR_N^Omega) with smoothing AND a three-piece penalty around the center.
@@ -1166,7 +1570,8 @@ def run(args):
     tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('_doi' if args.doi else '') \
         + ('_sar' if args.sar else '') + ('_nosmooth' if args.no_smoothing else '') \
         + ('_grb' if args.pricing_solver == 'gurobi' else '') \
-        + ('_nopen' if args.no_penalty else '')
+        + ('_nopen' if args.no_penalty else '') \
+        + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
 
     if args.deterministic_check:
@@ -1181,7 +1586,19 @@ def run(args):
           f'{ef["time_solve"]:.1f}s  vars {ef["stack"].model.getNVars()}')
 
     print('\n[2] column generation (DWR_N^Omega)')
-    if args.sar:
+    if args.engine == 'direct':
+        dw, master = solve_dwr_direct(
+            players, T, scen, base,
+            init_vals=None if args.cold_start else ef['vals'],
+            lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
+            pricing_time_limit=args.mip_time_limit, pricing_gap=args.mip_gap,
+            smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
+            pen_eps=0.0 if args.no_penalty else args.pen_eps,
+            pen_delta=0.0 if args.no_penalty else args.pen_delta,
+            pen_shrink=args.pen_shrink)
+        print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  iters {dw["iterations"]}  '
+              f'{dw["time"]:.1f}s  rounds {len(dw["penalty"]["rounds"])}')
+    elif args.sar:
         solver = solve_dwr_sar
         extra = {'sar_block': args.sar_block, 'sar_cap': args.sar_cap}
     elif not args.no_penalty:
@@ -1191,14 +1608,15 @@ def run(args):
     else:
         solver = solve_dwr
         extra = {'doi': args.doi}
-    dw, master = solver(players, T, scen, base, **extra,
-                           init_vals=None if args.cold_start else ef['vals'],
-                           time_limit=args.cg_time_limit,
-                           pricing_time_limit=args.mip_time_limit,
-                           pricing_gap=args.mip_gap,
-                           smoothing=not args.no_smoothing, incumbent=ef['obj'],
-                           pricing_solver=args.pricing_solver, gap_tol=args.cg_gap)
-    print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  iters {dw["iterations"]}  '
+    if args.engine != 'direct':
+        dw, master = solver(players, T, scen, base, **extra,
+                            init_vals=None if args.cold_start else ef['vals'],
+                            time_limit=args.cg_time_limit,
+                            pricing_time_limit=args.mip_time_limit,
+                            pricing_gap=args.mip_gap,
+                            smoothing=not args.no_smoothing, incumbent=ef['obj'],
+                            pricing_solver=args.pricing_solver, gap_tol=args.cg_gap)
+        print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  iters {dw["iterations"]}  '
           f'{dw["time"]:.1f}s  DOI {dw["doi"]}  SAR {dw.get("sar", {}).get("phases")}  '
           f'PEN {dw.get("penalty", {}).get("rounds")}')
 
@@ -1280,7 +1698,13 @@ def main():
                     help='seed the master from zero-dual pricing instead of the EF solution')
     ap.add_argument('--doi', action='store_true',
                     help='dual-optimal inequalities on the balance rows (market price box)')
-    ap.add_argument('--pricing-solver', default='scip', choices=['scip', 'gurobi'])
+    ap.add_argument('--engine', default='scip', choices=['scip', 'direct'],
+                    help="'scip': SCIP master with its pricer plugin; 'direct': our "
+                         'own loop on a HiGHS or Gurobi LP')
+    ap.add_argument('--lp-solver', default='highs', choices=['highs', 'gurobi'],
+                    help='master LP solver for --engine direct')
+    ap.add_argument('--pricing-solver', default='scip',
+                    choices=['scip', 'gurobi', 'highs'])
     ap.add_argument('--cg-gap', type=float, default=1e-8,
                     help='relative CG tolerance (column admission and LB >= RMP stop)')
     ap.add_argument('--no-penalty', action='store_true',
