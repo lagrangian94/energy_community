@@ -19,7 +19,7 @@ class PlayerSubproblem:
     Individual player's subproblem for column generation
     Reuses LocalEnergyMarket class with single player
     """
-    def __init__(self, player: str, time_periods: List[int], parameters: Dict, model_type: str, mipsolver: str = None):
+    def __init__(self, player: str, time_periods: List[int], parameters: Dict, model_type: str, mipsolver: str = 'highs'):
         """
         Create subproblem for a single player
         
@@ -49,9 +49,13 @@ class PlayerSubproblem:
         # Disable output for subproblems
         self.model.hideOutput()
 
-        self.mipsolver = mipsolver
-        if mipsolver == 'highs':
+        self.mipsolver = 'highs' if mipsolver is None else mipsolver
+        if self.mipsolver == 'highs':
             self._init_highs_model()
+        elif model_type == 'mip':
+            # the SCIP pricing path below would branch; only HiGHS pricing exists here
+            raise ValueError(f"pricing solver for a MIP subproblem must be 'highs', got "
+                             f"{mipsolver!r} (SCIP is not used as a MIP solver)")
 
     def _init_highs_model(self):
         """

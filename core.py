@@ -42,10 +42,11 @@ class SeparationProblem(LocalEnergyMarket):
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
             current_payoffs: Current payoff allocation {player_id: payoff}
-            mipsolver: MIP solver to use. None for SCIP (default), 'highs' for HiGHS
+            mipsolver: 'highs' (default, also for None) or 'gurobi'. SCIP is not
+                used as a MIP solver.
         """
         self.current_payoffs = current_payoffs
-        self.mipsolver = mipsolver
+        self.mipsolver = 'highs' if mipsolver is None else mipsolver.lower()
 
         # Initialize parent class
         super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False, mipsolver=mipsolver)
@@ -375,43 +376,13 @@ class SeparationProblem(LocalEnergyMarket):
         # So we keep the default minimize objective
 
         self.truncated = False
-        if self.mipsolver and self.mipsolver.lower() == 'highs':
-            obj_val, selected_coalition = self._solve_with_highs()
-        elif self.mipsolver and self.mipsolver.lower() == 'gurobi':
+        if self.mipsolver == 'highs':
+            obj_val, selected_coalition = self._solve_with_highs(time_limit)
+        elif self.mipsolver == 'gurobi':
             obj_val, selected_coalition = self._solve_with_gurobi(time_limit)
         else:
-            # Solve with SCIP (default). The budget has to be honoured here as well, not
-            # only on the Gurobi path: this branch is what `check_allocations` reached by
-            # default, so a time limit that existed only for Gurobi was silently no
-            # limit at all -- one 60-prosumer separation ran six hours at a 118% gap
-            # inside a measurement nominally capped at 3600 s.
-            if time_limit is not None:
-                self.model.setRealParam('limits/time', max(1.0, float(time_limit)))
-            status = self.solve()
-
-            if status == "optimal":
-                pass
-            elif self.model.getNSols() > 0:
-                # Cut off with an incumbent: a violated coalition, just not provably the
-                # most violated one. Same contract as the Gurobi path.
-                self.truncated = True
-                print(f"  SCIP separation cut off at the time limit (status {status}, "
-                      f"{self.model.getNSols()} solution(s)); using the incumbent")
-            else:
-                self.truncated = True
-                print(f"  SCIP separation cut off with no solution (status {status})")
-                if status in ('timelimit', 'userinterrupt'):
-                    return 0.0, []
-                raise RuntimeError(f"Separation problem failed with status: {status}")
-
-            obj_val = self.model.getObjVal()
-
-            # Extract selected coalition
-            selected_coalition = []
-            for i in self.players:
-                z_val = self.model.getVal(self.z[i])
-                if z_val > 0.5:  # Binary variable threshold
-                    selected_coalition.append(i)
+            raise ValueError(f"separation solver must be 'highs' or 'gurobi', got "
+                             f"{self.mipsolver!r} (SCIP is not used as a MIP solver)")
 
         # Compute violation: Σ payoffs[i] - cost(S)
         # The objective value is: -Σ payoffs[i] + cost(S)
@@ -424,7 +395,7 @@ class SeparationProblem(LocalEnergyMarket):
 
         return selected_coalition, violation
 
-    def _solve_with_highs(self):
+    def _solve_with_highs(self, time_limit: Optional[float] = None):
         """
         Export SCIP model to .mps, then solve with HiGHS via highspy.
 
@@ -442,14 +413,29 @@ class SeparationProblem(LocalEnergyMarket):
         h = highspy.Highs()
         h.setOptionValue("output_flag", True)
         h.readModel(mps_path)
+        h.setOptionValue("mip_rel_gap", 1e-4)
+        if time_limit is not None:
+            # same budget contract as the Gurobi path
+            h.setOptionValue("time_limit", max(1.0, float(time_limit)))
         h.run()
 
         status = h.getInfoValue("primal_solution_status")[1]
         # primal_solution_status: 2 = feasible
         if h.getModelStatus() != highspy.HighsModelStatus.kOptimal:
-            raise RuntimeError(
-                f"HiGHS separation problem failed with status: {h.getModelStatus()}"
-            )
+            if status == 2:
+                # Cut off with an incumbent: a violated coalition, just not provably
+                # the most violated one. Same contract as the Gurobi path.
+                self.truncated = True
+                print(f"  HiGHS separation cut off (status {h.getModelStatus()}); "
+                      f"using the incumbent")
+            elif h.getModelStatus() == highspy.HighsModelStatus.kTimeLimit:
+                self.truncated = True
+                print("  HiGHS separation cut off with no solution")
+                return 0.0, []
+            else:
+                raise RuntimeError(
+                    f"HiGHS separation problem failed with status: {h.getModelStatus()}"
+                )
 
         obj_val = h.getInfoValue("objective_function_value")[1]
 
@@ -594,8 +580,8 @@ class CoreComputation:
             model_type: Type of model to use ('mip' or 'lp')
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
-            mipsolver: MIP solver to use for separation problem.
-                       None for SCIP (default), 'highs' for HiGHS
+            mipsolver: MIP solver for the separation problem and coalition values:
+                       'highs' (default, also for None) or 'gurobi'
         """
         self.players = players
         if model_type not in ('mip', 'lp'):
@@ -603,7 +589,7 @@ class CoreComputation:
         self.model_type = model_type
         self.time_periods = time_periods
         self.params = parameters
-        self.mipsolver = mipsolver
+        self.mipsolver = 'highs' if mipsolver is None else mipsolver.lower()
         
         # Cache for coalition costs
         self.coalition_costs = {}
@@ -652,7 +638,8 @@ class CoreComputation:
             time_periods=self.time_periods,
             parameters=self.params,
             model_type=self.model_type,
-            dwr=False
+            dwr=False,
+            mipsolver=self.mipsolver
         )
         lem.model.hideOutput()
         status = lem.solve()
@@ -926,8 +913,8 @@ class CoreComputation:
             print(f"  Actual violation (Σ payoffs - cost): {actual_violation:.4f}")
             print(f"  Separation problem violation: {violation:.4f}")
             print(f"  Found coalition: {coalition}")
-            # The separation MIP is solved to a RELATIVE gap (MIPGap=1e-4, Gurobi or
-            # SCIP), so the separation-vs-fresh-c(S) mismatch scales with the
+            # The separation MIP is solved to a RELATIVE gap (1e-4, Gurobi or
+            # HiGHS), so the separation-vs-fresh-c(S) mismatch scales with the
             # objective magnitude. Use a relative tolerance (≈ MIPGap·|c(S)|) with an
             # absolute floor, rather than a fixed 1e-4 that only held for near-exact
             # solves and spuriously tripped with the Gurobi separation path.

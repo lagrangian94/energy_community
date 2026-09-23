@@ -239,7 +239,7 @@ def solve_standalone_r_sym(players, time_periods, params, model_type='mip', verb
         lem = LocalEnergyMarket(players=[u], time_periods=time_periods,
                                 parameters=params, model_type=model_type, dwr=False)
         lem.model.hideOutput()
-        lem.model.optimize()
+        lem.solve()                 # MILP on HiGHS, then SCIP on the fixed-commitment LP
         status, res = solve_and_extract_results(lem.model)
         if status not in ("optimal", "gaplimit") or not res:
             if verbose:

@@ -124,6 +124,11 @@ def build_instance(n):
         sens = {k: v[0] for k, v in LC.BASELINE_CANDIDATES_30.items()}
         override_fn = LC.apply_30player_overrides
         scenario = "30p_reserve_peak"
+    elif n == 60:
+        players, config = LC.PLAYERS_60, LC.CONFIGURATION_60
+        sens = {k: v[0] for k, v in LC.BASELINE_CANDIDATES_60.items()}
+        override_fn = LC.apply_60player_overrides
+        scenario = "60p_reserve_peak"
     else:
         raise ValueError(f"unsupported size {n}")
 
@@ -220,7 +225,7 @@ def run_owen(n, players, T, params, scenario):
 
 # ----------------------------------------------------------------------------- RowGen stage
 def run_rowgen(n, players, T, params, scenario, time_limit, sep_solver=None):
-    print(f"\n{'='*72}\n[RowGen / CoS] n={n}  (time_limit={time_limit}s, sep_solver={sep_solver or 'scip'})\n{'='*72}")
+    print(f"\n{'='*72}\n[RowGen / CoS] n={n}  (time_limit={time_limit}s, sep_solver={sep_solver or 'highs'})\n{'='*72}")
     core_comp = CoreComputation(players, 'mip', T, params, mipsolver=sep_solver)
     t0 = time.time()
     alloc, success = core_comp.compute_core(max_iterations=int(1e8),
@@ -288,13 +293,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sizes', default='6', help='comma list, e.g. 6,15,30')
     ap.add_argument('--rowgen-time-limit', type=float, default=3600)
-    ap.add_argument('--sep-solver', default='gurobi',
-                    help="separation MIP solver for row-gen: gurobi (default) | highs | scip")
+    ap.add_argument('--sep-solver', default='gurobi', choices=['gurobi', 'highs'],
+                    help="separation MIP solver for row-gen (SCIP is not used as a MIP solver)")
     ap.add_argument('--force', action='store_true', help='recompute even if JSON exists')
     ap.add_argument('--skip-rowgen', action='store_true')
     ap.add_argument('--skip-owen', action='store_true')
     args = ap.parse_args()
-    sep_solver = None if args.sep_solver.lower() == 'scip' else args.sep_solver.lower()
+    sep_solver = args.sep_solver
     sizes = [int(s) for s in args.sizes.split(',') if s.strip()]
 
     for n in sizes:

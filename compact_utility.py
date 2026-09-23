@@ -5,6 +5,82 @@ import pandas as pd
 from data_generator import setup_lem_parameters
 from pyscipopt import SCIP_PARAMSETTING
 
+# Relative MIP gap for every SCIP solve built on LocalEnergyMarket (grand coalition,
+# pricing subproblems, SeparationProblem). SCIP's own default is 0; Gurobi and HiGHS
+# default to 1e-4, which is what the HiGHS/Gurobi paths already get.
+MIP_GAP = 1e-4
+MIP_SOLVERS = ('highs', 'gurobi')
+
+
+class ScipModel(Model):
+    """A SCIP model that SCIP may solve only as an LP.
+
+    SCIP builds every model here and still solves LPs (masters, restricted pricing),
+    but it is no longer a MIP solver: optimize() on a model that still has integer
+    variables raises. LocalEnergyMarket.solve() takes those to HiGHS or Gurobi.
+    """
+    def optimize(self):
+        if any(v.vtype() in ('BINARY', 'INTEGER') for v in self.getVars()):
+            raise RuntimeError(
+                f"SCIP is not used as a MIP solver: model '{self.getProbName()}' has "
+                f"integer variables. Solve it through LocalEnergyMarket.solve() or "
+                f"solve_mip() with solver in {MIP_SOLVERS}.")
+        return super().optimize()
+
+
+def solve_mip(model, solver='highs', time_limit=None, gap=MIP_GAP, verbose=False):
+    """Solve a SCIP-built MILP with HiGHS or Gurobi through an MPS copy.
+
+    Returns (status, objective, {variable name: value}); status is 'optimal',
+    'timelimit' (with an incumbent) or the solver's own word when there is no
+    solution, in which case objective and values are None.
+    """
+    import tempfile, os
+    if solver not in MIP_SOLVERS:
+        raise ValueError(f"MIP solver must be one of {MIP_SOLVERS}, got {solver!r} "
+                         f"(SCIP is not used as a MIP solver)")
+    fd, mps_path = tempfile.mkstemp(suffix='.mps')
+    os.close(fd)
+    try:
+        model.writeProblem(mps_path, verbose=False)
+        if solver == 'highs':
+            import highspy
+            h = highspy.Highs()
+            h.setOptionValue('output_flag', bool(verbose))
+            h.readModel(mps_path)
+            h.setOptionValue('mip_rel_gap', gap)
+            if time_limit is not None:
+                h.setOptionValue('time_limit', float(time_limit))
+            h.run()
+            st = h.getModelStatus()
+            if h.getInfo().primal_solution_status != 2:     # no feasible solution
+                return h.modelStatusToString(st).lower(), None, None
+            status = 'optimal' if st == highspy.HighsModelStatus.kOptimal else 'timelimit'
+            x = h.getSolution().col_value
+            names = [h.getColName(j) for j in range(h.getNumCol())]
+            names = [n[1] if isinstance(n, tuple) else n for n in names]
+            vals = dict(zip(names, x))
+            obj = h.getInfo().objective_function_value
+        else:
+            import gurobipy as gp
+            g = gp.read(mps_path)
+            g.Params.OutputFlag = 1 if verbose else 0
+            g.Params.MIPGap = gap
+            if time_limit is not None:
+                g.Params.TimeLimit = float(time_limit)
+            g.optimize()
+            if g.SolCount == 0:
+                return f'gurobi status {g.Status}', None, None
+            status = 'optimal' if g.Status == gp.GRB.OPTIMAL else 'timelimit'
+            vals = {v.VarName: v.X for v in g.getVars()}
+            obj = g.ObjVal
+    finally:
+        try:
+            os.remove(mps_path)
+        except OSError:
+            pass
+    return status, obj, vals
+
 # CSV 파일 읽기 (인코딩 처리)
 def load_korean_electricity_prices():
     """한국 전력가격 데이터 로드 및 처리"""
@@ -432,7 +508,7 @@ class LocalEnergyMarket:
                  model_type: str = 'mip',
                  dwr: bool = False,
                  binary_values: Optional[Dict] = None,
-                 mipsolver: str = None,
+                 mipsolver: str = 'highs',
                  model=None):
         """
         Initialize the Local Energy Market optimization model
@@ -442,7 +518,9 @@ class LocalEnergyMarket:
             time_periods: List of time period indices
             parameters: Dictionary containing all model parameters
             model_type: 'mip': Mixed-integer Community Games, 'lp': Linear Community Games, 'mip_fix_binaries': MIP game with fixed binary variables
-            mipsolver: None for SCIP (default), 'highs' to export MPS and solve with HiGHS
+            mipsolver: 'highs' (default) or 'gurobi' for the MILP; SCIP only builds
+                it and solves the LP that remains once the commitment is fixed.
+                None means 'highs'.
             model: build into this model instead of a fresh one. Used by the two-stage
                 extension (ieee_owen/stochastic_extension.py), which stacks one block
                 per scenario into a single model; None keeps the usual behaviour.
@@ -450,13 +528,20 @@ class LocalEnergyMarket:
         self.players = players
         self.time_periods = time_periods
         self.params = parameters
-        self.model = Model("LocalEnergyMarket") if model is None else model
+        if model is None:
+            self.model = ScipModel("LocalEnergyMarket")
+            self.model.setParam('limits/gap', MIP_GAP)
+        else:
+            self.model = model
         if model_type not in ('mip', 'mip_fix_binaries','lp'):
             raise ValueError("model_type must be either 'mip' or 'mip_fix_binaries' or 'lp', got: {}".format(model_type))
         self.model_type = model_type
         self.dwr = dwr
         self.binary_values = binary_values
-        self.mipsolver = mipsolver
+        self.mipsolver = 'highs' if mipsolver is None else mipsolver.lower()
+        if self.mipsolver not in MIP_SOLVERS:
+            raise ValueError(f"mipsolver must be one of {MIP_SOLVERS}, got {mipsolver!r} "
+                             f"(SCIP is not used as a MIP solver)")
         # Reserve / peak coupling toggles (adding_cons.txt). Default off, so the
         # model is byte-identical to the pre-extension version -- and the
         # copositive nc/constraint counts are unchanged -- unless deliberately
@@ -1663,10 +1748,31 @@ class LocalEnergyMarket:
                 )
                 self.electrolyzer_cons[f"electrolyzer_power_consumption_{u}_{t}"] = cons
     def solve(self):
-        """Solve the optimization model"""
-        # self.model.setParam('lp/iterlim', 100)
+        """Solve the model; returns the status.
+
+        An LP goes to SCIP as before. A MILP goes to self.mipsolver (HiGHS or Gurobi,
+        at MIP_GAP and SCIP's limits/time if one is set); its integer variables are
+        then fixed at that solution and made continuous, and SCIP solves the LP that
+        is left. So getObjVal()/getVal() on self.model keep working for every caller,
+        and SCIP never branches. The commitment stays fixed in self.model afterwards.
+        """
+        ints = [v for v in self.model.getVars() if v.vtype() in ('BINARY', 'INTEGER')]
+        if not ints:
+            self.model.optimize()
+            return self.model.getStatus()
+        tl = self.model.getParam('limits/time')
+        status, _, vals = solve_mip(self.model, self.mipsolver,
+                                    time_limit=tl if tl < 1e19 else None)
+        if vals is None:
+            return status
+        for v in ints:
+            x = float(round(vals[v.name]))
+            self.model.chgVarType(v, 'CONTINUOUS')
+            self.model.chgVarLb(v, x)
+            self.model.chgVarUb(v, x)
         self.model.optimize()
-        return self.model.getStatus()
+        lp_status = self.model.getStatus()
+        return status if lp_status == 'optimal' else lp_status
     
     def solve_complete_model(self, analyze_revenue=True):
         """
@@ -1691,37 +1797,17 @@ class LocalEnergyMarket:
         # self.model.setHeuristics(SCIP_PARAMSETTING.OFF)
         # self.model.disablePropagation()
         # self.model.setSeparating(SCIP_PARAMSETTING.OFF)
-        if self.mipsolver is not None:
-            # HiGHS 경로: MPS로 내보내고 HiGHS로 풀기
-            import tempfile, os, time as _time
-            import highspy
-            mps_path = tempfile.mktemp(suffix=".mps")
-            self.model.writeProblem(mps_path)
-            h = highspy.Highs()
-            h.setOptionValue("output_flag", True)
-            h.readModel(mps_path)
-            t_highs_start = _time.time()
-            h.run()
-            t_highs_elapsed = _time.time() - t_highs_start
-            print(f"[HiGHS] model_status={h.getModelStatus()}, "
-                  f"obj={h.getInfoValue('objective_function_value')[1]:.4f}, "
-                  f"time={t_highs_elapsed:.2f}s")
-            os.remove(mps_path)
+        # MILPs go to HiGHS/Gurobi inside solve(); see LocalEnergyMarket.solve
+        status = self.solve()
 
-            status, results = solve_and_extract_results_highs(self.model, h)
-            del h
-        else:
-            # 기존 SCIP 경로
-            status = self.solve()
+        if status != "optimal":
+            print(f"Optimization failed with status: {status}")
+            return status, None, None
 
-            if status != "optimal":
-                print(f"Optimization failed with status: {status}")
-                return status, None, None
+        print("Model solved successfully. Extracting results and analyzing revenue...")
 
-            print("Model solved successfully. Extracting results and analyzing revenue...")
-
-            # Extract results using existing function
-            status, results = solve_and_extract_results(self.model)
+        # Extract results using existing function
+        status, results = solve_and_extract_results(self.model)
         
         if status != "optimal":
             print(f"Failed to extract results. Status: {status}")
@@ -1736,7 +1822,7 @@ class LocalEnergyMarket:
 
         if self.model_type == 'mip':
             ip_status, ip_results, prices = self.solve_with_restricted_pricing(
-                mip_results=results if self.mipsolver is not None else None
+                mip_results=None
             )
             if ip_status != "optimal":
                 print(f"IP optimization failed with status: {ip_status}")
@@ -2221,10 +2307,7 @@ class LocalEnergyMarket:
         # print(f"  Solver objective:     {self.model.getObjVal():10.6f}")
         # print(f"  Difference:           {abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())):10.10f}")
         
-        if self.mipsolver is not None:
-            # HiGHS로 풀었을 때는 SCIP에 solution이 없으므로 verification skip
-            print("  (HiGHS solver used — objective verification skipped)")
-        elif abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())) > 1e-6:
+        if abs(revenue_analysis['net_profit'] - (-1*self.model.getObjVal())) > 1e-6:
             print("  ⚠️  WARNING: Calculated profit doesn't match solver objective value!")
         else:
             print("  ✓  Verification passed!")
