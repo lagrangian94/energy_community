@@ -91,13 +91,14 @@ def _ar1(rng, n, rho):
 
 def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
                    solar_sigma=0.20, load_sigma=0.10, price_sigma=0.15, rho=0.7,
-                   price_carriers=('E',)):
+                   price_carriers=('E',), load_carriers=CARRIERS):
     """Forecast-error scenarios around one deterministic instance, equiprobable.
 
     Every scenario is a copy of `base` with multiplicative AR(1) errors on
       renewable availability  renewable_cap_{u}_{t}   one path for wind, one for solar
                               (common weather), clipped to [0, the day's peak]
-      non-flexible load       d_{k}_nfl_{u}_{t}        one path per carrier
+      non-flexible load       d_{k}_nfl_{u}_{t}        one path per carrier in
+                                                        `load_carriers`
       market prices           pi_{k}_gri_{import,export}_{t} and u_{k}_{u}_{t},
                               one factor per carrier in `price_carriers`
     Import and export move by the same factor, so pi^imkt >= pi^emkt survives
@@ -125,6 +126,8 @@ def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
                         np.clip(base[f'renewable_cap_{u}_{t}'] * f[i], 0.0, peak))
         for k in CARRIERS:
             f = np.maximum(0.0, 1.0 + load_sigma * _ar1(rng, nT, rho))
+            if k not in load_carriers:
+                continue            # drawn anyway, so the other paths do not move
             for u in players:
                 for i, t in enumerate(T):
                     key = f'd_{k}_nfl_{u}_{t}'
@@ -1205,11 +1208,20 @@ class _LP:
         self._apply_method()
 
     def _apply_method(self):
+        # 'barrier': interior point without crossover, i.e. the well-centred duals of
+        # primal-dual column generation (Gondzio, Gonzalez-Brevis & Munari 2013)
         if self.backend == 'highs':
-            self.h.setOptionValue('simplex_strategy',
-                                  {'primal': 4, 'dual': 1, 'auto': 0}[self.method])
+            if self.method == 'barrier':
+                self.h.setOptionValue('solver', 'ipm')
+                self.h.setOptionValue('run_crossover', 'off')
+            else:
+                self.h.setOptionValue('solver', 'simplex')
+                self.h.setOptionValue('simplex_strategy',
+                                      {'primal': 4, 'dual': 1, 'auto': 0}[self.method])
         else:
-            self.m.Params.Method = {'primal': 0, 'dual': 1, 'auto': -1}[self.method]
+            self.m.Params.Method = {'primal': 0, 'dual': 1, 'auto': -1,
+                                    'barrier': 2}[self.method]
+            self.m.Params.Crossover = 0 if self.method == 'barrier' else -1
 
     def add_row(self, lo, hi):
         if self.backend == 'highs':
@@ -1335,7 +1347,12 @@ class _LP:
             return float(self.h.getObjectiveValue())
         self.m.optimize()
         self.stats = (self.m.Runtime, self.m.IterCount, self.m.NumVars, self.m.NumNZs)
-        if self.m.Status != self.gp.GRB.OPTIMAL:
+        ok = self.m.Status == self.gp.GRB.OPTIMAL or (
+            # barrier without crossover may stop just short of its tolerance; the
+            # iterate is still usable: the Lagrangian bound holds for any dual
+            self.method == 'barrier' and self.m.Status == self.gp.GRB.SUBOPTIMAL
+            and self.m.SolCount > 0)
+        if not ok:
             raise RuntimeError(f'master LP (gurobi): status {self.m.Status}')
         self._x = np.array(self.m.getAttr('X', self.cols))
         self._rc = np.array(self.m.getAttr('RC', self.cols))
@@ -1429,7 +1446,7 @@ class DirectMaster:
                  subs=None, verbose=True, pricing_workers=1, round_tol=None,
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
                  purge_cap=40, lp_presolve='auto', sar=False, sar_block=1, sar_cap=1.0,
-                 sar_exact=()):
+                 sar_exact=(), lazy_kinds=()):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
         # from aggregated linking rows and separates the original rows it violates
@@ -1437,6 +1454,17 @@ class DirectMaster:
         # row kinds that start disaggregated (one row per hour and scenario): those
         # whose prices differ across scenarios, so averaging them only gets undone
         self.sar_exact = tuple(sar_exact)
+        # lazy rows: inequality kinds (peak, dn, up) left out of the master and added
+        # one by one when the RMP solution violates them. Unlike dyn-SAR this never
+        # averages an equality, so a row once added stays the original row.
+        self.lazy_kinds = tuple(lazy_kinds)
+        if any(k in CARRIERS for k in self.lazy_kinds):
+            raise ValueError('only inequality rows (up, dn, peak) can be lazy')
+        if {'up', 'dn'} <= set(self.lazy_kinds):
+            raise ValueError('up and dn cannot both be lazy: nothing else bounds r_sym, '
+                             'so the master starts unbounded')
+        self.dyn_rows = sar or bool(self.lazy_kinds)
+        self.lazy_added = 0
         self.sar_phases = []
         self._shadow_viol = {}
         # pricing_workers > 1 prices that many prosumers at once (threads; Gurobi
@@ -1521,7 +1549,8 @@ class DirectMaster:
                         for k in kinds if k in self.sar_exact
                         for t in self.T for w in S)
         else:
-            fams = {key: [(key, 1.0)] for key in self.row_keys}
+            fams = {key: [(key, 1.0)] for key in self.row_keys
+                    if key[0] not in self.lazy_kinds}
         self.families, self.fam_of, self.row, self.pen = {}, {}, {}, {}
         # shared block x0: which original rows each x0 variable enters
         self.x0, self.x0_rows = {}, {}
@@ -1622,7 +1651,18 @@ class DirectMaster:
 
     def _single(self, key):
         kind, t, w = key
-        return _sar_family(kind, [t], [w], self.probs)[0] in self.families
+        return (key in self.families
+                or _sar_family(kind, [t], [w], self.probs)[0] in self.families)
+
+    def _add_lazy(self, viol):
+        """Add the violated lazy rows, each as itself. Returns how many."""
+        add = [k for k in viol if k[0] in self.lazy_kinds and not self._single(k)]
+        for k in add:
+            self.add_family(k, [(k, 1.0)])
+        if add and self._penalized():
+            self._set_penalty(*self._pen_state)
+        self.lazy_added += len(add)
+        return len(add)
 
     def _separate(self, viol):
         """Costa et al.'s policy: split a violated row's family gradually --
@@ -1779,11 +1819,13 @@ class DirectMaster:
             t1 = time.time()
             try:
                 ub = self.lp.solve_shadow()
-                if self.sar:
+                if self.dyn_rows:
                     # the shadow has the families, not the original rows
                     self._shadow_viol = self.violations(shadow=True)
                     if self._shadow_viol:
                         ub = np.inf
+                        if self.lazy_kinds:
+                            self._add_lazy(self._shadow_viol)
             except RuntimeError:        # not yet feasible without the slacks
                 ub = np.inf
             self.t_ub_split[0] += time.time() - t1
@@ -1837,7 +1879,14 @@ class DirectMaster:
                     for h in self.col_idx[u]:
                         if self.lp.x(h) > 1e-9:
                             self.last_used[h] = self.iteration
-            viol = self.violations() if self.sar else {}
+            viol = self.violations() if self.dyn_rows else {}
+            if self.lazy_kinds and self._add_lazy(viol):
+                # the RMP left out rows it now breaks: add them and re-solve before
+                # pricing, so pricing sees their duals
+                self.log.append({'iter': self.iteration, 'lp': lp_obj, 'lb': self.lb,
+                                 'ub': self.ub, 'mode': 'lazy', 'added': 0,
+                                 'round': tag, 't_lp': t_lp, 't_price': 0.0})
+                continue
             if not self._penalized() and not viol:
                 # (under dyn-SAR, only a solution of the aggregated master that
                 # violates no original row is feasible, and so bounds z_MP)
@@ -2029,7 +2078,10 @@ class DirectMaster:
                            'pricing_gap_final': {u: s.gap for u, s in self.subs.items()},
                            'workers': self.pricing_workers},
                 'sar': {'phases': self.sar_phases, 'final_rows': len(self.row),
-                        'original_rows': len(self.row_keys)} if self.sar else None}
+                        'original_rows': len(self.row_keys)} if self.sar else None,
+                'lazy': {'kinds': list(self.lazy_kinds), 'added': self.lazy_added,
+                         'final_rows': len(self.row),
+                         'original_rows': len(self.row_keys)} if self.lazy_kinds else None}
 
     def terminal_columns(self, duals):
         if self.best is not None and duals is self.best[0]:
@@ -2260,7 +2312,8 @@ def run(args):
                           wind_sigma=args.wind_sigma, solar_sigma=args.wind_sigma,
                           load_sigma=args.load_sigma, price_sigma=args.price_sigma,
                           rho=args.rho,
-                          price_carriers=tuple(args.price_carriers.split(',')))
+                          price_carriers=tuple(args.price_carriers.split(',')),
+                          load_carriers=tuple(args.load_carriers.split(',')))
     mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap,
                   solver=args.mip_solver)
     tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('_doi' if args.doi else '') \
@@ -2298,11 +2351,15 @@ def run(args):
             purge_every=args.purge_every, purge_age=args.purge_age,
             purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
             sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
-            sar_exact=tuple(k for k in args.sar_exact.split(',') if k))
+            sar_exact=tuple(k for k in args.sar_exact.split(',') if k),
+            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k))
         tm = dw['timing']
         print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  gap {dw["gap"]:.2e}  '
               f'iters {dw["iterations"]}  {dw["time"]:.1f}s  '
               f'rounds {len(dw["penalty"]["rounds"])}  status {dw["status"]}')
+        if dw.get('lazy'):
+            print(f'  lazy rows: {dw["lazy"]["added"]} added, master {dw["lazy"]["final_rows"]} '
+                  f'of {dw["lazy"]["original_rows"]} linking rows')
         print(f'  time: master LP {tm["lp"]:.1f}s  pricing {tm["pricing"]:.1f}s '
               f'({tm["pricing_calls"]} MILPs, {tm["workers"]} worker(s))')
     elif args.sar:
@@ -2403,6 +2460,8 @@ def main():
     ap.add_argument('--load-sigma', type=float, default=0.10)
     ap.add_argument('--price-sigma', type=float, default=0.15)
     ap.add_argument('--rho', type=float, default=0.7, help='hour-to-hour error correlation')
+    ap.add_argument('--load-carriers', default='E,H,G',
+                    help='carriers whose non-flexible load is uncertain')
     ap.add_argument('--price-carriers', default='E',
                     help='carriers whose prices are uncertain, e.g. E or E,H,G')
     ap.add_argument('--mip-gap', type=float, default=EF_GAP,
@@ -2442,7 +2501,8 @@ def main():
                     help='purge only while there are more than this many columns per prosumer')
     ap.add_argument('--lp-presolve', default='auto', choices=['auto', 'off'],
                     help='presolve of the master LP')
-    ap.add_argument('--lp-method', default='primal', choices=['primal', 'dual', 'auto'],
+    ap.add_argument('--lp-method', default='primal',
+                    choices=['primal', 'dual', 'auto', 'barrier'],
                     help='simplex variant of the master LP')
     ap.add_argument('--ub-every', type=int, default=30,
                     help='iterations between upper-bound checks inside a penalty round')
@@ -2458,6 +2518,8 @@ def main():
     ap.add_argument('--sar-block', type=int, default=1,
                     help='hours per aggregated row in the first dyn-SAR phase '
                          '(6 with --sar-cap 0.05 is the policy of Costa et al.)')
+    ap.add_argument('--lazy-rows', default='',
+                    help='inequality row kinds added only when violated, e.g. peak,dn')
     ap.add_argument('--sar-exact', default='',
                     help='dyn-SAR: row kinds kept per hour and scenario from the start, '
                          'e.g. E (the carrier whose price is uncertain)')
