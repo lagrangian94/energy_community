@@ -2,12 +2,13 @@
 
 Sep 24, 2026 · @Seokwoo Kim
 
-`ieee_owen/stochastic_extension.py`의 direct engine(`DirectMaster`)을 n=60, |Ω|=5까지 키우면서 측정한 기록이다. 결론은 네 가지다.
+`ieee_owen/stochastic_extension.py`의 direct engine(`DirectMaster`)을 n=60, |Ω|=5까지 키우면서 측정한 기록이다. 결론은 다섯 가지다.
 
-1. 지금의 CG 구성이 이 문제에서 가장 빠르다. 구성은 3구간 penalty + smoothing, bound 기반 종료, 병렬 pricing, column purge, primal simplex, 따로 둔 UB LP다.
-2. 이 CG는 n=60, |Ω|=5를 gap 1e-6까지 약 21~24분에 푼다. 시작할 때는 2시간 48분 동안 500회를 돌고도 수렴하지 못했다.
-3. 그다음 병목은 master LP다. 행 수 때문이 아니라 촘촘한 컬럼이 수천 개 쌓이기 때문이다. 그래서 행을 줄이는 방법(dyn-SAR, lazy 행)과 master 알고리즘을 바꾸는 방법(barrier, bundle)은 모두 이득이 없었다.
+1. **지금 기본값에서 n=60, |Ω|=5는 gap 1e-6까지 약 5분(299~313초)에 풀린다.** 시작할 때는 2시간 48분 동안 500회를 돌고도 수렴하지 못했다.
+2. 결정적인 한 수는 수지 행의 **DOI**(커뮤니티가 계통과 시장가로 사고파는 컬럼, 8절)다. master의 primal degeneracy를 풀어서, DOI 없는 구성(21~29분)보다 4.8~6.9배 빠르고 ω^LR은 정밀도 안에서 같다.
+3. DOI가 없을 때의 병목은 master LP였다. 원인은 행 수가 아니라 촘촘한 컬럼이 수천 개 쌓이는 것이다. 그래서 행을 줄이는 방법(dyn-SAR, lazy 행)과 master 알고리즘을 바꾸는 방법(barrier, bundle)은 모두 이득이 없었다(4절). DOI를 넣은 뒤의 병목은 pricing(약 70%)이다.
 4. ω^LR을 믿을 만하게 내려면 EF와 CG 종료 gap을 1e-6으로 둬야 한다(pricing은 1e-4면 된다). 지금 기본값이 그렇게 되어 있다.
+5. n=60에서는 EF의 LP 완화값이 v^LR과 사실상 같다. 그래서 LP 한 번으로 거의 최적인 dual이 나온다(9절). 그래도 CG가 필요한 것은 primal 쪽, 즉 UB를 증명하는 일 때문이다.
 
 모든 수치는 n=60, |Ω|=5, `PYTHONHASHSEED=21`, Gurobi, 16코어 기준이다. 다르면 따로 적었다. 실행 간 시간 편차는 같은 설정에서도 약 15%다(해시 시드 21과 22에서 1443초와 1247초).
 
@@ -142,7 +143,8 @@ disaggregated proximal bundle이다. master QP는 max Σθ_u − (1/2t)‖π−�
 
 ## 6. 남은 방향
 
-- **시나리오 분해 DW** (Schulze, Grothey & McKinnon 2017, 확률적 unit commitment): 시나리오 단위로 분해하면 컬럼이 한 시나리오에만 걸쳐 5분의 1로 희소해진다. 대신 1단계 변수를 맞추는 행이 생기고 분해 구조가 바뀐다. 컬럼 밀도를 직접 줄이는 유일한 후보다.
+- **시나리오 분해 DW** (Schulze, Grothey & McKinnon 2017, 확률적 unit commitment): 컬럼은 5분의 1로 희소해지지만, 1단계 결정(commitment)의 시나리오 간 일치 조건까지 완화하게 된다. convex hull을 시나리오별로 잡는 더 약한 완화라서 **v^LR과 dual 자체가 바뀐다.** 즉 논문이 정의하는 Owen 배분이 달라지므로, 속도 개선이 아니라 모델 변경이다. 쓰지 않는다.
+- **pricing** (DOI 이후의 병목): 반복마다 MILP 60개(개당 약 40ms)를 16개씩 병렬로 푼다. 가장 느린 prosumer 묶음이 반복 시간을 정한다.
 - **degeneracy 도구** (IPS, DCA, Row-reduced CG; Elhallaoui et al. 2005, Desrosiers, Gauthier & Lübbecke 2014, Raymond et al.): 주로 set partitioning용이다. 여기서는 degenerate basic이 551개 중 64개로 중간 수준이라 효과가 제한적일 것이다.
 - **번들을 계속 판다면:** QP의 이차항은 t가 바뀔 때만 다시 쓰고, 나머지는 속성값으로만 바꿔 warm start를 살린다. t를 키우는 규칙도 개선한다(Kiwiel의 곡률 추정). 초반만 번들로 dual을 모으고 후반은 CG로 넘기는 혼합도 있다.
 - **재현성:** 같은 명령이라도 EF 해가 실행마다 조금 다르다(1e-4 gap에서 −23597.65 ~ −23598.24). 파이썬 해시 순서가 모델을 만드는 순서를 바꾸는 것으로 보인다. `PYTHONHASHSEED`를 고정해야 재현된다.
@@ -150,10 +152,14 @@ disaggregated proximal bundle이다. master QP는 max Σθ_u − (1/2t)‖π−�
 ## 7. 재현
 
 ```bash
-# 지금의 기본 구성 (gap: EF 1e-6, CG 1e-6, pricing 1e-4; 병렬 pricing, purge, UB 확인 30회)
+# 지금의 기본 구성 (gap: EF 1e-6, CG 1e-6, pricing 1e-4; DOI, 병렬 pricing과 부하 분산,
+# purge, UB 확인 30회)
 PYTHONHASHSEED=21 python ieee_owen/stochastic_extension.py --n 60 --scenarios 5 \
     --lp-solver gurobi --pricing-solver gurobi --mip-solver gurobi --skip-standalone
+# 끌 수 있는 기본값: --no-doi, --no-balance-pricing
 # 비교한 변형 (모두 기본값에서 꺼져 있음)
+#   --dual-init lp|fix [--pen-eps 0.01 --pen-delta 0.01]   dual 웜스타트
+#   --column-pool / --mip-start                             컬럼 풀, pricing MIP 시작해
 #   --sar [--sar-exact E]       dyn-SAR
 #   --lazy-rows peak,dn         lazy 부등식 행
 #   --lp-method barrier         barrier master
@@ -173,3 +179,50 @@ PYTHONHASHSEED=21 python ieee_owen/stochastic_extension.py --n 60 --scenarios 5 
 - [Elhallaoui et al. 2005](https://pubsonline.informs.org/doi/10.1287/opre.1050.0222)
 - [Desrosiers, Gauthier & Lübbecke 2014](https://www.sciencedirect.com/science/article/abs/pii/S0377221713009922)
 - [Schulze, Grothey & McKinnon 2017](https://www.sciencedirect.com/science/article/abs/pii/S0377221717301108)
+
+## 8. DOI: 커뮤니티가 계통과 직접 거래하는 컬럼 (기본값)
+
+수지 행 (k, t, ω)마다 컬럼 두 개를 master에 넣는다. Ben Amor, Desrosiers & Valério de Carvalho (2006), Gschwind & Irnich (2016)의 dual-optimal inequality다.
+
+- "계통에서 산다": 행 계수 −1, 비용 ρ·수입가
+- "계통에 판다": 행 계수 +1, 비용 −ρ·수출가
+- 전력은 peak 행에도 반대 부호로 들어간다.
+
+dual 쪽에서 보면 커뮤니티 가격을 [수출가, 수입가] 상자에 가두는 부등식이다. primal 쪽에서 보면 **새 계획이 다른 prosumer의 짝을 기다리지 않고 들어갈 수 있게 한다.** 빈 수지를 계통 컬럼이 채우기 때문이다. 3절의 primal degeneracy를 정면으로 푸는 장치다.
+
+수입 한도 때문에 이 부등식이 미리 유효하다는 보장은 없다. 그래서 두 가지 안전장치를 둔다.
+
+- UB는 계통 거래량 y = 0일 때만 인정한다. 주 LP와 UB용 LP 둘 다 그렇다.
+- 수렴했는데 y > 0이면 계통 컬럼을 끄고(상한 0) CG를 이어 간다.
+
+LB는 원래 문제의 Lagrangian bound라서 어느 경우에도 유효하다. 측정한 모든 실행에서 안전장치는 한 번도 발동하지 않았다(`doi.active_at_end`).
+
+| 인스턴스 | DOI 없음 | **DOI** | 속도 | ω (없음 / DOI) |
+|---|---|---|---|---|
+| n=6, \|Ω\|=3 | 524회, 62s | 308회, 33s | 1.9× | 7.0056 / 7.0056 |
+| n=30, 시드 21 | 766회, 785s | 353회, **114s** | 6.9× | 1.7296 / 1.7288 |
+| n=60, 시드 21 | 758회, 1443s | 485회, **299s** | 4.8× | 3.728 / 3.729 |
+| n=60, 시드 22 | 951회, 1716s | 491회, **313s** | 5.5× | 3.689 / 3.727 |
+
+n=60에서 master LP가 941초에서 76초로 줄었다(반복당 1~3초 → 0.07~0.15초). 이제 pricing이 약 70%다. ω는 시드 사이에서 3.69~3.73으로 움직이는데, gap 1e-6의 인증 구간(약 ±0.024) 안이다.
+
+DOI 위에서 pricing과 컬럼 관리를 더 시험했다(n=60, 시드 21, DOI만 쓰면 299s).
+
+| 추가 | 시간 | 결과 |
+|---|---|---|
+| 부하 분산 (`--balance-pricing`, 기본값) | 287s | pricing 215 → 201s. 해가 없어서 켜 둔다 |
+| pricing MIP 시작해 (`--mip-start`) | 292s | 차이 없음 |
+| 컬럼 풀 (`--column-pool`) | 393s | 더 나쁨. 풀에서 되살린 반복이 LB를 못 올려 반복이 늘고(577회), 풀 행렬을 다시 만드는 비용도 약 90초 든다 |
+| 셋 다 | 343s | 더 나쁨 |
+
+## 9. dual 웜스타트와 "LP 완화 ≈ Lagrangian 완화"
+
+`--dual-init lp`는 EF의 LP 완화에서 linking 행의 dual을 읽어(0.2초) 첫 안정화 중심으로 쓴다. `fix`는 정수 변수를 EF 해에 고정한 LP다. EF 행은 master 행과 이름으로 짝지어진다. 부호와 ρ 배율은 공유 변수의 계수 비로 맞춘다.
+
+- n=60에서 L(π_LP) = −23601.9535이다. CG가 인증한 v^LR 구간 [−23601.974, −23601.951] 안에 있다. 즉 **EF의 LP 완화가 Lagrangian 완화만큼 강하고, LB는 처음부터 최적이다.** n=6에서는 둘이 0.41 다르다(−2733.85 vs −2733.44). 큰 n에서만 성립하는 성질로 보인다. 논문의 O(|T|/n) 논의와 관련이 있을 수 있는데, 확인하지는 않았다.
+- **n=6에서는 좋았다.** 웜스타트에 작은 초기 penalty 0.01을 주면 223회/25초(DOI 없음 기준 524회/59초)였다. 여기에 DOI를 더하면 183회/19초였다.
+- **n=60에서는 오히려 나빴다.** penalty 0.02로 27분에 1,550회를 돌고도 라운드 1이었다. DOI를 더해도 마지막 라운드에서 3,000회 넘게 정체했다. dual을 최적 근처에 붙잡아 두면 pricing이 최적 면 근처의 비슷한 컬럼만 만든다. 그래서 primal 해(UB)를 만드는 조합이 잘 생기지 않는다. dual 안정화가 primal 수렴을 늦추는 전형적인 모습이다. 그래서 끈 채로 둔다.
+
+## 10. 외부 종료
+
+긴 실행 몇 개(n=60의 dyn-SAR E, bundle simplex, dual 웜스타트 0.01)가 traceback 없이 도중에 끝났다(exit 127). 같은 기계의 다른 세션이 Python 프로세스를 멈춘 것으로 보이지만 확인하지 못했다. 해당 표의 "중단" 표시는 이것이다.

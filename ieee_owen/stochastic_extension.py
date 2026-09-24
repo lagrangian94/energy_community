@@ -34,6 +34,14 @@ are the extensive form and stand-alone MILPs (--mip-solver). SCIP builds the mod
 but solves none of them: --engine scip (the SCIP master with its pricer plugin, as in
 chp.py, and with it --sar and --doi) and SCIP as a pricing or MIP solver now raise.
 The code for them is kept only so the numbers below stay traceable.
+
+DEFAULTS of the direct engine, and why (measured in ieee_owen/cg_scaling.md): the
+balance-row DOIs are on -- the community may trade with the grid at market prices
+inside the master, which breaks the master's primal degeneracy; a bound counts only
+with no grid trade, and if the master settles with some they are switched off --
+and cut n=60, |Omega|=5 from 1443-1716 s to 299-313 s with the same omega^LR. Pricing
+is parallel, heavy prosumers dealt out first; columns are purged; gaps are EF 1e-6,
+CG 1e-6, pricing 1e-4.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
 give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
 
@@ -389,12 +397,14 @@ def _to_gurobi(scip_model, name, time_limit=None, gap=None, env=None):
         expr = gp.LinExpr([(a, gv[n]) for n, a in scip_model.getValsLinear(c).items()])
         lhs, rhs = scip_model.getLhs(c), scip_model.getRhs(c)
         if lhs > -inf and rhs < inf and lhs == rhs:
-            g.addLConstr(expr, GRB.EQUAL, rhs)
+            g.addLConstr(expr, GRB.EQUAL, rhs, name=c.name)
         else:
             if lhs > -inf:
-                g.addLConstr(expr, GRB.GREATER_EQUAL, lhs)
+                g.addLConstr(expr, GRB.GREATER_EQUAL, lhs,
+                             name=c.name if rhs >= inf else f'{c.name}__lo')
             if rhs < inf:
-                g.addLConstr(expr, GRB.LESS_EQUAL, rhs)
+                g.addLConstr(expr, GRB.LESS_EQUAL, rhs,
+                             name=c.name if lhs <= -inf else f'{c.name}__hi')
     g.ModelSense = GRB.MINIMIZE
     g.update()
     return g, gv
@@ -524,6 +534,7 @@ class PlayerPricing:
         self.solver = solver
         self.gap = MIP_GAP if gap is None else gap
         self.time, self.calls = 0.0, 0
+        self.mip_start, self._last_x = False, None
         if solver == 'gurobi':
             # env: a Gurobi environment is never used from two threads at once, so
             # DirectMaster hands one per worker and prices each env's prosumers in
@@ -605,6 +616,10 @@ class PlayerPricing:
         coef = self._coef(duals, farkas)
         g = self.g
         g.setAttr('Obj', self.g_vars, [coef.get(n, 0.0) for n in self.g_names])
+        if self.mip_start and self._last_x is not None:
+            # the previous plan is feasible for this prosumer whatever the duals:
+            # hand it to Gurobi as a starting incumbent
+            g.setAttr('Start', self.g_vars, self._last_x)
         for attempt in range(5):
             try:
                 g.optimize()
@@ -616,6 +631,7 @@ class PlayerPricing:
         if g.SolCount == 0:
             raise RuntimeError(f'pricing {self.player} (gurobi): no solution, status {g.Status}')
         x = g.getAttr('X', self.g_vars)
+        self._last_x = x
         vals = dict(zip(self.g_names, x))
         # the objective is recomputed from the solution, so it and the column cost
         # agree to the last digit whatever Gurobi reports internally
@@ -1464,7 +1480,8 @@ class DirectMaster:
                  subs=None, verbose=True, pricing_workers=1, round_tol=None,
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
                  purge_cap=40, lp_presolve='auto', sar=False, sar_block=1, sar_cap=1.0,
-                 sar_exact=(), lazy_kinds=()):
+                 sar_exact=(), lazy_kinds=(), doi=True, column_pool=False,
+                 mip_start=False, balance_pricing=True):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
         # from aggregated linking rows and separates the original rows it violates
@@ -1482,6 +1499,19 @@ class DirectMaster:
             raise ValueError('up and dn cannot both be lazy: nothing else bounds r_sym, '
                              'so the master starts unbounded')
         self.dyn_rows = sar or bool(self.lazy_kinds)
+        # Dual-optimal inequalities (Ben Amor, Desrosiers & Valerio de Carvalho 2006)
+        # on the balance rows, as the primal columns they dualize: the community
+        # buying from / selling to the grid at the scenario's market prices. A new
+        # plan then enters without waiting for partners, the grid covers the rest,
+        # which is what the degenerate master lacks. Import caps keep them from
+        # being valid a priori: a bound counts only with y = 0, and if the master
+        # settles with y > 0 they are switched off and column generation goes on.
+        self.doi, self.doi_active, self.y = doi, doi, {}
+        # column pool: purged columns wait here; each iteration the pool is priced
+        # first (one sparse product), and the pricing MILPs run only if it has
+        # nothing with negative reduced cost
+        self.pool_on, self.pool, self.pool_hits, self.pool_rounds = column_pool, [], 0, 0
+        self._pool_mat = None
         self.lazy_added = 0
         self.sar_phases = []
         self._shadow_viol = {}
@@ -1517,7 +1547,18 @@ class DirectMaster:
                 e.setParam('OutputFlag', 0)
                 e.start()
                 self._envs[i] = e
-        self._group = {u: i % k for i, u in enumerate(self.players)}
+        # Workers take their prosumers in sequence, so an iteration lasts as long as
+        # the slowest worker. The pricing MILPs with commitment binaries
+        # (electrolyzers, heat pumps) are the slow ones: deal them out first, in a
+        # snake order, then the rest the same way.
+        heavy = (set(params.get('players_with_electrolyzers', [])) |
+                 set(params.get('players_with_heatpumps', []))) if balance_pricing else set()
+        order = ([u for u in self.players if u in heavy]
+                 + [u for u in self.players if u not in heavy])
+        self._group = {}
+        for i, u in enumerate(order):
+            r, c = divmod(i, k)
+            self._group[u] = c if (r % 2 == 0 or not balance_pricing) else k - 1 - c
         self.subs = subs or {u: PlayerPricing(u, T, scenarios, pricing_time_limit,
                                               pricing_gap, pricing_solver,
                                               env=self._envs[self._group[u]])
@@ -1531,6 +1572,8 @@ class DirectMaster:
                               for d in ('up', 'dn')]
         if self.enable_peak:
             self.row_keys += [('peak', t, w) for w in range(len(scenarios)) for t in self.T]
+        for sub in self.subs.values():
+            sub.mip_start = mip_start
         if self.pricing_workers > 1:
             from concurrent.futures import ThreadPoolExecutor
             self._pool = ThreadPoolExecutor(self.pricing_workers)
@@ -1605,6 +1648,19 @@ class DirectMaster:
         # penalty slacks, created disabled (ub 0)
         for name in fams:
             self._add_pen(name)
+        if self.doi:
+            for w, (rho, prm) in enumerate(self.scenarios):
+                for t in self.T:
+                    for k in CARRIERS:
+                        for side, sgn, cost in (
+                                ('imp', -1.0, rho * prm[f'pi_{k}_gri_import_{t}']),
+                                ('exp', 1.0, -rho * prm[f'pi_{k}_gri_export_{t}'])):
+                            coef = {(k, t, w): sgn}
+                            if k == 'E' and self.enable_peak:
+                                coef[('peak', t, w)] = -sgn
+                            agg = self._aggregate(coef)
+                            self.y[(k, t, w, side)] = lp.add_col(
+                                cost, 0.0, INF, [self.row[f] for f in agg], list(agg.values()))
 
     def _register_family(self, name, members):
         self.families[name] = members
@@ -1736,12 +1792,17 @@ class DirectMaster:
                        and self.iteration - self.last_used[h] >= self.purge_age
                        and self.lp.rc(h) > tol))
         drop = set(h for _, h in cand[:ncol - cap])
+        self._dropped_cols = [c for u in self.players
+                              for h, c in zip(self.col_idx[u], self.columns[u]) if h in drop]
         for u in self.players:
             keep = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u]) if h not in drop]
             self.col_idx[u] = [h for h, _ in keep]
             self.columns[u] = [c for _, c in keep]
         drop = list(drop)
         if drop:
+            if self.pool_on:
+                self.pool.extend(self._dropped_cols)
+                self._pool_mat = None
             self.lp.remove_cols(drop)
             for h in drop:
                 del self.last_used[h]
@@ -1795,6 +1856,47 @@ class DirectMaster:
             min(1.0, 0.1 * (self.incumbent - self.L_bar) / gap)
             if lp_obj > self.incumbent and self.incumbent - self.L_bar > 1e-6 else 0.1)
 
+    def _pool_price(self, duals, conv, adm):
+        """Revive pooled columns with negative reduced cost at `duals`; returns how
+        many. The pool is held as a sparse matrix over the original linking rows."""
+        if not self.pool:
+            return 0
+        from scipy.sparse import csr_matrix
+        if self._pool_mat is None:
+            ridx = {k: i for i, k in enumerate(self.row_keys)}
+            data, rows, cols = [], [], []
+            for j, c in enumerate(self.pool):
+                for k, a in c.coef.items():
+                    data.append(a)
+                    rows.append(j)
+                    cols.append(ridx[k])
+            self._pool_mat = csr_matrix((data, (rows, cols)),
+                                        shape=(len(self.pool), len(self.row_keys)))
+            self._pool_cost = np.array([c.cost for c in self.pool])
+            pidx = {u: i for i, u in enumerate(self.players)}
+            self._pool_owner = np.array([pidx[c.player] for c in self.pool])
+        pi = np.array([duals.get(k, 0.0) for k in self.row_keys])
+        sig = np.array([conv[u] for u in self.players])
+        rc = self._pool_cost - self._pool_mat @ pi - sig[self._pool_owner]
+        pick = np.nonzero(rc < -adm)[0]
+        if len(pick) == 0:
+            return 0
+        # the most negative per prosumer, at most one each, as pricing would give
+        best = {}
+        for j in pick:
+            u = self._pool_owner[j]
+            if u not in best or rc[j] < rc[best[u]]:
+                best[u] = j
+        take = sorted(best.values())
+        for j in take:
+            self.add_column(self.pool[j])
+        keep = np.ones(len(self.pool), dtype=bool)
+        keep[take] = False
+        self.pool = [c for c, k in zip(self.pool, keep) if k]
+        self._pool_mat = None
+        self.pool_hits += len(take)
+        return len(take)
+
     def _price_group(self, members, duals):
         return {u: self.subs[u].price(duals) for u in members}
 
@@ -1837,6 +1939,8 @@ class DirectMaster:
             t1 = time.time()
             try:
                 ub = self.lp.solve_shadow()
+                if self._y_total(shadow=True) > 1e-7:
+                    ub = np.inf
                 if self.dyn_rows:
                     # the shadow has the families, not the original rows
                     self._shadow_viol = self.violations(shadow=True)
@@ -1852,6 +1956,21 @@ class DirectMaster:
         if ub < self.ub:
             self.ub = ub
         return ub
+
+    def _y_total(self, shadow=False):
+        if not self.doi_active:
+            return 0.0
+        xval = self.lp.x_shadow if shadow else self.lp.x
+        return sum(xval(j) for j in self.y.values())
+
+    def _disable_doi(self):
+        js = list(self.y.values())
+        self.lp.set_cols(js, ub=[0.0] * len(js))
+        if isinstance(self.lp, _TwinLP):
+            self.lp.shadow.set_cols(js, ub=[0.0] * len(js))
+        self.doi_active = False
+        if self.verbose:
+            print('  -- DOI: the master settled with y > 0; grid columns switched off')
 
     def _converged(self):
         return np.isfinite(self.ub) and self.ub - self.lb <= self._gap_tol(self.ub)
@@ -1905,9 +2024,10 @@ class DirectMaster:
                                  'ub': self.ub, 'mode': 'lazy', 'added': 0,
                                  'round': tag, 't_lp': t_lp, 't_price': 0.0})
                 continue
-            if not self._penalized() and not viol:
+            if not self._penalized() and not viol and self._y_total() <= 1e-7:
                 # (under dyn-SAR, only a solution of the aggregated master that
-                # violates no original row is feasible, and so bounds z_MP)
+                # violates no original row is feasible, and so bounds z_MP; with the
+                # DOIs, only one that buys nothing from the grid)
                 self._update_ub(lp_obj)
             tol = rel * (1.0 + abs(lp_obj))
             adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
@@ -1920,7 +2040,12 @@ class DirectMaster:
                 status = 'done'
             elif self.lb >= lp_obj - tol:
                 status = 'round'
-            if status is None and self.smoothing:
+            if status is None and self.pool_on:
+                added = self._pool_price(duals, conv, adm)
+                if added:
+                    mode = 'pool'
+                    self.pool_rounds += 1
+            if status is None and self.smoothing and not added:
                 if self.center is None:
                     self.center = dict(duals)
                 alpha = self._alpha(lp_obj)
@@ -1939,7 +2064,7 @@ class DirectMaster:
                             added += 1
                     if not added:
                         mode = 'misprice'
-            if status is None and not added:
+            if status is None and not added and mode != 'pool':
                 if self._converged():
                     status = 'done'
                 elif self.lb >= lp_obj - tol:
@@ -2004,6 +2129,59 @@ class DirectMaster:
             if self.purge_every and self.iteration % self.purge_every == 0:
                 self._purge(lp_obj)         # the next pass re-solves the LP first
 
+    EF_ROW = {'E': 'community_elec_balance', 'H': 'community_heat_balance',
+              'G': 'community_hydro_balance', 'up': 'reserve_up_coupling',
+              'dn': 'reserve_dn_coupling', 'peak': 'peak_penalty_cons'}
+
+    def duals_from_ef(self, ef, fix_binaries=False):
+        """A first dual point: the extensive form's LP duals on the linking rows.
+
+        mode 'lp' relaxes the integrality; 'fix' fixes the integer variables at the
+        EF's MIP solution first (the restricted-pricing LP). Either is a guess at the
+        Lagrangian dual solution pi*, available for one LP solve. Each EF row is
+        matched to its master row by name and scaled by the coefficient of one shared
+        variable, pi_master = pi_EF * a_EF / a_master, so sign and the rho scaling of
+        the scenario blocks come out right.
+        """
+        sm = ef['stack'].model
+        g, gv = _to_gurobi(sm, 'ef_lp')
+        # _to_gurobi copies rows and bounds only; the EF objective goes in here
+        for v in sm.getVars():
+            gv[v.name].Obj = v.getObj()
+        g.ObjCon = sm.getObjoffset()
+        if fix_binaries:
+            for n, v in gv.items():
+                if v.VType != 'C':
+                    x = float(round(ef['vals'][n]))
+                    v.LB = v.UB = x
+        g.update()                      # relax() copies only what is updated
+        r = g.relax()
+        r.Params.OutputFlag = 0
+        r.optimize()
+        if r.Status != 2:
+            raise RuntimeError(f'EF LP for the dual warm start: status {r.Status}')
+        pi, missing = {}, 0
+        for key in self.row_keys:
+            kind, t, w = key
+            con = r.getConstrByName(f'{self.EF_ROW[kind]}_{t}_s{w}')
+            ref = next(((n, a) for u in self.players
+                        for n, a in self.subs[u].rows.get(key, ()) if a), None)
+            if con is None or ref is None:
+                missing += 1
+                continue
+            a_ef = r.getCoeff(con, r.getVarByName(ref[0]))
+            if a_ef == 0.0:
+                missing += 1
+                continue
+            pi[key] = con.Pi * a_ef / ref[1]
+        # the <= rows need pi <= 0 (Theta); clip solver noise
+        for key in pi:
+            if key[0] not in CARRIERS and pi[key] > 0.0:
+                pi[key] = 0.0
+        self.dual_init_info = {'mode': 'fix' if fix_binaries else 'lp',
+                               'lp_obj': r.ObjVal, 'missing_rows': missing}
+        return pi
+
     def _add_seeds(self, init_vals, init_cols):
         """The first column per prosumer: its plan in the extensive-form solution."""
         cols = list(init_cols) if init_cols is not None else [
@@ -2043,9 +2221,22 @@ class DirectMaster:
                 bnds = sum(1 for v in self.lp.cols if v.IISLB or v.IISUB)
                 print(f'  seed master infeasible; IIS rows {rows[:30]} '
                       f'({len(rows)} rows, {bnds} bounds)')
-    def solve(self, init_vals=None, init_cols=None):
+    def solve(self, init_vals=None, init_cols=None, init_duals=None):
         t0 = time.time()
         self._add_seeds(init_vals, init_cols)
+        if init_duals is not None:
+            # dual warm start: price at the guess before the first round, so the
+            # stability center (smoothing and penalty) starts there
+            self._it_price = 0.0
+            res = self._price_all(init_duals)
+            self._record(init_duals, res)
+            for u, (obj, _, col) in res.items():
+                self.add_column(col)
+            if self.verbose:
+                print(f'  dual warm start ({self.dual_init_info["mode"]}): '
+                      f'L = {self._lagrangian(init_duals, [r[1] for r in res.values()]):.4f}, '
+                      f'EF LP {self.dual_init_info["lp_obj"]:.4f}, '
+                      f'{self.dual_init_info["missing_rows"]} rows unmatched')
         eps, delta, rounds = self.pen_eps, self.pen_delta, []
         status = None
         for rnd in range(1, self.max_rounds + 1):
@@ -2073,6 +2264,19 @@ class DirectMaster:
             eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
             if eps < 1e-4:
                 eps = delta = 0.0
+        while status != 'done' and self.doi_active:
+            self._disable_doi()
+            self._set_penalty(None, 0.0, 0.0)
+            status, obj = self._cg(len(rounds) + 1, True)
+            if status != 'done':
+                self._update_ub()
+                if self._converged():
+                    status = 'done'
+            rounds.append({'round': len(rounds) + 1, 'eps': 0.0, 'delta': 0.0, 'obj': obj,
+                           'lb': self.lb, 'ub': self.ub, 'slack': 0.0,
+                           'iterations': self.iteration, 'time': time.time() - t0,
+                           'certified': status == 'done', 'status': status,
+                           'doi_off': True})
         # report the unpenalized restricted master
         self._set_penalty(None, 0.0, 0.0)
         obj = self.lp.solve()
@@ -2086,13 +2290,15 @@ class DirectMaster:
                 'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.players},
                 'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
                 'columns': {u: len(self.columns[u]) for u in self.players},
-                'y_total': 0.0, 'penalty': {'rounds': rounds}, 'doi': {'used': False},
+                'y_total': self._y_total(), 'penalty': {'rounds': rounds},
+                'doi': {'used': self.doi, 'active_at_end': self.doi_active},
                 'time': time.time() - t0,
                 'timing': {'lp': self.t_lp, 'pricing': self.t_price,
                            'pricing_by_player': {u: s.time for u, s in self.subs.items()},
                            'pricing_calls': sum(s.calls for s in self.subs.values()),
                            'pricing_tightened': self.pricing_tightened,
-                           'purged': self.purged,
+                           'purged': self.purged, 'pool_hits': self.pool_hits,
+                           'pool_rounds': self.pool_rounds,
                            'seed_residual': self.seed_residual,
                            'ub_checks': self.n_ub, 'ub_solve': self.t_ub_split[0],
                            'ub_restore': self.t_ub_split[1],
@@ -2144,6 +2350,7 @@ class BundleMaster(DirectMaster):
                  bundle_m1=0.1, bundle_age=10, bundle_cap=20, bundle_qp='primal', **kw):
         kw['pen_eps'] = 0.0             # the UB LP is the plain master
         kw['purge_every'] = 0           # the bundle manages its own columns
+        kw['doi'] = False               # its QP has no grid columns
         super().__init__(*args, **kw)
         if self.lp_backend != 'gurobi':
             raise ValueError('the bundle master is implemented on Gurobi (QP)')
@@ -2373,10 +2580,13 @@ def solve_dwr_bundle(players, T, scenarios, params, init_vals=None, **kw):
     return master.solve(init_vals=init_vals), master
 
 
-def solve_dwr_direct(players, T, scenarios, params, init_vals=None, **kw):
-    """(DWR_N^Omega) through DirectMaster: our own loop, HiGHS or Gurobi, no SCIP."""
+def solve_dwr_direct(players, T, scenarios, params, init_vals=None, dual_init=None,
+                     ef=None, **kw):
+    """(DWR_N^Omega) through DirectMaster: our own loop, HiGHS or Gurobi, no SCIP.
+    dual_init 'lp' or 'fix' warm-starts the duals from the extensive form `ef`."""
     master = DirectMaster(players, T, scenarios, params, **kw)
-    return master.solve(init_vals=init_vals), master
+    duals = master.duals_from_ef(ef, fix_binaries=dual_init == 'fix') if dual_init else None
+    return master.solve(init_vals=init_vals, init_duals=duals), master
 
 
 def solve_dwr_stab(players, T, scenarios, params, init_vals=None, pen_eps=0.1,
@@ -2583,8 +2793,6 @@ def _jsonable(x):
 def run(args):
     if args.engine != 'direct':
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
-    if args.doi:
-        raise SystemExit('--doi exists only on the SCIP engine, which is no longer supported')
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n)
@@ -2596,7 +2804,7 @@ def run(args):
                           load_carriers=tuple(args.load_carriers.split(',')))
     mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap,
                   solver=args.mip_solver)
-    tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('_doi' if args.doi else '') \
+    tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('' if args.doi else '_nodoi') \
         + ('_sar' if args.sar else '') + ('_nosmooth' if args.no_smoothing else '') \
         + ('_grb' if args.pricing_solver == 'gurobi' else '') \
         + ('_nopen' if args.no_penalty else '') \
@@ -2617,6 +2825,8 @@ def run(args):
     print('\n[2] column generation (DWR_N^Omega)')
     if args.engine == 'direct':
         solver_fn = solve_dwr_bundle if args.bundle else solve_dwr_direct
+        extra_d = ({'dual_init': args.dual_init, 'ef': ef}
+                   if args.dual_init != 'none' and not args.bundle else {})
         extra_b = ({'bundle_t': args.bundle_t, 'bundle_age': args.bundle_age,
                     'bundle_t_min': args.bundle_t_min, 'bundle_cap': args.bundle_cap,
                     'bundle_qp': args.bundle_qp} if args.bundle else {})
@@ -2636,7 +2846,11 @@ def run(args):
             purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
             sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
             sar_exact=tuple(k for k in args.sar_exact.split(',') if k),
-            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k), **extra_b)
+            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k),
+            doi=args.doi and not args.bundle,
+            column_pool=args.column_pool, mip_start=args.mip_start,
+            balance_pricing=args.balance_pricing,
+            **extra_b, **extra_d)
         tm = dw['timing']
         if dw.get('bundle'):
             print(f'  bundle: {tm["serious"]} serious / {tm["null"]} null steps, '
@@ -2715,7 +2929,8 @@ def run(args):
             'no_penalty', 'no_smoothing', 'pen_eps', 'pen_delta', 'pen_shrink',
             'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
             'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start',
-            'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp')},
+            'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp',
+            'dual_init')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
@@ -2762,8 +2977,11 @@ def main():
     ap.add_argument('--cg-time-limit', type=float, default=None)
     ap.add_argument('--cold-start', action='store_true',
                     help='seed the master from zero-dual pricing instead of the EF solution')
-    ap.add_argument('--doi', action='store_true',
-                    help='dual-optimal inequalities on the balance rows (market price box)')
+    ap.add_argument('--doi', dest='doi', action='store_true', default=True,
+                    help='dual-optimal inequalities on the balance rows: the community '
+                         'trading with the grid at market prices (default on)')
+    ap.add_argument('--no-doi', dest='doi', action='store_false',
+                    help='plain master, without the grid columns')
     ap.add_argument('--engine', default='direct', choices=['scip', 'direct'],
                     help="'direct': our own loop on a HiGHS or Gurobi LP; 'scip' "
                          '(SCIP master with its pricer plugin) is no longer supported')
@@ -2807,6 +3025,18 @@ def main():
     ap.add_argument('--sar-block', type=int, default=1,
                     help='hours per aggregated row in the first dyn-SAR phase '
                          '(6 with --sar-cap 0.05 is the policy of Costa et al.)')
+    ap.add_argument('--balance-pricing', dest='balance_pricing', action='store_true',
+                    default=True,
+                    help='deal the prosumers with commitment binaries out to the pricing '
+                         'workers first, in a snake order (default on)')
+    ap.add_argument('--no-balance-pricing', dest='balance_pricing', action='store_false')
+    ap.add_argument('--mip-start', action='store_true',
+                    help="start each pricing MILP from the prosumer's previous plan")
+    ap.add_argument('--column-pool', action='store_true',
+                    help='keep purged columns in a pool and price the pool before the MILPs')
+    ap.add_argument('--dual-init', default='none', choices=['none', 'lp', 'fix'],
+                    help="dual warm start from the extensive form's LP duals: 'lp' "
+                         "relaxes integrality, 'fix' fixes it at the EF solution")
     ap.add_argument('--bundle', action='store_true',
                     help='proximal bundle method on the Lagrangian dual instead of the LP '
                          'master (Gurobi only)')
