@@ -162,7 +162,7 @@ Grand coalition의 minimizer (ρ\*, π\*)는 모든 연합의 dual에서 feasibl
 
 **해석.**
 
-- χ\_j는 커뮤니티의 worst-case 분포 ρ*와 가격 π* 아래에서 평가한 멤버 j의 가치다. ρ\*는 내생적으로 정해지는 pricing measure다.
+- χ\_j는 커뮤니티의 worst-case 분포 ρ\*와 가격 π\* 아래에서 평가한 멤버 j의 가치다. ρ\*는 내생적으로 정해지는 pricing measure다.
 - 커뮤니티에 나쁜 시나리오(ρ\*가 크게 잡힌 ω)에서 돈을 버는 멤버가 더 받는다. 보험료로 해석할 수 있다.
 - P = {ρ̂}이면 Remark stoch와 정확히 같다. P = Δ(Ω)이면 ρ\*는 N의 최악 시나리오들 위에 모인다.
 - Stand-alone κ\_j = v^MIP,rob({j})는 멤버 자신의 worst case라 훨씬 비관적이다. 그래서 협력 이득에 자원 pooling 외에 hedging(분산) 가치가 더해진다. eq:v0의 Γ^MIP 정규화도 이 κ\_j로 한다.
@@ -210,6 +210,85 @@ Master에 θ, α column과 ω-row |Ω|개가 추가되고, pricing은 같은 MIL
 3. scenario\_allocation (S1): pen\[w\]가 dual을 probs\[w\]로 나눈다. ρ\*\_ω = 0인 시나리오가 생기면 0으로 나누게 되므로, 나누지 않는 형태로 다시 쓴다.
 4. Stabilization(Wentges smoothing, du Merle penalty)은 그대로 적용된다. ρ는 dual vector의 일부일 뿐이다.
 5. 검증: CVaR β = 0(P = {ρ̂})에서 현재 v^CHP와 Owen 배분이 소수점 넷째 자리까지 같아야 한다.
+
+### 5.1 KL ball을 LP로: column-and-cut generation 전체 절차
+
+Exponential cone 없이 LP 하나에서 두 oracle이 번갈아 돈다. 멤버 pricing(MILP)은 column을, KL separation(닫힌 형태)은 분포 cut(row)을 추가하고, 두 oracle의 위반량을 더한 것이 곧 상한과 하한의 차이다.
+
+**Restricted master (RMP).** D는 지금까지 만든 분포들이고, g\_ω는 시나리오별 커뮤니티 이익이다.
+
+```latex
+\begin{aligned}
+\max\ &\theta\\
+\text{s.t. }&\theta-\sum_\omega\rho^k_\omega\,g_\omega(\lambda,x_0)\le 0&&[\mu_k]\quad\forall k\in D\\
+&\sum_{j,q}a^\omega_{jq}\lambda_{jq}+A^\omega_0x_0\le b^\omega&&[\pi^\omega]\quad\forall\omega\\
+&\sum_q\lambda_{jq}=1&&[\sigma_j]\quad\forall j\\
+&\lambda,\ x_0\ge 0,\ \theta\ \text{free},\qquad g_\omega(\lambda,x_0)=\sum_{j,q}w^\omega_{jq}\lambda_{jq}+c_0^{\omega\top}x_0
+\end{aligned}
+```
+
+- θ column에서 Σ\_k μ\_k = 1이 나온다. 집계 분포 ρ̄ = Σ\_k μ\_k ρ^k는 conv D ⊆ P에 있다.
+- Column q의 cut k 계수는 −Σ\_ω ρ^k\_ω w\_jq^ω이다. Column.scen(시나리오별 비용)에서 바로 계산하고, 새 cut을 넣을 때 기존 column 전부의 계수를 내적으로 채운다.
+
+**Oracle 1: pricing (멤버별 MILP).** 기존 PlayerPricing과 같은 MILP이고 가중치만 ρ̂에서 ρ̄로 바뀐다. rc\_j > tol이면 column을 추가한다.
+
+```latex
+\mathrm{rc}_j=\max_{x_j\in X_j}\Big\{\mathbb{E}_{\bar\rho}\big[f_j(x_j)\big]-\sum_\omega\pi^{\omega\top}A_j^\omega x_j\Big\}-\sigma_j
+```
+
+**Oracle 2: KL separation (닫힌 형태).** 현재 RMP 해의 시나리오별 이익 g\*로 worst-case 분포를 구한다.
+
+```latex
+\phi(g)=\min_{\mathrm{KL}(\rho\|\hat\rho)\le r}\rho^\top g,\qquad \rho_\omega(\eta)\propto\hat\rho_\omega\,e^{-g_\omega/\eta},\qquad \mathrm{KL}\big(\rho(\eta)\|\hat\rho\big)=r
+```
+
+- η는 이분법으로 찾는다. KL은 η에 대해 단조 감소한다. η → ∞면 ρ̂이고, η → 0이면 argmin g 위에 몰린다. r ≥ −ln ρ̂(argmin g)이면 해는 argmin 위의 ρ̂ 조건부 분포다.
+- φ(g\*) < θ\* − tol이면 ρ(g\*)를 D에 cut으로 추가한다. 비용은 O(|Ω| × 이분법 횟수)라 MILP pricing에 비하면 무시할 만하다.
+
+**상한과 하한.**
+
+- 하한 LB = φ(g\*): 현재 RMP 해는 참 master에서도 feasible하고, 그 참 robust 가치가 φ(g\*)다.
+- 상한 UB = z\_RMP + Σ\_j rc\_j: (ρ̄, π\*)가 참 Lagrangian dual에서 feasible(ρ̄ ∈ P)이므로 유효하다. Pricing을 MIP gap으로 풀면 rc\_j 대신 pricing의 dual bound를 쓴다.
+- UB − LB = (θ\* − φ(g\*)) + Σ\_j rc\_j다. 첫 항이 cut 위반량, 둘째 항이 pricing 위반량이다.
+- RMP 값 자체는 어느 쪽 bound도 아니다. Column 제한은 값을 낮추고, 분포 제한(conv D ⊆ P)은 값을 높인다.
+
+**루프.**
+
+1. 초기화: D = {ρ̂}, column은 같은 Ω의 stochastic 실행 terminal column으로 warm start한다. 이 상태의 RMP가 곧 현재 stochastic master다.
+2. RMP를 푼다. HiGHS LP이고 column·row 추가 후 warm start한다.
+3. Separation: 위반 cut이 있으면 추가하고 2로 간다. 싸므로 매 반복 먼저 한다.
+4. Pricing: (ρ̄, π\*)(smoothing을 쓰면 안정화 중심과의 볼록결합)으로 멤버 MILP를 풀고 rc\_j > tol인 column을 추가한다.
+5. LB와 UB를 갱신한다. UB − LB ≤ tol이면 종료하고, 아니면 2로 간다.
+6. 관리: 오래 μ\_k = 0인 cut과 오래 쓰이지 않은 column을 purge한다. 기존 column purge 규칙을 cut에도 적용한다.
+
+**Column을 추가해도 기존 cut은 그대로 유효하다.** Cut은 KL ball 안의 분포 하나(내부 근사 conv D ⊆ P의 꼭짓점)이므로 column 집합과 무관하다. 그래서 column이 늘어도 cut을 버리거나 다시 만들 필요가 없고, 다음 row generation은 기존 cut들을 들고 warm start한다. C&CG에서 새 ξ가 기존 column을 무효로 만드는 것(6.4)과 반대이고, 이 절차가 가벼운 이유다.
+
+**Nested와 interleaved.** 논문 설명은 nested로 한다. 현재 column으로 exp master를 row generation으로 끝까지 푼 뒤 그 dual (π\*, ρ̄)로 pricing하는 방식이고 표준 DW와 같다. 구현에서는 interleaved(매 반복 cut 몇 개만 추가하고 바로 pricing)도 시도해볼 만하다. 두 방식 모두 종료 시 위반 cut과 양의 rc가 없는지 확인하므로 결과는 같다.
+
+**안정화.** Wentges smoothing은 (π, ρ̄)에 그대로 적용된다. ρ의 볼록결합은 P 안에 머물므로 ρ̄ ∈ P가 유지된다. du Merle penalty는 π에만 걸면 된다. 분포 cut은 매끄러운 concave 함수 φ의 Kelley 근사라 느리게 수렴할 수 있다.
+
+**Owen 배분 (종료 후).**
+
+```latex
+\rho^*=\bar\rho=\sum_k\mu_k\rho^k,\qquad \chi_j=\sigma_j+\mathrm{rc}_j\ \big(=\phi_j(\rho^*,\pi^*)\ \text{또는 그 상한}\big)
+```
+
+- 안정성은 tolerance와 무관하게 정확히 성립한다. χ\_j ≥ φ\_j(ρ\*, π\*)이고 (ρ\*, π\*) ∈ P × Θ이기 때문이다(9.2).
+- 효율성 쪽 초과분은 robust duality gap에 종료 gap(UB − LB)을 더한 것이다. 균등 차감한 ε에 종료 gap/n이 더해진다.
+
+**검증 계획.**
+
+- r = 0: separation이 ρ̂만 돌려주므로 현재 stochastic 결과(v^CHP, Owen)가 재현돼야 한다.
+- r을 키우면 v^LR,rob은 단조 감소하고 ρ\*는 나쁜 시나리오로 이동해야 한다.
+- 작은 n에서 --check-core로 안정성을 확인하고, exponential cone(MOSEK이나 Gurobi) 직접 풀이와 값을 비교한다.
+
+**코드 변경점 (stochastic\_extension.py의 DirectMaster).**
+
+1. θ column과 cut row 집합을 두고, 새 cut의 column 계수를 채운다.
+2. PlayerPricing의 가중치를 호출마다 받는다(5절 변경점 2와 같다).
+3. Separation 함수(tilting과 이분법)를 추가한다.
+4. LB와 UB 계산을 위 식으로 교체한다.
+5. S1 배분의 probs를 ρ\*로 바꾼다(5절 변경점 3과 같다).
 
 ## 6. 성립 조건과 깨지는 지점
 
@@ -374,13 +453,65 @@ y_j(\xi)=y_j^0+Y_j\,\xi,\qquad \text{master row: }\ \sum_{j,p}\lambda_{jp}a_{jp}
 
 **MILP 게임 자체의 core.** v^MIP,rob의 core가 비어 있는지는 이 논증이 다루지 않는다. copositive(Sec. 4.3) 방법이 max-min 구조로 확장되는지도 열려 있다.
 
+### 6.7 Ambiguity set의 선택: 투영 일관성, 밀도비 통제, KL
+
+본 모델의 ambiguity set은 두 조건을 만족해야 한다. Robust game으로 제시하려면 고정 반경 KL ball이 가장 자연스럽고, 분해를 쓰면 LP로 풀 수 있다.
+
+**두 조건.**
+
+1. 투영 일관성: 집합 규칙이 marginal화와 교환되어야 한다. 즉 {ρ의 S-marginal : ρ ∈ P(ρ̂)} = P(ρ̂\_S)다. 이것이 (A1)을 주고, “소연합이 같은 규칙으로 스스로 골랐을 set이 공 투영과 같다”는 해석을 보장한다. Law-invariance는 이 성질을 위험척도 쪽에서 본 모습이다.
+2. 밀도비 통제: ρ̂에서 드문 사건에 질량을 싸게 올릴 수 없어야 한다. 이것이 분산 효과를 보장한다.
+
+확률 p인 사건에 질량 δ를 올리는 비용은 TV에서 약 δ, KL에서 약 δ·log(δ/p), χ²에서 약 δ²/p다. 따라서 φ가 초선형인 divergence(KL, χ²)는 드문 결합 극단을 막고, 선형인 TV는 못 막는다. TV ball의 worst case는 아래와 같고, 둘째 항은 유계 손실이면 |S|에 선형이며 표본에서는 |Ω|에 의존한다.
+
+```latex
+\max_{\rho:\ \mathrm{TV}(\rho,\hat\rho)\le\delta}\mathbb{E}_\rho[L]=(1-\delta)\,\mathrm{CVaR}_\delta(L)+\delta\max L
+```
+
+| 집합과 크기 규칙 | (A1) | 투영 일관성 | 분산 효과 |
+| --- | --- | --- | --- |
+| Budget, 신뢰도에 맞춘 Γ\_S ∝ √\|S\| | 깨짐 | 성립 | 있음 |
+| Budget, 상수 Γ (N에 맞춤) | 성립 | 깨짐 (소연합 과보호) | \|S\| > Γ인 연합에만 |
+| Ball-box, 고정 Ω | 성립 | 성립 | 있음 (√\|S\|) |
+| CVaR\_β, 고정 β | 성립 | 성립 | 있음 (√\|S\|) |
+| KL ball, 고정 r | 성립 | 성립 | 있음 (√\|S\|) |
+| TV ball, 고정 δ | 성립 | 성립 | 부분적 |
+| Wasserstein/KL, 표본 수·차원으로 보정한 반경 | 투영을 쓰면 성립 | 깨짐 | 설정에 따라 다름 |
+
+**Budget set의 Γ (pure robust).** (A1)은 min(|S|, Γ\_N) ≤ Γ\_S ≤ |S|와 같다. 분산 이득이 가장 큰 선택은 상수 Γ를 N의 신뢰도에 맞추는 것이다. Bertsimas-Sim 상한을 쓰면 Γ ≈ √(2n ln(1/ε\_v))이고, ε\_v = 5%에서 n = 6, 30, 60이면 Γ ≈ 6.0, 13.4, 18.9다. n = 6에서는 Γ ≥ n이라 분산 이득이 없다. 작은 연합은 위반 확률이 약 exp(−Γ²/(2|S|))로 더 작아 과보호된다. 이탈 연합을 보수적으로 평가하는 것이라 안정성에는 문제가 없지만, 소연합이 굳이 전체 크기의 set을 상정할 이유가 없어 해석이 약하다.
+
+**KL 반경을 표본 수 없이 잡는 법.** 세 기준 모두 차원과 무관하다. KL의 chain rule 때문에 결합 KL ball의 투영은 같은 반경의 KL ball이다.
+
+1. 꼬리 사건: r = ln(1/p). 확률 P(A)인 사건으로 조건부를 걸면 KL 비용이 정확히 −ln P(A)다. 그래서 r은 “확률 p 이상인 어떤 사건도 일어났다고 가정하고 대비한다”는 뜻이다.
+2. σ 단위: r = k²/2. Gaussian이면 worst-case 평균 이동이 σ\_S√(2r)이다. √|S|는 σ\_S에서 나오므로 r 자체는 연합과 무관하다.
+3. CVaR와 비교: r = ln(1/(1−β))이면 P\_β ⊆ KL ball이다. P\_β의 원소는 밀도비가 1/(1−β) 이하라 KL도 그 이하이기 때문이다. β = 0.9이면 r ≈ 2.30이다.
+
+**주의.**
+
+- 공통 편향은 빠진다. 모든 멤버의 예측이 같은 방향으로 틀리는 경우 product ρ̂ 기준 KL은 |S|·KL\_i라, r을 고정하면 큰 연합에서 ball 밖이다. 분산 이득은 “공통 오지정이 비싸다”는 가정에서 나온다. 공통 날씨 모델 오차처럼 실제로 걱정되는 공통 요인은 ρ̂에 명시해야 하고, 그 요인에 대해서는 분산 효과가 정직하게 사라진다. CVaR도 같다.
+- 유한 표본에서는 r < ln|Ω|여야 의미가 있다. 표본 하나에 질량을 몰아도 KL이 ln|Ω|이기 때문이다. tail에 실질적으로 남는 표본 수 |Ω|e^(−r)이 수십 개는 되게 잡는다.
+
+**포장: risk game이 아니라 robust game.** KL ball은 “기준 예측오차 모형의 오지정에 대한 robustness”로 읽힌다(Hansen-Sargent 계열의 entropy 제약 robustness). CVaR도 형식상 DRO(밀도비 ≤ 1/(1−β)인 재가중)지만 위험척도로 읽히기 쉽다. 그래서 본 모델은 KL로 두고 CVaR는 비교용으로 쓰는 방향을 검토 중이다.
+
+**계산: KL을 LP로 푸는 분해.** KL-DRO를 그대로 쓰면 master가 exponential cone이지만, worst-case 분포가 closed form이라 cut 생성으로 LP를 유지할 수 있다.
+
+```latex
+\phi(g)=\min_{\rho:\ \mathrm{KL}(\rho\|\hat\rho)\le r}\rho^\top g,\qquad \rho_\omega(g)\propto\hat\rho_\omega\,e^{-g_\omega/\lambda},\quad \lambda>0:\ \mathrm{KL}\big(\rho(g)\|\hat\rho\big)=r
+```
+
+- g는 현재 master 해의 시나리오별 커뮤니티 이익이다. φ는 concave이고, tilted 분포 ρ(g)가 그 supergradient다. λ는 단조인 1차원 근 찾기로 정해진다.
+- Master는 exponential cone 대신 분포 cut θ ≤ Σ\_ω ρ^k\_ω g\_ω(λ)를 쓴다(k는 지금까지 만든 분포). LP이고, 멤버 column 생성과 분포 cut(row) 생성이 같은 LP에서 번갈아 돈다. 새 cut이 위반되지 않으면(φ(g\*) ≥ θ\* − tol) 종료한다.
+- Cut들은 P를 안쪽에서 근사한다(conv{ρ^k} ⊆ P). 그래서 중간 master 값은 참값보다 크고, 종료 시 tol 이내로 같아진다.
+- Owen: cut row의 dual μ\_k(Σμ\_k = 1)로 ρ\* = Σ μ\_k ρ^k를 만든다. P가 볼록이므로 ρ\* ∈ P이고, 9.2의 안정성 증명에 필요한 것은 (ρ\*, π\*) ∈ P × Θ뿐이라 그대로 성립한다. 초과분은 robust duality gap에 tol이 더해진다.
+- 비용: 루프가 두 겹(분포 cut, 멤버 column)이지만 같은 LP 안이라 DirectMaster 구조를 재사용하고 HiGHS로 푼다. Kelley형 cut은 느리게 수렴할 수 있어 stabilization이 필요할 수 있다. 대안은 Gurobi나 MOSEK의 exponential cone을 직접 쓰고 conic dual로 Owen을 읽는 것이다.
+
 ## 7. 열린 질문과 다음 단계
 
 가장 큰 열린 질문은 정의 3(contingent)이고, 가장 싼 다음 단계는 finite Ω 위의 CVaR DRO 구현이다.
 
 **열린 질문.**
 
-1. 정의 3: ρ*를 쓴 Algorithm S1의 x\_j*(ω)가 min\_{ρ∈P} E\_ρ\[x(S, ·)\] ≥ v^MIP,rob(S)를 만족하는가? 보장되는 것은 E\_{ρ\*}\[χ(S, ·)\] ≥ v(S)뿐이다. 다른 ρ에서는 더 낮을 수 있다. 반례를 찾거나, 성립하는 P의 범위를 찾아야 한다.
+1. 정의 3: ρ\*를 쓴 Algorithm S1의 x\_j\*(ω)가 min\_{ρ∈P} E\_ρ\[x(S, ·)\] ≥ v^MIP,rob(S)를 만족하는가? 보장되는 것은 E\_{ρ\*}\[χ(S, ·)\] ≥ v(S)뿐이다. 다른 ρ에서는 더 낮을 수 있다. 반례를 찾거나, 성립하는 P의 범위를 찾아야 한다.
 2. γ̄: eq:gammatilde를 P 아래에서 다시 확인해야 한다. max\_{ρ∈P}로 바뀜다고 예상한다.
 3. 논문 프레이밍: uncertainty set U를 쓰는 robust로 갈지, Ω 위의 분포 집합 P를 쓰는 DRO로 갈지 정해야 한다. 후자는 현재 코드로 거의 바로 된다.
 4. P의 선택: CVaR\_β가 가장 자연스럽다. β 하나로 stochastic과 worst-scenario 사이를 잇는다.
@@ -415,3 +546,139 @@ y_j(\xi)=y_j^0+Y_j\,\xi,\qquad \text{master row: }\ \sum_{j,p}\lambda_{jp}a_{jp}
 - Zhao & Zeng (2012), 정수 recourse가 있는 two-stage robust의 nested C&CG. (제목과 출처 확인 필요, 6.4)
 - Bauso & Timmer (2009), Robust dynamic cooperative games, International Journal of Game Theory. (서지 확인 필요)
 - Doan & Nguyen, Robust stable payoff distribution in stochastic cooperative games. (저널과 연도 확인 필요. 정의 3과 가장 가까울 가능성이 있다)
+
+## 9. 논문 블록 정리 (논의 중)
+
+논문에 넣을 핵심 블록 다섯 개의 메시지와 진술 초안이다. 기호는 원고(lem:lpg, prop:opap, cor:eps, prop:eps, κ\_j 정규화)에 맞춘다. 아직 확정한 것은 없고, 모두 손 유도라 9.3 상수와 9.5 분해는 검증이 필요하다.
+
+### 9.1 Definition: robust game과 robust core
+
+**메시지.** 각 연합은 자기 worst case로 평가받고, 커뮤니티 자신도 마찬가지다. 비관의 기준이 양쪽에서 같다.
+
+**진술.**
+
+```latex
+v^{\mathrm{rob}}(S)=\max_{x\in X_S}\ \min_{\rho\in P}\ \sum_{\omega}\rho_\omega f_S^\omega(x)
+```
+
+- Core와 weak ε-core는 원고 eq:weakeps를 그대로 쓴다.
+- 가정 (A1)을 여기서 선언한다. P ⊆ Δ(Ω)는 연합과 무관한 polytope다.
+- P = {ρ̂}이면 Remark stoch의 게임이다.
+
+**논의할 점.** Remark 1(멤버 소유 불확실성은 marginal로 들어오므로 (A1)을 깨지 않는다)을 정의 바로 뒤에 붙이는 안. 리뷰어가 가장 먼저 물을 질문이다.
+
+### 9.2 Lemma: robust Owen solution
+
+**메시지.** Robust화는 행을 추가할 뿐 구조를 바꾸지 않는다. Epigraph row도 linking row이므로 sub-game은 여전히 linear production game이고, worst-case 분포 ρ\*는 같은 master의 dual 변수로 나온다.
+
+**진술.** lem:lpg, prop:opap, cor:eps의 robust 판이다.
+
+- (a) Lagrangian sub-game v̄(S) = min\_{(ρ,θ)∈P×Θ} v^LR(S; ρ, θ)는 val(DWR^rob\_S)와 같다. Epigraph 변수 θ와 α는 x0처럼 master 소유다. Epigraph row의 RHS는 0이라 endowment는 원고와 같다.
+- (b) Owen 해는 아래와 같다. ρ\*와 θ\*는 grand coalition master의 dual이다.
+- (c) 모든 S에서 χ(S) ≥ v^rob(S)이고, 초과분 ω^LR,rob은 robust duality gap이다. 균등 차감하면 weak ε-core에 들고 ε = ω^LR,rob/n이다.
+
+```latex
+\sigma_j^*=\max_{x_j\in X_j}\Big\{\mathbb{E}_{\rho^*}\big[f_j(x_j)\big]-\theta^{*\top}A_jx_j\Big\}
+```
+
+**논의할 점.** 원고의 “MILP 게임은 이 구조가 없다”는 대비를 강화할 수 있다. Robust MILP에는 integrality gap 외에 minimax gap이 하나 더 있고, DW 볼록화가 둘을 동시에 닫는다. 이 문장을 lemma 뒤 본문에 둘지 remark로 나눌지 정해야 한다.
+
+### 9.3 Proposition: ε bound
+
+**메시지.** Robust화의 비용은 행 수와 상수에만 들어가고, rate는 O(1/n) 그대로다.
+
+**진술 (손 유도, 확인 필요).**
+
+```latex
+\varepsilon^{\mathrm{LR,rob}}\ \le\ \frac{(m+|\Omega|)\,\bar\gamma^{\mathrm{rob}}}{n}
+```
+
+- Shapley-Folkman 차원: 원고는 m+1(linking rows와 목적함수)이다. Robust에서는 목적함수 한 줄이 epigraph row |Ω|개로 바뀌어 m+|Ω|가 된다. m 자체가 이미 (2|K|+3)|T||Ω|라 차이는 작다.
+- γ̄^rob: eq:gammatilde의 목적함수 손실 항 (w̄\_j − w\_j)⁺를 max\_{ρ∈P} E\_ρ\[w̄\_j^ω − w\_j^ω\]⁺로 바꾼다. 새 dispatch의 robust 가치가 θ̄ − Σ\_{j∈J} max\_ρ E\_ρ\[손실\_j\] 이상이라는 점에서 나온다.
+- P\_β이면 γ̄^rob ≤ γ̄^stoch/(1−β)라는 명시적 상한이 된다. ρ ≤ ρ̂/(1−β)이고 손실이 0 이상이기 때문이다.
+
+**KL ball에서의 γ̄^rob (반경 r).** γ̄^rob는 여전히 n과 무관하게 유계라 rate는 그대로다. 다만 CVaR처럼 γ̄^stoch의 몇 배라는 곡셈형 상한은 없고, 손실 범위가 들어간 덧셈형 상한이 나온다.
+
+- P와 무관한 부분: SF로 고른 멤버 j ∈ J가 시나리오 ω에서 내는 되돌리기 손실을 ℓ\_j^ω ≥ 0(목적함수 손실과 peak 증가분)이라 하면, 되돌린 dispatch의 robust 가치는 θ̄ − Σ\_{j∈J} Φ(ℓ\_j) 이상이다. Φ(ℓ) := max\_{ρ∈P} E\_ρ\[ℓ\]이고, min(a − b) ≥ min a − max b와 max의 subadditivity에서 나온다.
+- 그래서 γ̃\_j^rob = sup\_{x̄\_j} min\_{x∈X\_j(ā\_j)} { Π^res·(reserve 부족분) + Φ(ℓ\_j(x)) }이다. KL로 바뀌는 것은 Φ뿐이다.
+
+```latex
+\Phi_r(\ell)=\sup_{\mathrm{KL}(\rho\|\hat\rho)\le r}\mathbb{E}_\rho[\ell]=\inf_{\eta>0}\Big\{\eta\log\mathbb{E}_{\hat\rho}\big[e^{\ell/\eta}\big]+\eta\,r\Big\}
+```
+
+닫힌 상한은 세 가지다. ρ̂ 기준으로 μ는 평균, σ²는 분산, R은 범위 max ℓ − min ℓ, M은 max ℓ이다.
+
+| 상한 | 식 | 쓰임 |
+| --- | --- | --- |
+| Pinsker | μ + R·√(r/2) | 가장 단순. 범위만 필요 |
+| Bernstein | μ + √(2rσ²) + R·r/3 | r과 분산이 작을 때 더 조임 |
+| 평균·최댓값 기준 최적 | M·kl⁻¹(μ/M, r) | 평균과 최댓값만 알 때 가장 조임(두 점 분포가 극값, KL-UCB와 같은 함수) |
+
+Pinsker를 쓰고 안쪽 min의 x를 stochastic 최적 x로 고정하면 다음이 된다. R̄는 멤버 하나의 시나리오별 되돌리기 손실의 최대 범위이고, eq:bnd\_trade로 유계이며 n과 무관하다.
+
+```latex
+\bar\gamma^{\mathrm{rob}}\le\bar\gamma^{\mathrm{stoch}}+\sqrt{r/2}\,\bar R,\qquad \varepsilon^{\mathrm{LR,rob}}\le\frac{(m+|\Omega|)\big(\bar\gamma^{\mathrm{stoch}}+\sqrt{r/2}\,\bar R\big)}{n}
+```
+
+- 곡셈형 상한이 없는 이유: 확률 p인 사건에서만 손실 M이 나면 CVaR는 Φ ≤ Mp/(1−β)지만 KL은 Φ = M·q\*이다. q\*는 kl(q\*‖p) = r의 해라 p → 0에서도 대략 r/ln(1/p) 수준이고, q\*/p → ∞다. KL은 드문 사건의 우도비를 로그 비용만 받고 키워 주므로, γ̄는 드물지만 큰 되돌리기 손실(R̄)에 민감하다.
+- r = ln(1/(1−β))이면 P\_β ⊆ KL ball이라 KL의 γ̄는 CVaR의 γ̄ 이상이다.
+- 분산 효과(6.2)와는 충돌하지 않는다. 그쪽은 많은 멤버의 동시 극단 비용 문제이고, 여기는 멤버 한 명의 손실 분포다.
+- 개선 가능성(추측): subadditivity 단계는 J의 손실이 동시에 최악이라고 가정하는 셈이라 느슨하다. 합 Σ\_J ℓ\_j에 Bernstein을 직접 쓰고 손실들이 약하게만 상관되면, robust 할증 항이 (m+|Ω|)가 아니라 √(m+|Ω|)로 커진다. ℓ\_j들이 같은 결합 시나리오의 함수라 독립 가정의 정당성은 확인이 필요하다.
+
+**논의할 점.** SF를 m+1 차원으로 줄이는 방법(ρ\*에서 평가)은 부등호 방향이 반대라 안 된다고 판단했다. 새 dispatch의 가치는 min\_ρ로 평가되는데, ρ\*에서의 값은 그 상한일 뿐이다. 그래서 시나리오별 총이익 벡터 전체를 보존해야 하고 m+|Ω| 차원이 필요하다. 이 판단이 맞는지 확인이 필요하다. 4절의 m' 표기도 이에 맞춰 정리해야 한다.
+
+### 9.4 Proposition 후보: 분산 효과는 협력 이득이다
+
+후보는 둘이다. 현재 추천은 (a)를 명제로, (b)를 corollary나 example로 두는 것이고, 결정은 보류했다.
+
+**(a) 일반 명제: 합병 이득의 분해.** 서로소인 S, T에 대해 다음이 성립한다. g\_S는 S의 최적 robust plan이 시나리오별로 내는 이익이다.
+
+```latex
+v^{\mathrm{rob}}(S\cup T)-v^{\mathrm{rob}}(S)-v^{\mathrm{rob}}(T)\ \ge\ H(S,T)\ \ge\ 0,\qquad H(S,T)=\min_{\rho\in P}\mathbb{E}_\rho[g_S+g_T]-\min_{\rho\in P}\mathbb{E}_\rho[g_S]-\min_{\rho\in P}\mathbb{E}_\rho[g_T]
+```
+
+- H = 0일 필요충분조건은 S와 T가 공통의 worst-case 분포를 갖는 것이다.
+- 증명은 세 줄이다. S∪T는 두 plan을 동시에 돌릴 수 있고(linking row가 가법적, as:pool), min\_ρ는 선형 함수들의 min이라 superadditive하다.
+- Stochastic(P가 한 점)에서는 H ≡ 0이라 합병 이득이 전부 pooling이다. Robust에서는 worst case가 다른 연합끼리 합칠수록 hedging 이득이 더해진다.
+- 가정은 (A1)뿐이고 분포 가정이 필요 없다. 그래서 명제로 적합하다.
+
+**(b) 규모 법칙: corollary나 example.** 멤버 손실이 독립이고 분산이 유한하며 P = P\_β이면, CLT에 의해 1인당 hedging 이득은 Θ(1)로 k\_β σ에 수렴한다. 반면 1인당 안정성 비용 ε는 O(1/n)이다.
+
+- 논문 메시지로는 가장 강하다. 커뮤니티가 커질수록 1인당 협력 가치는 유지되고 불안정성은 사라진다.
+- 다만 CLT와 독립성 가정, 9.3의 γ̄^rob 확정이 필요하다. 멤버 간 상관이 있으면 분산이 다시 |S|에 비례해 효과가 줄어든다(9.6).
+
+### 9.5 Corollary 후보: Owen 배분의 pooling/hedging 분해
+
+**메시지.** 각 멤버의 몫은 pooling 몫과 hedging 몫으로 쪼개지고, 둘 다 음수가 아니다.
+
+**진술.** κ\_j(ρ\*)는 멤버 j가 커뮤니티의 worst-case 분포 ρ\* 아래에서 혼자 낼 수 있는 가치다.
+
+```latex
+\chi_j^{\mathrm{OW}}=\sigma_j^*-\kappa_j=p_j+h_j,\qquad p_j:=\sigma_j^*-\kappa_j(\rho^*)\ge 0,\qquad h_j:=\kappa_j(\rho^*)-\kappa_j\ge 0
+```
+
+- p\_j ≥ 0 (pooling 몫): 싱글턴 {j}에 eq:weakdual을 (ρ\*, θ\*)에서 적용하면 나온다.
+- h\_j ≥ 0 (hedging 몫): κ\_j = max\_x min\_ρ ≤ min\_ρ max\_x ≤ κ\_j(ρ\*)이다.
+- h\_j = 0일 필요충분조건은 j 자신의 worst case가 커뮤니티의 worst case와 일치하는 것이다. 커뮤니티가 나쁨 때 같이 나쁜 멤버는 hedging 몫이 없고, 반대로 움직이는 멤버는 보험료를 받는다.
+- 위험만 있는 예시에서 h\_j는 Euler(CVaR contribution) 배분이 된다(Tasche, Denault). i.i.d. Gaussian이면 h\_j = k\_β σ (1 − 1/√n)이다.
+
+**논의할 점.** 이 분해는 κ\_j 정규화를 쓰는 원고 eq:chi\_ow에 바로 얹히므로 corollary가 자연스럽다. 9.4 명제의 part (ii)로 합치는 안도 있다. p\_j ≥ 0 유도에서 공유 변수 x0(r\_sym, p)의 Lagrangian 항이 dual feasible한 θ\*에서 0 이하인지도 확인해야 한다.
+
+### 9.6 댓글 스레드에서 정리된 점과 열린 결정
+
+**6.2 예제에 대한 댓글 논의.**
+
+- β가 정하는 것은 adversary가 시나리오 가중치를 최대 1/(1−β)배까지만 올릴 수 있다는 것뿐이다. 독립인 ρ̂에서는 |S|명이 동시에 최악인 시나리오의 질량이 지수적으로 작아서 tail은 일부 멤버만 나쁜 시나리오로 채워진다.
+- “분산 효과가 연합 수와 무관하다”는 틀린 표현이다. 효과의 크기(|S| 대비 √|S|)는 연합 크기에 따라 커지고, 연합과 무관한 것은 adversary의 힘 β다.
+- √|S|의 근거: Gaussian이면 독립 합의 표준편차가 σ√|S|이고 CVaR가 positively homogeneous라 정확하다. 일반 분포에서는 CLT 근사로 CVaR\_β(L\_S) ≈ |S|μ + k\_β σ√|S|이고, 평균 항은 가법적이라 협력 이득에 영향이 없다.
+- 깨지는 조건: 멤버 간 상관 ρ\_c > 0이면 분산이 σ²(|S| + |S|(|S|−1)ρ\_c)라서 큰 |S|에서 다시 |S|에 비례한다. 작은 |S|, heavy tail, 작은 표본 Ω에서도 근사가 나빠진다.
+- Projection: S의 문제에는 S 멤버 데이터만 들어오므로 S가 마주하는 것은 P의 S-marginal이다. P\_β이면 이는 ρ̂의 S-marginal에 같은 β로 CVaR를 건 것과 정확히 같다. 다만 증명은 projection 없이 ρ\*\_N ∈ P만으로 충분하다.
+
+**보류한 결정.**
+
+1. 9.4: (a)를 명제로, (b)를 corollary나 example로 둘지.
+2. 9.5: 독립 corollary로 둘지, 9.4 명제의 part (ii)로 합칠지.
+3. 9.3: SF 차원을 m+|Ω|로 두는 판단과 γ̄^rob의 정의.
+4. 9.2: minimax gap 문장을 본문에 둘지 remark로 둘지.
+5. 9.1: Remark 1을 정의 바로 뒤에 둘지.
+6. 본 모델 ambiguity set: KL(robust game 포장, cut 생성으로 LP) vs CVaR(LP 직접, risk game으로 읽힘). 검토 중인 방향은 KL (6.7). KL이면 9.3의 γ̄^rob 상한도 P\_β 대신 KL ball로 다시 써야 한다.
