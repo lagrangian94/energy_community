@@ -339,6 +339,24 @@ class Column:
         # the plan's commitment, kept for reporting
         self.fs = {n: round(vals.get(n, 0.0)) for n in names if n in stack.first_stage}
 
+    @classmethod
+    def combine(cls, cols, weights):
+        """The convex combination sum_i w_i col_i of one prosumer's columns: a point
+        of conv(X_u), so it is a column in its own right (bundle compression)."""
+        new = cls.__new__(cls)
+        new.player = cols[0].player
+        new.cost = sum(w * c.cost for c, w in zip(cols, weights))
+        new.coef = {}
+        for c, w in zip(cols, weights):
+            for k, a in c.coef.items():
+                new.coef[k] = new.coef.get(k, 0.0) + w * a
+        new.coef = {k: a for k, a in new.coef.items() if abs(a) > 1e-12}
+        new.first = sum(w * c.first for c, w in zip(cols, weights))
+        new.scen = [sum(w * c.scen[i] for c, w in zip(cols, weights))
+                    for i in range(len(cols[0].scen))]
+        new.fs = None
+        return new
+
 
 def _to_gurobi(scip_model, name, time_limit=None, gap=None, env=None):
     """Copy a pyscipopt model that has only linear constraints into gurobipy.
@@ -1986,8 +2004,8 @@ class DirectMaster:
             if self.purge_every and self.iteration % self.purge_every == 0:
                 self._purge(lp_obj)         # the next pass re-solves the LP first
 
-    def solve(self, init_vals=None, init_cols=None):
-        t0 = time.time()
+    def _add_seeds(self, init_vals, init_cols):
+        """The first column per prosumer: its plan in the extensive-form solution."""
         cols = list(init_cols) if init_cols is not None else [
             self.subs[u].column_from(init_vals) for u in self.players]
         # The seed plans come from a MIP solved to its feasibility tolerance, so they
@@ -2025,6 +2043,9 @@ class DirectMaster:
                 bnds = sum(1 for v in self.lp.cols if v.IISLB or v.IISUB)
                 print(f'  seed master infeasible; IIS rows {rows[:30]} '
                       f'({len(rows)} rows, {bnds} bounds)')
+    def solve(self, init_vals=None, init_cols=None):
+        t0 = time.time()
+        self._add_seeds(init_vals, init_cols)
         eps, delta, rounds = self.pen_eps, self.pen_delta, []
         status = None
         for rnd in range(1, self.max_rounds + 1):
@@ -2091,6 +2112,265 @@ class DirectMaster:
             obj, _, col = sub.price(duals)
             out[u] = (obj, col)
         return out
+
+
+class BundleMaster(DirectMaster):
+    """(DWR_N^Omega) by a disaggregated proximal bundle method on the Lagrangian dual.
+
+    Column generation is Kelley's cutting-plane method on L(pi) = sum_u v_u(pi): every
+    column is a cut, the RMP carries all of them, and at n=60, |Omega|=5 it ends with
+    thousands of dense columns (about 277 nonzeros each) whose LP is most of the run.
+    The bundle method keeps a bounded set of cuts and stabilizes with a proximal term
+    instead of smoothing and penalty rounds (Lemarechal; Kiwiel; Frangioni, "Generalized
+    bundle methods", SIAM J. Optim. 2002; Briant et al., Math. Program. 2008).
+
+    Master, as a QP in pi:
+        max  sum_u theta_u - (1/2t) ||pi - pi_hat||^2
+        s.t. theta_u <= c_j - pi' a_j   (j in the bundle of u),   pi in Theta.
+    It is solved in its dual form, the RMP with its linking rows made soft:
+        min  c'lambda + c0'x0 - pi_hat'z + (t/2)||z||^2
+        s.t. z = A lambda + A0 x0 (+ s on the <= rows, s >= 0),  sum_j lambda_uj = 1,
+    and pi = pi_hat - t z, theta_u = dual of u's convexity row. The model value
+    m = sum_u theta_u at pi gives the predicted increase delta = m - L(pi_hat); pi
+    becomes the new center (serious step) when L(pi) >= L(pi_hat) + m1 delta, and
+    otherwise only its cuts are kept (null step).
+
+    Cuts with lambda = 0 for bundle_age iterations are dropped; the seed columns never
+    are, so the plain LP over the bundle's columns (DirectMaster's LP, which holds
+    exactly the same columns) is always feasible. That LP is the upper bound, and the
+    run stops on the same test as DirectMaster: UB - LB <= gap_tol (1 + |UB|).
+    """
+    def __init__(self, *args, bundle_t=10.0, bundle_t_min=1e-2, bundle_t_max=1e4,
+                 bundle_m1=0.1, bundle_age=10, bundle_cap=20, bundle_qp='primal', **kw):
+        kw['pen_eps'] = 0.0             # the UB LP is the plain master
+        kw['purge_every'] = 0           # the bundle manages its own columns
+        super().__init__(*args, **kw)
+        if self.lp_backend != 'gurobi':
+            raise ValueError('the bundle master is implemented on Gurobi (QP)')
+        self.t, self.t_min, self.t_max = bundle_t, bundle_t_min, bundle_t_max
+        self.m1, self.age, self.cap, self.qp_method = bundle_m1, bundle_age, bundle_cap, bundle_qp
+        self.aggregated = 0
+        self.t_qp, self.n_serious, self.n_null, self.dropped = 0.0, 0, 0, 0
+        self._build_qp()
+
+    # --- the QP --------------------------------------------------------------
+    def _build_qp(self):
+        import gurobipy as gp
+        self.gp = gp
+        q = self.q = gp.Model('bundle_qp', env=self._envs[0]) if self._envs[0] \
+            else gp.Model('bundle_qp')
+        q.Params.OutputFlag = 0
+        # simplex keeps a basis between solves and returns a sparse lambda (a vertex of
+        # the QP's active face); barrier starts over and makes every lambda positive,
+        # so no cut ever looks inactive
+        q.Params.Method = {'primal': 0, 'dual': 1, 'barrier': 2}[self.qp_method]
+        self.qz, self.qrow, self.qconv, self.qx0, self.qvar = {}, {}, {}, {}, {}
+        self.qcost = {}
+        for key in self.row_keys:
+            z = q.addVar(lb=-gp.GRB.INFINITY, name=f'z_{key[0]}_{key[1]}_{key[2]}')
+            expr = gp.LinExpr(1.0, z)
+            if key[0] not in CARRIERS:              # <= row: z = row + s, s >= 0
+                expr.add(q.addVar(lb=0.0), -1.0)
+            self.qz[key] = z
+            self.qrow[key] = q.addLConstr(expr, gp.GRB.EQUAL, 0.0)
+        for u in self.players:
+            self.qconv[u] = q.addLConstr(gp.LinExpr(), gp.GRB.EQUAL, 1.0)
+        for nm, rows in self.x0_rows.items():
+            self.qx0[nm] = q.addVar(lb=0.0, obj=self.x0_obj[nm],
+                                    column=gp.Column([-c for _, c in rows],
+                                                     [self.qrow[k] for k, _ in rows]))
+        q.update()
+
+    def add_column(self, col):
+        super().add_column(col)
+        h = self.col_idx[col.player][-1]
+        gp = self.gp
+        cons = [self.qconv[col.player]] + [self.qrow[k] for k in col.coef]
+        coefs = [1.0] + [-a for a in col.coef.values()]
+        self.qvar[h] = self.q.addVar(lb=0.0, obj=col.cost, column=gp.Column(coefs, cons))
+        self.qcost[h] = col.cost
+
+    def _drop(self, handles):
+        drop = set(handles)
+        for u in self.players:
+            keep = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u]) if h not in drop]
+            self.col_idx[u] = [h for h, _ in keep]
+            self.columns[u] = [c for _, c in keep]
+        self.lp.remove_cols(list(drop))
+        self.q.remove([self.qvar.pop(h) for h in drop])
+        for h in drop:
+            self.qcost.pop(h, None)
+        for h in drop:
+            self.last_used.pop(h, None)
+        self.dropped += len(drop)
+
+    def _solve_qp(self, center):
+        gp, q = self.gp, self.q
+        t0 = time.time()
+        zs = [self.qz[k] for k in self.row_keys]
+        lin = gp.LinExpr([-center.get(k, 0.0) for k in self.row_keys], zs)
+        quad = gp.QuadExpr()
+        quad.addTerms([0.5 * self.t] * len(zs), zs, zs)
+        # the lambda/x0 costs sit in their Obj attributes; setObjective replaces them,
+        # so they go back in explicitly
+        hs = list(self.qvar)
+        costs = gp.LinExpr([self.qcost[h] for h in hs], [self.qvar[h] for h in hs])
+        costs.add(gp.LinExpr([self.x0_obj[nm] for nm in self.qx0], list(self.qx0.values())))
+        q.setObjective(costs + lin + quad, gp.GRB.MINIMIZE)
+        q.optimize()
+        self.t_qp += time.time() - t0
+        if q.Status != gp.GRB.OPTIMAL:
+            raise RuntimeError(f'bundle QP: status {q.Status}')
+        z = dict(zip(self.row_keys, q.getAttr('X', zs)))
+        pi = {k: center.get(k, 0.0) - self.t * z[k] for k in self.row_keys}
+        theta = {u: c.Pi for u, c in self.qconv.items()}
+        lam = {h: v.X for h, v in self.qvar.items()}
+        return pi, theta, z, lam
+
+    def _compress(self, lam, keep):
+        """Bundle compression: a prosumer with more than `cap` cuts has every cut
+        outside `keep` replaced by their lambda-weighted convex combination (the
+        aggregate cut), and those with lambda = 0 dropped. The QP's primal solution
+        survives -- the aggregate carries the weight -- so the model loses no value at
+        the current point."""
+        for u in self.players:
+            if len(self.col_idx[u]) <= self.cap:
+                continue
+            cand = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u])
+                    if h not in keep and h in lam]
+            if len(cand) < 2:
+                continue
+            pos = [(h, c, lam[h]) for h, c in cand if lam[h] > 1e-12]
+            self._drop([h for h, _ in cand])
+            if pos:
+                tot = sum(w for _, _, w in pos)
+                agg = Column.combine([c for _, c, _ in pos], [w / tot for _, _, w in pos])
+                self.add_column(agg)
+                self.last_used[self.col_idx[u][-1]] = self.iteration
+                self.aggregated += len(pos)
+
+    # --- the loop ------------------------------------------------------------
+    def solve(self, init_vals=None, init_cols=None):
+        t0 = time.time()
+        self._add_seeds(init_vals, init_cols)
+        # first center: the seed RMP's duals, in Theta by LP duality
+        lp_obj = self.lp.solve()
+        self._update_ub(lp_obj)
+        center, _ = self._duals()
+        self._it_price = 0.0
+        res = self._price_all(center)
+        self._record(center, res)
+        # The descent test runs on the oracle's values, sum_u of the incumbent pricing
+        # objectives (Kiwiel's inexact oracle); the pricing MILPs' dual bounds, which
+        # sit up to their gap below, only certify LB. With the bounds in the test a
+        # step whose model is already exact reads as a failure by exactly that gap,
+        # and the method stalls in null steps with t shrinking to its floor.
+        L_hat = self._lagrangian(center, [r[0] for r in res.values()])
+        for u, (obj, _, col) in res.items():
+            self.add_column(col)
+        self.center_cuts = {self.col_idx[u][-1] for u in self.players}
+        log_every = 25
+        status = None
+        while True:
+            self.iteration += 1
+            if self.iteration > self.max_iter:
+                raise RuntimeError('bundle: iteration limit')
+            self._it_price = 0.0
+            pi, theta, z, lam = self._solve_qp(center)
+            model = sum(theta.values())
+            delta = model - L_hat
+            for h, v in lam.items():
+                if v > 1e-9:
+                    self.last_used[h] = self.iteration
+            res = self._price_all(pi)
+            self._record(pi, res)
+            L_k = self._lagrangian(pi, [r[0] for r in res.values()])
+            serious = np.isfinite(L_k) and L_k >= L_hat + self.m1 * delta
+            added, new = 0, {}
+            for u, (obj, _, col) in res.items():
+                # a serious step keeps every cut at the new center, so the model there
+                # is exact; a null step only the cuts that improve it
+                if serious or obj < theta[u] - 1e-9 * (1.0 + abs(theta[u])):
+                    self.add_column(col)
+                    new[u] = self.col_idx[u][-1]
+                    added += 1
+            if serious:
+                if L_k - L_hat >= 0.5 * delta:
+                    self.t = min(2.0 * self.t, self.t_max)
+                # the center's value is the model's there: sum_u min(theta_u, obj_u).
+                # With an inexact oracle obj_u may exceed theta_u; taking the model
+                # value keeps delta >= 0 (Kiwiel's noise-safe choice)
+                L_hat = sum(min(theta[u], res[u][0]) for u in self.players)
+                center = dict(pi)
+                self.center_cuts = set(new.values())
+                self.n_serious += 1
+                self._nulls = 0
+                step = 'serious'
+            else:
+                self._nulls = getattr(self, '_nulls', 0) + 1
+                if self._nulls % 5 == 0:
+                    self.t = max(0.5 * self.t, self.t_min)
+                self.n_null += 1
+                step = 'null'
+            keep = self.protected | getattr(self, 'center_cuts', set())
+            old = [h for u in self.players for h in self.col_idx[u]
+                   if h not in keep and h in lam
+                   and self.iteration - self.last_used.get(h, self.iteration) >= self.age]
+            if old:
+                self._drop(old)
+            self._compress(lam, keep | set(new.values()))
+            znorm = float(np.sqrt(sum(v * v for v in z.values())))
+            tol = self._gap_tol(self.ub if np.isfinite(self.ub) else model)
+            if self.iteration % self.ub_every == 0 or delta <= tol:
+                self._update_ub(self.lp.solve())
+            if self._converged():
+                status = 'done'
+            elif delta <= tol and not added:
+                # the model is exact at pi and predicts no gain: only the pricing
+                # MILPs' gaps can keep LB below UB
+                if not self._tighten_pricing(res):
+                    status = 'stalled'
+            ncol = sum(len(v) for v in self.col_idx.values())
+            self.log.append({'iter': self.iteration, 'lp': model, 'lb': self.lb,
+                             'ub': self.ub, 'mode': step, 't': self.t, 'delta': delta,
+                             'z': znorm, 'added': added, 'columns': ncol,
+                             't_price': self._it_price, 't_lp': 0.0})
+            if self.verbose and (self.iteration % log_every == 0 or status):
+                print(f'  BN {self.iteration:4d} | model {model:13.4f} | L^ {L_hat:13.4f} '
+                      f'| LB {self.lb:13.4f} | UB {self.ub:13.4f} | t {self.t:8.3g} '
+                      f'| delta {delta:9.3e} | |z| {znorm:8.2e} | {step:7s} +{added} '
+                      f'| cols {ncol}' + (f'  [{status}]' if status else ''))
+            if status:
+                break
+        obj = self.lp.solve()
+        if obj < self.ub:
+            self.ub = obj
+        duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
+        return {'status': 'optimal' if status == 'done' else status,
+                'obj': obj, 'lb': self.lb, 'ub': self.ub,
+                'gap': (self.ub - self.lb) / (1.0 + abs(self.ub)), 'duals': duals,
+                'sigma': sigma, 'iterations': self.iteration,
+                'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.players},
+                'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
+                'columns': {u: len(self.columns[u]) for u in self.players},
+                'y_total': 0.0, 'penalty': {'rounds': []}, 'doi': {'used': False},
+                'time': time.time() - t0,
+                'timing': {'lp': self.t_lp, 'qp': self.t_qp, 'pricing': self.t_price,
+                           'pricing_by_player': {u: s.time for u, s in self.subs.items()},
+                           'pricing_calls': sum(s.calls for s in self.subs.values()),
+                           'pricing_tightened': self.pricing_tightened,
+                           'serious': self.n_serious, 'null': self.n_null,
+                           'dropped': self.dropped, 'aggregated': self.aggregated,
+                           'workers': self.pricing_workers,
+                           'seed_residual': self.seed_residual},
+                'bundle': {'t_final': self.t, 'serious': self.n_serious,
+                           'null': self.n_null}}
+
+
+def solve_dwr_bundle(players, T, scenarios, params, init_vals=None, **kw):
+    """(DWR_N^Omega) through BundleMaster."""
+    master = BundleMaster(players, T, scenarios, params, **kw)
+    return master.solve(init_vals=init_vals), master
 
 
 def solve_dwr_direct(players, T, scenarios, params, init_vals=None, **kw):
@@ -2336,7 +2616,11 @@ def run(args):
 
     print('\n[2] column generation (DWR_N^Omega)')
     if args.engine == 'direct':
-        dw, master = solve_dwr_direct(
+        solver_fn = solve_dwr_bundle if args.bundle else solve_dwr_direct
+        extra_b = ({'bundle_t': args.bundle_t, 'bundle_age': args.bundle_age,
+                    'bundle_t_min': args.bundle_t_min, 'bundle_cap': args.bundle_cap,
+                    'bundle_qp': args.bundle_qp} if args.bundle else {})
+        dw, master = solver_fn(
             players, T, scen, base,
             init_vals=None if args.cold_start else ef['vals'],
             lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
@@ -2352,8 +2636,12 @@ def run(args):
             purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
             sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
             sar_exact=tuple(k for k in args.sar_exact.split(',') if k),
-            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k))
+            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k), **extra_b)
         tm = dw['timing']
+        if dw.get('bundle'):
+            print(f'  bundle: {tm["serious"]} serious / {tm["null"]} null steps, '
+                  f'QP {tm["qp"]:.1f}s, {tm["dropped"]} cuts dropped, '
+                  f'{tm["aggregated"]} aggregated')
         print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  gap {dw["gap"]:.2e}  '
               f'iters {dw["iterations"]}  {dw["time"]:.1f}s  '
               f'rounds {len(dw["penalty"]["rounds"])}  status {dw["status"]}')
@@ -2426,7 +2714,8 @@ def run(args):
             'lp_solver', 'pricing_solver', 'mip_solver', 'cg_gap', 'pricing_gap',
             'no_penalty', 'no_smoothing', 'pen_eps', 'pen_delta', 'pen_shrink',
             'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
-            'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start')},
+            'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start',
+            'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
@@ -2518,6 +2807,19 @@ def main():
     ap.add_argument('--sar-block', type=int, default=1,
                     help='hours per aggregated row in the first dyn-SAR phase '
                          '(6 with --sar-cap 0.05 is the policy of Costa et al.)')
+    ap.add_argument('--bundle', action='store_true',
+                    help='proximal bundle method on the Lagrangian dual instead of the LP '
+                         'master (Gurobi only)')
+    ap.add_argument('--bundle-t', type=float, default=10.0,
+                    help='initial proximal parameter t of the bundle method')
+    ap.add_argument('--bundle-cap', type=int, default=20,
+                    help='cuts per prosumer before the bundle is compressed')
+    ap.add_argument('--bundle-qp', default='primal', choices=['primal', 'dual', 'barrier'],
+                    help='algorithm for the bundle QP')
+    ap.add_argument('--bundle-t-min', type=float, default=1e-2,
+                    help='floor of the proximal parameter t')
+    ap.add_argument('--bundle-age', type=int, default=10,
+                    help='iterations a cut may stay inactive before the bundle drops it')
     ap.add_argument('--lazy-rows', default='',
                     help='inequality row kinds added only when violated, e.g. peak,dn')
     ap.add_argument('--sar-exact', default='',
