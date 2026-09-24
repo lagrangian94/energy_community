@@ -1238,6 +1238,23 @@ class _LP:
         self.handle_at.append(j)
         return j
 
+    def add_row_with(self, lo, hi, handles, coefs):
+        """A row over existing columns (by handle), for rows added mid-run."""
+        if self.backend == 'highs':
+            idx = np.array([self.pos[j] for j in handles], dtype=np.int32)
+            self.h.addRow(lo, hi, len(idx), idx, np.asarray(coefs, dtype=float))
+            self.nrow += 1
+            return self.nrow - 1
+        expr = self.gp.LinExpr(list(coefs), [self.cols[self.pos[j]] for j in handles])
+        if lo == hi:
+            c = self.m.addLConstr(expr, self.gp.GRB.EQUAL, lo)
+        elif lo <= -self.INF:
+            c = self.m.addLConstr(expr, self.gp.GRB.LESS_EQUAL, hi)
+        else:
+            c = self.m.addLConstr(expr, self.gp.GRB.GREATER_EQUAL, lo)
+        self.rows.append(c)
+        return len(self.rows) - 1
+
     def remove_cols(self, handles):
         """Delete columns; the remaining handles stay valid."""
         drop = sorted(self.pos[j] for j in handles if self.pos[j] >= 0)
@@ -1369,9 +1386,17 @@ class _TwinLP:
     def solve_shadow(self):
         return self.shadow.solve()
 
+    def x_shadow(self, j):
+        return self.shadow.x(j)
+
     def remove_cols(self, handles):
         self.main.remove_cols(handles)
         self.shadow.remove_cols(handles)
+
+    def add_row_with(self, lo, hi, handles, coefs):
+        r = self.main.add_row_with(lo, hi, handles, coefs)
+        assert self.shadow.add_row_with(lo, hi, handles, coefs) == r
+        return r
 
     def rc(self, j):
         return self.main.rc(j)
@@ -1403,8 +1428,17 @@ class DirectMaster:
                  pen_delta=0.2, pen_shrink=0.25, max_rounds=12, max_iter=100000,
                  subs=None, verbose=True, pricing_workers=1, round_tol=None,
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
-                 purge_cap=40, lp_presolve='auto'):
+                 purge_cap=40, lp_presolve='auto', sar=False, sar_block=1, sar_cap=1.0,
+                 sar_exact=()):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
+        # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
+        # from aggregated linking rows and separates the original rows it violates
+        self.sar, self.sar_block, self.sar_cap = sar, sar_block, sar_cap
+        # row kinds that start disaggregated (one row per hour and scenario): those
+        # whose prices differ across scenarios, so averaging them only gets undone
+        self.sar_exact = tuple(sar_exact)
+        self.sar_phases = []
+        self._shadow_viol = {}
         # pricing_workers > 1 prices that many prosumers at once (threads; Gurobi
         # releases the GIL while it solves). round_tol, if set, is the column
         # admission tolerance of every penalty round but the last, which always uses
@@ -1471,59 +1505,156 @@ class DirectMaster:
 
     # --- model ---------------------------------------------------------------
     def _build(self):
+        """Master rows are families: nonnegative combinations of original linking
+        rows, {name: [(row key, weight)]}. Without dyn-SAR each original row is its
+        own family (name = key, weight 1), which is the plain master. The duals of
+        the families map back to pi_r = sum_f w_{f,r} gamma_f (Costa et al. eq. 13)."""
         p, lp, INF = self.params, self.lp, self.lp.INF
-        self.row = {}
-        for key in self.row_keys:
-            self.row[key] = lp.add_row(0.0, 0.0) if key[0] in CARRIERS \
-                else lp.add_row(-INF, 0.0)
-        self.conv = {u: lp.add_row(1.0, 1.0) for u in self.players}
-        # shared block x0
+        S = list(range(len(self.scenarios)))
+        if self.sar:
+            kinds = sorted({k for k, _, _ in self.row_keys})
+            self.sar_blocks = reserve_blocks(self.T, self.sar_block)
+            fams = dict(_sar_family(k, blk, S, self.probs)
+                        for k in kinds if k not in self.sar_exact
+                        for blk in self.sar_blocks)
+            fams.update(_sar_family(k, [t], [w], self.probs)
+                        for k in kinds if k in self.sar_exact
+                        for t in self.T for w in S)
+        else:
+            fams = {key: [(key, 1.0)] for key in self.row_keys}
+        self.families, self.fam_of, self.row, self.pen = {}, {}, {}, {}
+        # shared block x0: which original rows each x0 variable enters
         self.x0, self.x0_rows = {}, {}
         blocks = reserve_blocks(self.T, p.get('reserve_block_hours', 24))
         block_of_t = {t: i for i, blk in enumerate(blocks) for t in blk}
         sym = p.get('reserve_product', 'symmetric') == 'symmetric'
+        x0_cost = {}
         if self.enable_reserve:
             pi_res = p.get('pi_res', 0.0)
             for i, blk in enumerate(blocks):
                 names = [('r_sym', i)] if sym else [('r_up', i), ('r_dn', i)]
                 for nm in names:
-                    rows = [self.row[(d, t, w)] for w in range(len(self.scenarios))
-                            for t in self.T for d in ('up', 'dn')
-                            if block_of_t[t] == i
-                            and (sym or d == nm[0].split('_')[1])]
                     price = pi_res if sym else p.get(f'pi_{nm[0][2:]}', pi_res)
-                    self.x0[nm] = lp.add_col(-len(blk) * price, 0.0, INF, rows,
-                                             [1.0] * len(rows))
+                    x0_cost[nm] = -len(blk) * price
                     self.x0_rows[nm] = [(k, 1.0) for k in self.row_keys
                                         if k[0] in ('up', 'dn')
                                         and block_of_t[k[1]] == i
                                         and (sym or k[0] == nm[0].split('_')[1])]
         if self.enable_peak:
             for w, rho in enumerate(self.probs):
-                rows = [self.row[('peak', t, w)] for t in self.T]
-                self.x0[('p', w)] = lp.add_col(rho * p.get('pi_E_peak', 0.0), 0.0, INF,
-                                               rows, [-1.0] * len(rows))
+                x0_cost[('p', w)] = rho * p.get('pi_E_peak', 0.0)
                 self.x0_rows[('p', w)] = [(('peak', t, w), -1.0) for t in self.T]
-        self.x0_obj = {('r_sym', i): -len(blk) * p.get('pi_res', 0.0)
-                       for i, blk in enumerate(blocks)} if (self.enable_reserve and sym) else {}
-        if self.enable_peak:
-            self.x0_obj.update({('p', w): rho * p.get('pi_E_peak', 0.0)
-                                for w, rho in enumerate(self.probs)})
-        if self.enable_reserve and not sym:
-            for i, blk in enumerate(blocks):
-                self.x0_obj[('r_up', i)] = -len(blk) * p.get('pi_up', 0.0)
-                self.x0_obj[('r_dn', i)] = -len(blk) * p.get('pi_dn', 0.0)
+        self.x0_obj = dict(x0_cost)
+        self.conv = {u: lp.add_row(1.0, 1.0) for u in self.players}
+        for name, members in fams.items():
+            self._register_family(name, members)
+            kind = members[0][0][0]
+            self.row[name] = lp.add_row(0.0, 0.0) if kind in CARRIERS \
+                else lp.add_row(-INF, 0.0)
+        for nm, cost in x0_cost.items():
+            agg = self._aggregate(dict(self.x0_rows[nm]))
+            self.x0[nm] = lp.add_col(cost, 0.0, INF, [self.row[f] for f in agg],
+                                     list(agg.values()))
         # penalty slacks, created disabled (ub 0)
-        self.pen = {}
-        for key in self.row_keys:
-            up = lp.add_col(0.0, 0.0, 0.0, [self.row[key]], [1.0])
-            dn = lp.add_col(0.0, 0.0, 0.0, [self.row[key]], [-1.0])
-            self.pen[key] = (up, dn)
+        for name in fams:
+            self._add_pen(name)
+
+    def _register_family(self, name, members):
+        self.families[name] = members
+        for key, w in members:
+            self.fam_of.setdefault(key, []).append((name, w))
+
+    def _aggregate(self, coef):
+        """{original row key: a} -> {family: sum_r w_{f,r} a_r}, zeros dropped."""
+        out = {}
+        for key, a in coef.items():
+            for name, w in self.fam_of.get(key, ()):
+                out[name] = out.get(name, 0.0) + w * a
+        return {f: a for f, a in out.items() if a != 0.0}
+
+    def _add_pen(self, name):
+        up = self.lp.add_col(0.0, 0.0, 0.0, [self.row[name]], [1.0])
+        dn = self.lp.add_col(0.0, 0.0, 0.0, [self.row[name]], [-1.0])
+        self.pen[name] = (up, dn)
+
+    def add_family(self, name, members):
+        """dyn-SAR separation: a new aggregated row over every existing column."""
+        self._register_family(name, members)
+        mem = dict(members)
+        handles, coefs = [], []
+        for u in self.players:
+            for h, col in zip(self.col_idx[u], self.columns[u]):
+                a = sum(w * col.coef.get(k, 0.0) for k, w in mem.items())
+                if a:
+                    handles.append(h)
+                    coefs.append(a)
+        for nm, rows in self.x0_rows.items():
+            a = sum(mem.get(k, 0.0) * c for k, c in rows)
+            if a:
+                handles.append(self.x0[nm])
+                coefs.append(a)
+        kind = members[0][0][0]
+        lo, hi = (0.0, 0.0) if kind in CARRIERS else (-self.lp.INF, 0.0)
+        self.row[name] = self.lp.add_row_with(lo, hi, handles, coefs)
+        self._add_pen(name)
+
+    def violations(self, tol=1e-5, shadow=False):
+        """Original linking rows the current RMP solution violates: {key: residual}.
+        shadow=True reads the unpenalized twin's solution instead. A row that is
+        already a family of its own is enforced by the LP, to the LP's tolerance,
+        and is not reported."""
+        xval = self.lp.x_shadow if shadow else self.lp.x
+        act = {}
+        for nm, rows in self.x0_rows.items():
+            x = xval(self.x0[nm])
+            if x:
+                for k, c in rows:
+                    act[k] = act.get(k, 0.0) + c * x
+        for u in self.players:
+            for h, col in zip(self.col_idx[u], self.columns[u]):
+                lam = xval(h)
+                if lam > 1e-12:
+                    for k, a in col.coef.items():
+                        act[k] = act.get(k, 0.0) + a * lam
+        return {k: r for k, r in act.items()
+                if (abs(r) > tol if k[0] in CARRIERS else r > tol)
+                and not self._single(k)}
+
+    def _single(self, key):
+        kind, t, w = key
+        return _sar_family(kind, [t], [w], self.probs)[0] in self.families
+
+    def _separate(self, viol):
+        """Costa et al.'s policy: split a violated row's family gradually --
+        (kind, block, all scenarios) -> (kind, block, one scenario) -> the row
+        itself -- and add at most sar_cap of the original rows per round, largest
+        violation first. Returns the number of families added."""
+        S = list(range(len(self.scenarios)))
+        block_of_t = {t: i for i, blk in enumerate(self.sar_blocks) for t in blk}
+        cand = {}
+        for (k, t, w), r in viol.items():
+            blk = self.sar_blocks[block_of_t[t]]
+            for name, members in (_sar_family(k, blk, S, self.probs),
+                                  _sar_family(k, blk, [w], self.probs),
+                                  _sar_family(k, [t], [w], self.probs)):
+                if name not in self.families:
+                    cur = cand.get(name)
+                    cand[name] = (max(cur[0], abs(r)) if cur else abs(r), name, members)
+                    break
+        cap = max(1, int(self.sar_cap * len(self.row_keys)))
+        added = 0
+        for _, name, members in sorted(cand.values(), key=lambda c: -c[0])[:cap]:
+            self.add_family(name, members)
+            added += 1
+        if added and self._penalized():
+            self._set_penalty(*self._pen_state)     # the new rows' slacks too
+        return added
 
     def add_column(self, col):
         u = col.player
-        rows = [self.conv[u]] + [self.row[k] for k in col.coef]
-        coefs = [1.0] + list(col.coef.values())
+        agg = self._aggregate(col.coef)
+        rows = [self.conv[u]] + [self.row[f] for f in agg]
+        coefs = [1.0] + list(agg.values())
         h = self.lp.add_col(col.cost, 0.0, self.lp.INF, rows, coefs)
         self.col_idx[u].append(h)
         self.columns[u].append(col)
@@ -1563,7 +1694,11 @@ class DirectMaster:
         self._pen_state = (center, eps, delta)
         js, obj = [], []
         for key, (up, dn) in self.pen.items():
-            c = center.get(key, 0.0) if center else 0.0
+            # the center lives in the original rows; a family's is the least-squares
+            # gamma with pi = w gamma, i.e. sum w pi / sum w^2 (pi itself for a row)
+            mem = self.families[key]
+            c = (sum(w * center.get(k, 0.0) for k, w in mem) / sum(w * w for _, w in mem)
+                 if center else 0.0)
             e = eps * (1.0 + abs(c))
             js += [up, dn]
             obj += [c + e, -c + e]
@@ -1571,7 +1706,8 @@ class DirectMaster:
 
     # --- duals and bound -----------------------------------------------------
     def _duals(self):
-        duals = {k: self.lp.pi(r) for k, r in self.row.items()}
+        gamma = {f: self.lp.pi(r) for f, r in self.row.items()}
+        duals = {k: sum(w * gamma[f] for f, w in fams) for k, fams in self.fam_of.items()}
         conv = {u: self.lp.pi(r) for u, r in self.conv.items()}
         return duals, conv
 
@@ -1643,6 +1779,11 @@ class DirectMaster:
             t1 = time.time()
             try:
                 ub = self.lp.solve_shadow()
+                if self.sar:
+                    # the shadow has the families, not the original rows
+                    self._shadow_viol = self.violations(shadow=True)
+                    if self._shadow_viol:
+                        ub = np.inf
             except RuntimeError:        # not yet feasible without the slacks
                 ub = np.inf
             self.t_ub_split[0] += time.time() - t1
@@ -1696,7 +1837,10 @@ class DirectMaster:
                     for h in self.col_idx[u]:
                         if self.lp.x(h) > 1e-9:
                             self.last_used[h] = self.iteration
-            if not self._penalized():
+            viol = self.violations() if self.sar else {}
+            if not self._penalized() and not viol:
+                # (under dyn-SAR, only a solution of the aggregated master that
+                # violates no original row is feasible, and so bounds z_MP)
                 self._update_ub(lp_obj)
             tol = rel * (1.0 + abs(lp_obj))
             adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
@@ -1751,6 +1895,25 @@ class DirectMaster:
                             mode = 'tighten'
                         else:
                             status = 'stalled'
+            if self.sar and status in ('round', 'stalled') and self._penalized():
+                self._update_ub()
+                viol = self._shadow_viol
+                if not viol and self._converged():
+                    status = 'done'
+            if self.sar and status in ('round', 'stalled') and viol:
+                # converged on the aggregated master: separate the violated rows
+                n_add = self._separate(viol)
+                self.sar_phases.append({'iteration': self.iteration, 'lp': lp_obj,
+                                        'lb': self.lb, 'violated': len(viol),
+                                        'added': n_add, 'rows': len(self.row)})
+                if self.verbose:
+                    kinds = {}
+                    for (k, _, _) in viol:
+                        kinds[k] = kinds.get(k, 0) + 1
+                    print(f'  -- SAR: {len(viol)} original rows violated {kinds}, +{n_add} rows '
+                          f'-> {len(self.row)} rows (RMP {lp_obj:.4f}, LB {self.lb:.4f})')
+                if n_add:
+                    status, mode = None, 'separate'
             since_ub += 1
             if status is None and self._penalized() and since_ub >= self.ub_every:
                 self._update_ub()
@@ -1864,7 +2027,9 @@ class DirectMaster:
                            'ub_checks': self.n_ub, 'ub_solve': self.t_ub_split[0],
                            'ub_restore': self.t_ub_split[1],
                            'pricing_gap_final': {u: s.gap for u, s in self.subs.items()},
-                           'workers': self.pricing_workers}}
+                           'workers': self.pricing_workers},
+                'sar': {'phases': self.sar_phases, 'final_rows': len(self.row),
+                        'original_rows': len(self.row_keys)} if self.sar else None}
 
     def terminal_columns(self, duals):
         if self.best is not None and duals is self.best[0]:
@@ -2086,9 +2251,8 @@ def _jsonable(x):
 def run(args):
     if args.engine != 'direct':
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
-    if args.sar or args.doi:
-        raise SystemExit('--sar and --doi exist only on the SCIP engine, which is no '
-                         'longer supported')
+    if args.doi:
+        raise SystemExit('--doi exists only on the SCIP engine, which is no longer supported')
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n)
@@ -2132,7 +2296,9 @@ def run(args):
             pricing_workers=args.pricing_workers, round_tol=args.round_tol,
             ub_every=args.ub_every, lp_method=args.lp_method,
             purge_every=args.purge_every, purge_age=args.purge_age,
-            purge_cap=args.purge_cap, lp_presolve=args.lp_presolve)
+            purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
+            sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
+            sar_exact=tuple(k for k in args.sar_exact.split(',') if k))
         tm = dw['timing']
         print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  gap {dw["gap"]:.2e}  '
               f'iters {dw["iterations"]}  {dw["time"]:.1f}s  '
@@ -2292,6 +2458,9 @@ def main():
     ap.add_argument('--sar-block', type=int, default=1,
                     help='hours per aggregated row in the first dyn-SAR phase '
                          '(6 with --sar-cap 0.05 is the policy of Costa et al.)')
+    ap.add_argument('--sar-exact', default='',
+                    help='dyn-SAR: row kinds kept per hour and scenario from the start, '
+                         'e.g. E (the carrier whose price is uncertain)')
     ap.add_argument('--sar-cap', type=float, default=1.0,
                     help='rows added per dyn-SAR round, as a share of the original rows')
     ap.add_argument('--skip-standalone', action='store_true',
