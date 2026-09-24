@@ -57,9 +57,18 @@ from pyscipopt import Model, Pricer, SCIP_RESULT, SCIP_PARAMSETTING, quicksum
 from compact_utility import LocalEnergyMarket, reserve_blocks
 
 OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
-# relative MIP gap for every MILP here (extensive form, stand-alone, pricing) when
-# --mip-gap is not given: Gurobi's and HiGHS's own default; SCIP's would be 0
+# Relative gaps. omega^LR = v^MIP - v^LR is a difference of two values of ~2e4 whose
+# decision-independent part (the fixed non-flexible demand, ~-3.1e4 at n=60) cancels,
+# so a relative 1e-4 on either side is an absolute ~2.4 against omega ~3.7. Measured at
+# n=60, |Omega|=5: EF and CG at 1e-4 put omega anywhere in [1.5, 6.1]; both at 1e-6
+# give 3.715 / 3.728 over two runs, and the EF still solves in ~10 s.
+#   MIP_GAP  pricing MILPs (CG tightens a prosumer's gap itself when its bound is
+#            what holds the Lagrangian bound back)
+#   EF_GAP   extensive form and stand-alone MILPs: v^MIP enters omega directly
+#   CG_GAP   column generation: stop once UB - LB <= CG_GAP (1 + |UB|)
 MIP_GAP = 1e-4
+EF_GAP = 1e-6
+CG_GAP = 1e-6
 
 # Names LocalEnergyMarket gives the first-stage variables (f"{prefix}{u}_{t}" and
 # f"r_sym_{i}"). Heat-pump commitment is deliberately absent: it is redispatched.
@@ -282,6 +291,7 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
     """
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
+    gap = EF_GAP if gap is None else gap
     t0 = time.time()
     st = ScenarioStack('DP_Omega', players, T, scenarios, dwr=False)
     build = time.time() - t0
@@ -1389,7 +1399,7 @@ class DirectMaster:
     """
     def __init__(self, players, T, scenarios, params, lp_solver='highs',
                  pricing_solver='highs', pricing_time_limit=None, pricing_gap=None,
-                 smoothing=True, incumbent=None, gap_tol=MIP_GAP, pen_eps=0.2,
+                 smoothing=True, incumbent=None, gap_tol=CG_GAP, pen_eps=0.2,
                  pen_delta=0.2, pen_shrink=0.25, max_rounds=12, max_iter=100000,
                  subs=None, verbose=True, pricing_workers=1, round_tol=None,
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
@@ -2114,7 +2124,7 @@ def run(args):
             init_vals=None if args.cold_start else ef['vals'],
             lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
             pricing_time_limit=args.mip_time_limit,
-            pricing_gap=args.mip_gap if args.pricing_gap is None else args.pricing_gap,
+            pricing_gap=args.pricing_gap,
             smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
             pen_eps=0.0 if args.no_penalty else args.pen_eps,
             pen_delta=0.0 if args.no_penalty else args.pen_delta,
@@ -2229,8 +2239,9 @@ def main():
     ap.add_argument('--rho', type=float, default=0.7, help='hour-to-hour error correlation')
     ap.add_argument('--price-carriers', default='E',
                     help='carriers whose prices are uncertain, e.g. E or E,H,G')
-    ap.add_argument('--mip-gap', type=float, default=None,
-                    help=f'relative gap for every MILP (default {MIP_GAP})')
+    ap.add_argument('--mip-gap', type=float, default=EF_GAP,
+                    help=f'relative gap of the extensive form and stand-alone MILPs '
+                         f'(default {EF_GAP})')
     ap.add_argument('--mip-time-limit', type=float, default=None)
     ap.add_argument('--mip-solver', default='highs', choices=['highs', 'gurobi'],
                     help='extensive form and stand-alone MILPs (DP_S^Omega)')
@@ -2245,8 +2256,8 @@ def main():
     ap.add_argument('--lp-solver', default='highs', choices=['highs', 'gurobi'],
                     help='master LP solver for --engine direct')
     ap.add_argument('--pricing-solver', default='highs', choices=['highs', 'gurobi'])
-    ap.add_argument('--pricing-gap', type=float, default=None,
-                    help='relative gap of the pricing MILPs only (default: --mip-gap)')
+    ap.add_argument('--pricing-gap', type=float, default=MIP_GAP,
+                    help=f'relative gap of the pricing MILPs (default {MIP_GAP})')
     ap.add_argument('--pricing-workers', type=int, default=0,
                     help='prosumers priced in parallel (0: one per core)')
     ap.add_argument('--round-tol', type=float, default=None,
@@ -2254,7 +2265,7 @@ def main():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
-    ap.add_argument('--cg-gap', type=float, default=MIP_GAP,
+    ap.add_argument('--cg-gap', type=float, default=CG_GAP,
                     help='relative CG gap: stop once (UB - LB) <= cg_gap (1 + |UB|), UB the '
                          'unpenalized RMP value and LB the Lagrangian bound')
     ap.add_argument('--purge-every', type=int, default=10,
