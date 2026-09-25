@@ -2,9 +2,9 @@
 
 Sep 24, 2026 · @Seokwoo Kim
 
-> [Claude Docs 문서](https://claude.ai/code/artifact/fd931bec-e11b-40de-a9ad-b2393bf781b0)의 "유한 시나리오 판" 탭 스냅샷(2026-09-24). 살아 있는 판은 문서다. 본문의 "RO 판"은 [robust_core_ro.md](robust_core_ro.md)다.
+> [Claude Docs 문서](https://claude.ai/code/artifact/fd931bec-e11b-40de-a9ad-b2393bf781b0)의 "유한 시나리오 판" 탭 스냅샷(2026-09-25). 살아 있는 판은 문서다.
 
-유한 시나리오 Ω 위에서 robust core를 정의하고(1절), DRO 모델과 계산을 유도한다(2절). 결론은 하나다. Ambiguity set의 크기가 연합과 무관하게 고정되면 grand coalition DW master의 dual에서 읽은 Owen 배분이 robust core에 들고, 효율 손실은 minimax gap과 integrality gap의 합이다(1.2 Remark). 연속 불확실성 집합 U 위의 robust optimization 판은 RO 판에 있고, 그쪽도 이 탭의 1절을 그대로 쓴다. 이론은 손 유도다.
+유한 시나리오 Ω 위에서 robust core를 정의하고(1절), DRO 모델과 계산을 유도한다(2절). 결론은 하나다. Ambiguity set의 크기가 연합과 무관하게 고정되면 grand coalition DW master의 dual에서 읽은 Owen 배분이 robust core에 들고, 효율 손실은 minimax gap과 integrality gap의 합이다(1.2 Remark). 이론은 손 유도다.
 
 ## 1. Robust core
 
@@ -24,7 +24,7 @@ v^{\mathrm{rob}}(S)=\max_{x\in X_S}\ \min_{\rho\in P}\ \mathbb{E}_\rho\big[f_S(x
 
 **가정 (A1)과 원칙.** Adversary의 힘(P의 크기: β, r 등)은 연합과 무관하게 고정하고, 연합 의존성은 데이터(ρ̂의 marginal)에만 둔다. 증명에 실제로 필요한 것은 “grand coalition의 worst case가 모든 S에서도 허용된다”는 것뿐이다. 즉 모든 S에서 ρ\*\_N ∈ P\_S이고, 충분조건은 P\_N ⊆ P\_S다.
 
-**Remark (멤버 소유 불확실성).** 멤버가 들어오면 그 불확실성이 생기고 나가면 빠지는 것은 이미 모델에 있다. S의 문제에는 S 멤버 데이터만 들어오므로 S가 마주하는 것은 P의 S-marginal이다. 연합 의존성이 데이터에 있으면 (A1)과 충돌하지 않고, adversary의 힘에 있으면 깨진다(예: 1.3 표의 보정 반경, RO 판의 √|S| budget).
+**Remark (멤버 소유 불확실성).** 멤버가 들어오면 그 불확실성이 생기고 나가면 빠지는 것은 이미 모델에 있다. S의 문제에는 S 멤버 데이터만 들어오므로 S가 마주하는 것은 P의 S-marginal이다. 연합 의존성이 데이터에 있으면 (A1)과 충돌하지 않고, adversary의 힘에 있으면 깨진다(예: 1.3 표의 보정 반경, √|S|로 커지는 budget).
 
 ### 1.2 주정리: robust Owen
 
@@ -45,7 +45,7 @@ v^{\mathrm{LR,rob}}(S)=\min_{\rho\in P,\ \pi\ge 0}\sum_{j\in S}\phi_j(\rho,\pi)=
 2. 모든 S에서 Σ\_{j∈S} χ\_j ≥ v^LR,rob(S) ≥ v^MIP,rob(S).
 3. χ\_j − g/n은 weak ε-core에 든다. g는 효율 손실(아래 Remark의 minimax gap과 integrality gap의 합)이고 ε = g/n이다.
 
-**증명.** (A1)에 의해 S의 dual feasible region P × R₊는 N의 것과 같다. 따라서 (ρ\*, π\*)는 S에서도 feasible하고, 목적함수가 separable하므로 weak duality 한 줄로 2번이 나온다. 스왑은 쓰이지 않는다. b\_j ≠ 0이면(예: RO 판의 불균형 요건) χ\_j에 π\*ᵀb\_j가 더해진다.
+**증명.** (A1)에 의해 S의 dual feasible region P × R₊는 N의 것과 같다. 따라서 (ρ\*, π\*)는 S에서도 feasible하고, 목적함수가 separable하므로 weak duality 한 줄로 2번이 나온다. 스왑은 쓰이지 않는다. b\_j ≠ 0이면χ\_j에 π\*ᵀb\_j가 더해진다.
 
 **해석.**
 
@@ -67,7 +67,7 @@ v^{\mathrm{MIP,rob}}(S)=\max_{x\in X_S}\min_{\rho}F_S\ \underbrace{\le}_{\text{m
 
 ### 1.3 분산 효과와 협력 이득의 원리
 
-분산 효과를 내면서 (A1)을 지키는 adversary 집합은 두 조건을 만족해야 한다. KL·CVaR가 둘을 만족한다(RO 판에서는 고정 Ω ball-box가 같은 역할을 한다).
+분산 효과를 내면서 (A1)을 지키는 adversary 집합은 두 조건을 만족해야 한다. KL·CVaR가 둘을 만족한다.
 
 1. 투영 일관성: 집합 규칙이 marginal화(투영)와 교환된다. 이것이 (A1)을 주고, “소연합이 같은 규칙으로 고를 집합이 공 투영”이라는 해석을 보장한다. Law-invariance는 이 성질을 위험척도 쪽에서 본 모습이다.
 2. 밀도비 통제: ρ̂에서 드문 사건(여러 멤버의 동시 최악)에 질량을 싸게 올릴 수 없다. 이것이 분산 효과를 보장한다. 확률 p 사건에 질량 δ를 올리는 비용은 TV ≈ δ, KL ≈ δ·log(δ/p), χ² ≈ δ²/p다.
@@ -179,7 +179,7 @@ Master는 기존 DW에 epigraph row를 더한 것이고, pricing은 같은 MILP�
 
 - LB = φ(g\*)는 현재 해의 참 robust 가치이고, UB = z\_RMP + Σ rc\_j는 (ρ̄, π\*)의 Lagrangian bound다. 차이가 cut 위반량과 pricing 위반량으로 정확히 나뉜다. RMP 값 자체는 어느 쪽 bound도 아니다(column 제한은 낮추고 분포 제한 conv D ⊆ P는 높인다). Pricing을 MIP gap으로 풀면 rc\_j 대신 pricing의 dual bound를 쓴다.
 - 루프: D = {ρ̂}와 같은 Ω의 stochastic column으로 시작(이 상태가 곷 현재 stochastic master) → RMP → separation(매 반복 먼저) → pricing → UB − LB ≤ tol이면 종료.
-- **Column을 추가해도 기존 cut은 그대로 유효하다.** Cut은 KL ball 안의 분포 하나라 column과 무관하고, row generation은 항상 warm start된다. C&CG에서 새 ξ가 기존 column을 무효로 만드는 것(RO 판 5절)과 반대다.
+- **Column을 추가해도 기존 cut은 그대로 유효하다.** Cut은 KL ball 안의 분포 하나라 column과 무관하고, row generation은 항상 warm start된다. C&CG에서 새 ξ가 기존 column을 무효로 만드는 것과 반대다.
 - 논문 설명은 nested(exp master를 row generation으로 끝까지 푼 뒤 그 dual로 pricing)로 하고, 구현에서는 interleaved(매 반복 cut 몇 개만 더하고 바로 pricing)도 시도해볼 만하다.
 - Owen: ρ\* = ρ̄, χ\_j = σ\_j + rc\_j. 안정성은 tolerance와 무관하게 정확하고(ρ̄ ∈ P), 종료 gap은 ε에 gap/n으로만 더해진다.
 
@@ -226,7 +226,7 @@ Robust화의 비용은 행 수와 상수에만 들어가고 rate는 O(1/n) 그�
 - KL에는 γ̄^stoch의 곡셈형 상한이 없다. 확률 p 사건에만 손실 M이 나면 CVaR는 Φ ≤ Mp/(1−β)지만 KL은 Φ = M·q\*이고, q\*(kl(q\*‖p) = r의 해)는 p → 0에서도 약 r/ln(1/p)라 q\*/p → ∞다. 그래서 KL의 γ̄는 드물지만 큰 되돌리기 손실(R̄)에 민감하다.
 - r = ln(1/(1−β))이면 P\_β ⊆ KL ball이라 KL의 γ̄는 CVaR의 γ̄ 이상이다. 분산 효과(2.2)와는 충돌하지 않는다. 그쪽은 여러 멤버의 동시 극단이고 여기는 한 멤버의 손실 분포다.
 - 개선 가능성(추측): subadditivity 대신 Σ\_J ℓ\_j에 Bernstein을 직접 쓰면, 손실이 약하게만 상관될 때 robust 할증이 (m+|Ω|)가 아니라 √(m+|Ω|)로 커진다.
-- 주의: 멤버 소유 독립 오차를 표현하려고 |Ω|를 n과 함께 키우면 m+|Ω|도 n과 함께 커져 bound가 나빠진다. 이는 RO 판 6절의 결정 의존 exposure와 같은 구조다. 실제 gap이 Θ(√n)인지는 확인하지 않았다.
+- 주의: 멤버 소유 독립 오차를 표현하려고 |Ω|를 n과 함께 키우면 m+|Ω|도 n과 함께 커져 bound가 나빠진다. 실제 gap이 Θ(√n)인지는 확인하지 않았다.
 
 ### 2.5 행 수 문제와 모델링 선택
 
@@ -240,14 +240,13 @@ Stochastic master는 시간당 6|Ω|행(carrier balance 3, reserve 2, peak 1)이
 | A. 전부 실시간 공동 정산 (현재) | 6·\|Ω\| | 없음 |
 | C. 전기만 실시간, H·G는 first-stage, reserve는 멤버별 first-stage 분담 | 약 \|Ω\| + 2–3 | reserve 재조정 유연성. peak까지 분담하면 peak 분산 이득도 |
 | B. Two-settlement (커뮤니티는 day-ahead만, 편차는 각자 grid) | 6 (\|Ω\| 무관) | 실시간 netting. DRO의 tail 분산은 남는다 |
-| RO 판의 pure RO (RO 판 4절) | 8–10 | 정수 recourse, merit order |
 
 - 이 선택은 ε bound에도 들어간다. Remark stoch의 “불확실성이 허용 편차를 키운다”는 m에 |Ω|가 곱해지기 때문이라, B면 결정론과 같은 O(|T|/n)이다.
 - 같은 모델에서 시도할 것: 시나리오별 결정론 dual(ρ̂\_ω·π^det\_ω)로 warm start와 안정화 중심, 시나리오별·extensive form 해의 commitment로 column seeding, barrier RMP(crossover 없이), Gurobi solution pool로 멤버당 여러 column, scenario reduction.
 
 ## 3. 논문 블록
 
-기호는 원고(lem:lpg, prop:opap, cor:eps, prop:eps, κ\_j 정규화)에 맞춘다. 이 탭의 1절이 본문의 공통 결과이고 2절의 DRO가 그 모델이다. RO 판을 붙일 때 더할 블록은 RO 판 7절에 있다. 아직 확정한 것은 없다.
+기호는 원고(lem:lpg, prop:opap, cor:eps, prop:eps, κ\_j 정규화)에 맞춘다. 이 탭의 1절이 본문의 공통 결과이고 2절의 DRO가 그 모델이다. 아직 확정한 것은 없다.
 
 ### 3.1 Definition: robust game과 robust core
 
@@ -259,7 +258,7 @@ Stochastic master는 시간당 6|Ω|행(carrier balance 3, reserve 2, peak 1)이
 
 ### 3.3 Proposition: ε bound
 
-메시지: robust화의 비용은 행 수와 상수에 들어간다. 유한 시나리오에서는 (m+|Ω|)γ̄^rob/n이다(2.4). RO 판의 rate와 √n 반례는 RO 판 6·7절에 있다.
+메시지: robust화의 비용은 행 수와 상수에 들어간다. 유한 시나리오에서는 (m+|Ω|)γ̄^rob/n이다(2.4).
 
 ### 3.4 Proposition 후보: hedging 이득
 
@@ -269,7 +268,7 @@ Stochastic master는 시간당 6|Ω|행(carrier balance 3, reserve 2, peak 1)이
 v^{\mathrm{rob}}(S\cup T)-v^{\mathrm{rob}}(S)-v^{\mathrm{rob}}(T)\ \ge\ H(S,T)=\min_{\rho\in P}\mathbb{E}_\rho[g_S+g_T]-\min_{\rho\in P}\mathbb{E}_\rho[g_S]-\min_{\rho\in P}\mathbb{E}_\rho[g_T]\ \ge\ 0
 ```
 
-증명: S∪T는 두 plan을 동시에 돌릴 수 있고(linking row가 가법적, as:pool), min\_ρ는 선형 함수들의 min이라 superadditive하다. 등호는 두 함수의 minimizer가 공통일 때만 성립한다. Stochastic(P가 한 점)에서는 H ≡ 0이라 합병 이득이 전부 pooling이고, robust에서는 worst case가 다른 연합끼리 합칠수록 hedging 이득이 더해진다. 가정은 (A1)뿐이고, √|S| budget처럼 (A1)이 깨지면 성립하지 않는다(RO 판 3절).
+증명: S∪T는 두 plan을 동시에 돌릴 수 있고(linking row가 가법적, as:pool), min\_ρ는 선형 함수들의 min이라 superadditive하다. 등호는 두 함수의 minimizer가 공통일 때만 성립한다. Stochastic(P가 한 점)에서는 H ≡ 0이라 합병 이득이 전부 pooling이고, robust에서는 worst case가 다른 연합끼리 합칠수록 hedging 이득이 더해진다. 가정은 (A1)뿐이고, √|S| budget처럼 (A1)이 깨지면 성립하지 않는다.
 
 (b) 규모 법칙(corollary나 example): 독립 손실이면 1인당 hedging 이득은 Θ(1)(Gaussian이면 k\_βσ에 수렴)이고 1인당 ε는 0으로 간다. 멤버 간 상관이 있으면 효과가 줄어든다.
 
@@ -295,7 +294,7 @@ v^{\mathrm{rob}}(S\cup T)-v^{\mathrm{rob}}(S)-v^{\mathrm{rob}}(T)\ \ge\ H(S,T)=\
 
 **보류한 결정.**
 
-1. 본 모델: 이 탭의 유한 Ω DRO(KL) vs RO 판의 타원 pure RO, 또는 둘의 비교.
+1. 본 모델: 이 탭의 유한 Ω DRO(KL).
 2. Ambiguity set: KL(robust game, cut 생성 LP) vs CVaR(LP 직접, risk game으로 읽힘). 현재 방향은 KL이다.
 3. 실시간 공동 정산 범위(2.5): 열·수소를 실시간으로 공동 정산하는가(물리 네트워크 가정), reserve를 멤버별 first-stage 분담으로 둘 수 있는가.
 4. 3.4: (a)를 명제, (b)를 corollary나 example로. 3.5는 독립 corollary로 둘지 3.4에 합칠지.
@@ -311,7 +310,7 @@ v^{\mathrm{rob}}(S\cup T)-v^{\mathrm{rob}}(S)-v^{\mathrm{rob}}(T)\ \ge\ H(S,T)=\
 
 ## 5. 참고문헌
 
-기억에 의존한 목록이다. 인용 전에 서지를 확인해야 한다. RO 문헌(Bertsimas–Sim, Ben-Tal–Nemirovski, C&CG 등)는 RO 판 9절에 있다.
+기억에 의존한 목록이다. 인용 전에 서지를 확인해야 한다.
 
 - Owen (1975), On the core of linear production games, Math. Programming.
 - Kalai & Zemel (1982), Totally balanced games and games of flow, Math. of OR.
