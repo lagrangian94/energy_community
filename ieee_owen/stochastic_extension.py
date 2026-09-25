@@ -41,7 +41,8 @@ inside the master, which breaks the master's primal degeneracy; a bound counts o
 with no grid trade, and if the master settles with some they are switched off --
 and cut n=60, |Omega|=5 from 1443-1716 s to 299-313 s with the same omega^LR. Pricing
 is parallel, heavy prosumers dealt out first; columns are purged; gaps are EF 1e-6,
-CG 1e-6, pricing 1e-4.
+CG 1e-6 or omega^LR to 2% (OMEGA_TOL), whichever comes first, with the pricing MILPs
+on the absolute gap that needs.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
 give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
 
@@ -77,6 +78,11 @@ OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
 MIP_GAP = 1e-4
 EF_GAP = 1e-6
 CG_GAP = 1e-6
+# OMEGA_TOL: column generation also stops once omega^LR is known to this relative
+# precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
+# absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
+# high (ieee_owen/cg_scaling.md, section 11). --no-omega-tol restores CG_GAP alone.
+OMEGA_TOL = 0.02
 
 # Names LocalEnergyMarket gives the first-stage variables (f"{prefix}{u}_{t}" and
 # f"r_sym_{i}"). Heat-pump commitment is deliberately absent: it is redispatched.
@@ -1493,8 +1499,8 @@ class DirectMaster:
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
                  purge_cap=40, lp_presolve='auto', sar=False, sar_block=1, sar_cap=1.0,
                  sar_exact=(), lazy_kinds=(), doi=True, column_pool=False,
-                 mip_start=False, balance_pricing=True, omega_tol=None,
-                 pricing_abs=False):
+                 mip_start=False, balance_pricing=True, omega_tol=OMEGA_TOL,
+                 pricing_abs=True):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
         # from aggregated linking rows and separates the original rows it violates
@@ -3079,12 +3085,16 @@ def main():
     ap.add_argument('--no-balance-pricing', dest='balance_pricing', action='store_false')
     ap.add_argument('--mip-start', action='store_true',
                     help="start each pricing MILP from the prosumer's previous plan")
-    ap.add_argument('--omega-tol', type=float, default=None,
+    ap.add_argument('--omega-tol', type=float, default=OMEGA_TOL,
                     help='also stop once UB - LB <= omega_tol * (EF value - LB), i.e. '
-                         'omega^LR to that relative precision (e.g. 0.02)')
-    ap.add_argument('--pricing-abs', action='store_true',
+                         f'omega^LR to that relative precision (default {OMEGA_TOL})')
+    ap.add_argument('--no-omega-tol', dest='omega_tol', action='store_const', const=None,
+                    help='stop on --cg-gap alone')
+    ap.add_argument('--pricing-abs', dest='pricing_abs', action='store_true', default=True,
                     help='pricing MILPs stop on an absolute gap of the current CG '
-                         'tolerance / (2 n) instead of the relative --pricing-gap')
+                         'tolerance / (2 n) (default on)')
+    ap.add_argument('--no-pricing-abs', dest='pricing_abs', action='store_false',
+                    help='pricing MILPs stop on the relative --pricing-gap instead')
     ap.add_argument('--column-pool', action='store_true',
                     help='keep purged columns in a pool and price the pool before the MILPs')
     ap.add_argument('--dual-init', default='none', choices=['none', 'lp', 'fix'],
