@@ -580,6 +580,18 @@ class PlayerPricing:
         else:
             self.h.setOptionValue('mip_rel_gap', gap)
 
+    def set_abs_gap(self, gap_abs):
+        """Stop the pricing MILP on an absolute gap alone (incumbent minus dual bound
+        <= gap_abs): the relative gap is switched off, since what the Lagrangian bound
+        needs is the sum of the absolute slacks over the prosumers."""
+        self.gap_abs = gap_abs
+        if self.solver == 'gurobi':
+            self.g.Params.MIPGap = 0.0
+            self.g.Params.MIPGapAbs = gap_abs
+        else:
+            self.h.setOptionValue('mip_rel_gap', 0.0)
+            self.h.setOptionValue('mip_abs_gap', gap_abs)
+
     def set_threads(self, k):
         """Solver threads for this prosumer's MILP (None: the solver's default)."""
         if self.solver == 'gurobi':
@@ -1481,7 +1493,8 @@ class DirectMaster:
                  ub_every=10, lp_method='primal', purge_every=0, purge_age=50,
                  purge_cap=40, lp_presolve='auto', sar=False, sar_block=1, sar_cap=1.0,
                  sar_exact=(), lazy_kinds=(), doi=True, column_pool=False,
-                 mip_start=False, balance_pricing=True):
+                 mip_start=False, balance_pricing=True, omega_tol=None,
+                 pricing_abs=False):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
         # from aggregated linking rows and separates the original rows it violates
@@ -1507,6 +1520,12 @@ class DirectMaster:
         # being valid a priori: a bound counts only with y = 0, and if the master
         # settles with y > 0 they are switched off and column generation goes on.
         self.doi, self.doi_active, self.y = doi, doi, {}
+        # omega_tol: stop once UB - LB <= omega_tol * omega_hat as well, omega_hat =
+        # incumbent - LB >= omega^LR, i.e. precision relative to the quantity reported
+        # rather than to |z|. pricing_abs: pricing MILPs stop on an absolute gap of
+        # (current CG tolerance) / (2 n), so their slacks never hold LB back.
+        self.omega_tol, self.pricing_abs = omega_tol, pricing_abs
+        self._abs_set = None
         # column pool: purged columns wait here; each iteration the pool is priced
         # first (one sparse product), and the pricing MILPs run only if it has
         # nothing with negative reduced cost
@@ -1922,8 +1941,21 @@ class DirectMaster:
     def _penalized(self):
         return self._pen_state is not None and self._pen_state[2] > 0.0
 
+    def _omega_abs(self):
+        if not self.omega_tol or not np.isfinite(self.lb) or not np.isfinite(self.incumbent):
+            return 0.0
+        return self.omega_tol * max(self.incumbent - self.lb, 0.0)
+
     def _gap_tol(self, ref):
-        return self.gap_tol * (1.0 + abs(ref))
+        return max(self.gap_tol * (1.0 + abs(ref)), self._omega_abs())
+
+    def _set_pricing_abs(self, tol):
+        """Absolute pricing gap tol / (2 n), refreshed when it moves by 20%."""
+        d = max(tol / (2.0 * len(self.players)), 1e-9)
+        if self._abs_set is None or abs(d - self._abs_set) > 0.2 * self._abs_set:
+            for sub in self.subs.values():
+                sub.set_abs_gap(d)
+            self._abs_set = d
 
     def _update_ub(self, lp_obj=None):
         """Upper bound on z_MP: the value of the RMP without the penalty slacks.
@@ -2029,7 +2061,9 @@ class DirectMaster:
                 # violates no original row is feasible, and so bounds z_MP; with the
                 # DOIs, only one that buys nothing from the grid)
                 self._update_ub(lp_obj)
-            tol = rel * (1.0 + abs(lp_obj))
+            tol = max(rel * (1.0 + abs(lp_obj)), self._omega_abs())
+            if self.pricing_abs:
+                self._set_pricing_abs(self._gap_tol(lp_obj))
             adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
             self.iteration += 1
             if self.iteration > self.max_iter:
@@ -2087,6 +2121,17 @@ class DirectMaster:
                             mode = 'tighten'
                         else:
                             status = 'stalled'
+                    elif (sum(r[0] - r[1] for r in res.values())
+                          > 0.5 * (lp_obj - self.lb) > tol / 2):
+                        # Columns still price, but at the true duals the pricing
+                        # MILPs' own gaps (incumbent minus dual bound) are most of
+                        # what separates LB from the RMP: at 10 or more scenarios
+                        # Gurobi stops at the 1e-4 gap without proving the rest, and
+                        # the tail then adds columns worth ~1e-5 while LB never
+                        # moves. Tighten those prosumers now rather than waiting for
+                        # a pass that prices nothing.
+                        if self._tighten_pricing(res):
+                            mode = 'tighten'
             if self.sar and status in ('round', 'stalled') and self._penalized():
                 self._update_ub()
                 viol = self._shadow_viol
@@ -2298,6 +2343,7 @@ class DirectMaster:
                            'pricing_calls': sum(s.calls for s in self.subs.values()),
                            'pricing_tightened': self.pricing_tightened,
                            'purged': self.purged, 'pool_hits': self.pool_hits,
+                           'omega_tol': self.omega_tol, 'pricing_abs_final': self._abs_set,
                            'pool_rounds': self.pool_rounds,
                            'seed_residual': self.seed_residual,
                            'ub_checks': self.n_ub, 'ub_solve': self.t_ub_split[0],
@@ -2849,6 +2895,7 @@ def run(args):
             lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k),
             doi=args.doi and not args.bundle,
             column_pool=args.column_pool, mip_start=args.mip_start,
+            omega_tol=args.omega_tol, pricing_abs=args.pricing_abs,
             balance_pricing=args.balance_pricing,
             **extra_b, **extra_d)
         tm = dw['timing']
@@ -2930,7 +2977,7 @@ def run(args):
             'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
             'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start',
             'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp',
-            'dual_init')},
+            'dual_init', 'omega_tol', 'pricing_abs')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
@@ -3032,6 +3079,12 @@ def main():
     ap.add_argument('--no-balance-pricing', dest='balance_pricing', action='store_false')
     ap.add_argument('--mip-start', action='store_true',
                     help="start each pricing MILP from the prosumer's previous plan")
+    ap.add_argument('--omega-tol', type=float, default=None,
+                    help='also stop once UB - LB <= omega_tol * (EF value - LB), i.e. '
+                         'omega^LR to that relative precision (e.g. 0.02)')
+    ap.add_argument('--pricing-abs', action='store_true',
+                    help='pricing MILPs stop on an absolute gap of the current CG '
+                         'tolerance / (2 n) instead of the relative --pricing-gap')
     ap.add_argument('--column-pool', action='store_true',
                     help='keep purged columns in a pool and price the pool before the MILPs')
     ap.add_argument('--dual-init', default='none', choices=['none', 'lp', 'fix'],
