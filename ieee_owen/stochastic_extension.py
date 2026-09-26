@@ -46,13 +46,23 @@ on the absolute gap that needs.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
 give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
 
+KL DRO (--kl-radius r, ieee_owen/robust_core.md sec. 2.3). Worst expected cost over
+KL(rho || rho_hat) <= r, on the same engine and defaults. The master (KLMaster) moves
+every cost into distribution cuts, one per tilted distribution found by kl_worst in
+closed form (no exponential cone); pricing is the same MILP at the cut mixture rho_bar;
+LB is the Lagrangian at (rho_bar, pi), UB the worst case of the unpenalized RMP plan.
+The extensive form adds the same cuts as Gurobi lazy constraints. r = 0 reproduces
+the stochastic model (n=6, |Omega|=3: omega 7.118, certified [6.994, 7.125] around
+the exact 7.0056); at r = 0.5 the measured weak eps over all 62 coalitions is -1.97
+against the bound omega/n = 0.85.
+
 Usage (from anywhere):
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 5
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 3 --check-core
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 1 --wind-sigma 0 \
       --load-sigma 0 --price-sigma 0          # reproduces the deterministic model
 """
-import os, sys, json, time, argparse, itertools
+import os, sys, json, time, argparse, itertools, functools
 # layout: <repo root>/ieee_owen/. Shared model modules and data/ live at the root;
 # run_experiment (the instance builder) lives in weak_eps_experiment/.
 _PAPER = os.path.dirname(os.path.abspath(__file__))
@@ -89,6 +99,59 @@ OMEGA_TOL = 0.02
 FIRST_STAGE_PREFIXES = ('z_on_G_', 'z_off_G_', 'z_sb_G_', 'z_su_G_', 'z_sd_G_',
                         'r_sym_', 'r_up_', 'r_dn_')
 CARRIERS = ('E', 'H', 'G')
+
+
+def rho_key(w):
+    """Key of the KL master's pricing measure rho_bar_w inside a duals dict."""
+    return ('rho', 0, w)
+
+
+def kl_worst(c, probs, radius):
+    """psi(c) = max {rho.c : KL(rho || probs) <= radius}, the worst expected cost.
+
+    The maximizer tilts the reference, rho_w ~ probs_w exp(c_w / eta), with eta set by
+    KL = radius (bisection in log eta; KL falls monotonically in eta). If the radius
+    reaches -ln probs(argmax c), rho is probs conditioned on the argmax. Returns
+    (value, rho, eta): value = eta ln E exp(c/eta) + eta r is the dual bound at eta,
+    so it is >= psi(c), and rho is taken on the feasible side, KL(rho) <= radius, so
+    it lies in the ball. Both are exact to the last digits after the bisection.
+    """
+    c, p = np.asarray(c, float), np.asarray(probs, float)
+    if radius <= 0.0:
+        return float(p @ c), p.copy(), np.inf
+    cmax = c.max()
+    top = c >= cmax - 1e-12 * (1.0 + abs(cmax))
+    ptop = p[top].sum()
+    if -np.log(ptop) <= radius:
+        return float(cmax), np.where(top, p, 0.0) / ptop, 0.0
+
+    def tilt(eta):
+        z = (c - cmax) / eta
+        wt = p * np.exp(z)
+        s = wt.sum()
+        rho = wt / s
+        kl = float(np.sum(rho[rho > 0] * (z[rho > 0] - np.log(s))))
+        return rho, kl, s
+
+    spread = cmax - c.min()
+    lo, hi = np.log(spread * 1e-8), np.log(spread * 1e8)
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if tilt(np.exp(mid))[1] > radius:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-14:
+            break
+    eta = float(np.exp(hi))
+    rho, _, s = tilt(eta)
+    return float(cmax + eta * np.log(s) + eta * radius), rho, eta
+
+
+def kl_div(rho, probs):
+    rho, p = np.asarray(rho, float), np.asarray(probs, float)
+    m = rho > 0
+    return float(np.sum(rho[m] * np.log(rho[m] / p[m])))
 
 
 # =============================================================================
@@ -300,11 +363,12 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
 # Extensive form
 # =============================================================================
 def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
-                         solver='highs'):
+                         solver='highs', kl_radius=None):
     """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
 
     solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
-    gurobipy copy of it.
+    gurobipy copy of it. kl_radius > 0 solves the KL-robust version instead,
+    min_x max_{KL(rho || rho_hat) <= r} E_rho[cost(x)] (Gurobi only).
     """
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
@@ -313,6 +377,11 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
     st = ScenarioStack('DP_Omega', players, T, scenarios, dwr=False)
     build = time.time() - t0
     m = st.model
+    if kl_radius is not None:
+        if solver != 'gurobi':
+            raise ValueError('the KL-robust extensive form needs --mip-solver gurobi '
+                             '(lazy constraints)')
+        return _solve_extensive_kl(st, build, time_limit, gap, quiet, kl_radius)
     if solver in ('highs', 'gurobi'):
         fn = _solve_extensive_highs if solver == 'highs' else _solve_extensive_gurobi
         return fn(st, build, time_limit, gap, quiet)
@@ -522,6 +591,131 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet):
     }
 
 
+def _kl_tangent(s):
+    """Tangent of g(h, mu, lam) = lam (exp((h - mu)/lam) - 1) at the ratio s:
+    g >= a (h - mu) + b lam with a = e^s, b = e^s - 1 - s e^s, for every h, mu and
+    lam >= 0 (g is the perspective of the convex e^s - 1, hence jointly convex)."""
+    a = float(np.exp(s))
+    return a, a - 1.0 - s * a
+
+
+def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30):
+    """The KL-robust extensive form through the dual of the inner max
+    (Love & Bayraksan, phi-divergence constrained two-stage programs, eq. 9):
+
+        psi(h) = max_{KL(p || q) <= r} p.h
+               = min_{lam >= 0, mu} mu + r lam + sum_w q_w lam (exp((h_w - mu)/lam) - 1)
+
+    holds for any cost vector h, so lam and mu join the MILP's variables and the
+    integers (first stage and recourse alike) stay with the MILP solver. What is not
+    linear is each scenario's perspective term; it becomes a variable t_w held up by
+    tangent planes (_kl_tangent), valid everywhere, so they go in as ordinary rows
+    from the start: no callback, full presolve, and the root bound already sees every
+    scenario (their multicut, laid down in advance). h_w is one variable per
+    scenario, H_w = cost_w(x), so each tangent row has four entries.
+
+    The tangents only underestimate, so Gurobi's bound stays a bound on the robust
+    value. The incumbent's true worst case psi(h) (kl_worst) is the reported value;
+    while it exceeds the bound by more than the gap, the exact tangents at the
+    incumbent's ratios s_w = ln(p_w / q_w) are added and the MILP re-solved from the
+    incumbent (with its exact lam, mu, t as the start).
+
+    Replaces a first version that added distribution cuts theta >= p.h as lazy
+    constraints at incumbents only: at n=60 it took 304 s for |Omega|=5 (stochastic
+    EF: ~10 s) and had not finished |Omega|=10 after 100 minutes.
+    """
+    import gurobipy as gp
+    from gurobipy import GRB
+    m = st.model
+    if m.getObjectiveSense() != 'minimize':
+        raise ValueError('extensive form is expected to minimise')
+    g, gv = _to_gurobi(m, 'DP_Omega_KL', time_limit, gap)
+    g.Params.OutputFlag = 0 if quiet else 1
+    gap = g.Params.MIPGap
+    q = np.array(st.probs)
+    S = len(q)
+    names = [n for n in st.vars if st.cost[n] != 0.0]
+    gvars = [gv[n] for n in names]
+    cost = np.array([st.cost[n] for n in names])
+    sidx = np.array([-1 if st.scen_of[n] is None else st.scen_of[n] for n in names])
+    first = sidx < 0
+
+    def scen_costs(x):
+        cx = cost * x
+        return cx[first].sum() + np.bincount(sidx[~first], weights=cx[~first], minlength=S)
+
+    H = [g.addVar(lb=-GRB.INFINITY, name=f'kl_h_{w}') for w in range(S)]
+    t = [g.addVar(lb=-GRB.INFINITY, name=f'kl_t_{w}') for w in range(S)]
+    lam = g.addVar(lb=0.0, name='kl_lambda')
+    mu = g.addVar(lb=-GRB.INFINITY, name='kl_mu')
+    for w in range(S):
+        on = first | (sidx == w)
+        g.addLConstr(gp.LinExpr(cost[on].tolist(), [v for v, o in zip(gvars, on) if o])
+                     - H[w], GRB.EQUAL, 0.0, name=f'kl_cost_{w}')
+    for v in g.getVars():
+        v.Obj = 0.0
+    g.setObjective(mu + radius * lam + gp.quicksum(q[w] * t[w] for w in range(S))
+                   + m.getObjoffset(), GRB.MINIMIZE)
+
+    def add_tangents(w, ss):
+        for s in ss:
+            a, b = _kl_tangent(s)
+            g.addLConstr(t[w] - a * H[w] + a * mu - b * lam, GRB.GREATER_EQUAL, 0.0)
+
+    # the grid: at the optimum s_w = ln(p*_w / q_w), so it covers ratios from a nearly
+    # suppressed scenario (p/q = e^-8) to all the mass on one (p/q = 1/q_w); spacing
+    # 0.25 leaves an error below 0.8% of each term, which the refinement removes
+    for w in range(S):
+        add_tangents(w, np.arange(-8.0, np.log(1.0 / q[w]) + 0.25, 0.25))
+        g.addLConstr(t[w] + lam, GRB.GREATER_EQUAL, 0.0)      # the asymptote s -> -inf
+
+    rounds, t0 = [], time.time()
+    for k in range(max_rounds):
+        g.optimize()
+        if g.SolCount == 0:
+            raise RuntimeError(f'KL extensive form ({len(st.players)} players): no '
+                               f'solution, status {g.Status}')
+        x = np.array(g.getAttr('X', gvars))
+        c = scen_costs(x)
+        psi, rho, eta = kl_worst(c, q, radius)
+        psi += m.getObjoffset()
+        bound = g.ObjBound
+        rounds.append({'obj_model': g.ObjVal, 'bound': bound, 'psi': psi,
+                       'time': g.Runtime, 'nodes': g.NodeCount})
+        if psi - bound <= gap * max(1.0, abs(psi)):
+            break
+        # exact tangents at the incumbent's own ratios, then restart from it
+        pos = rho > 0
+        for w in np.nonzero(pos)[0]:
+            add_tangents(w, [np.log(rho[w] / q[w])])
+        start = dict(zip(gvars, x))
+        if eta > 0:
+            m_hat = c.max() + eta * np.log(q @ np.exp((c - c.max()) / eta))
+            start.update({lam: eta, mu: m_hat})
+            start.update({t[w]: eta * (np.exp((c[w] - m_hat) / eta) - 1.0) for w in range(S)})
+        else:                       # all the mass on the costliest scenarios
+            start.update({lam: 0.0, mu: c.max()})
+            start.update({t[w]: 0.0 for w in range(S)})
+        start.update({H[w]: c[w] for w in range(S)})
+        for v, val in start.items():
+            v.Start = val
+    allv = [n for n in gv]
+    vals = dict(zip(allv, g.getAttr('X', [gv[n] for n in allv])))
+    vals = {n: vals[n] for n in st.vars}
+    fc, per = st.cost_split(vals)
+    bound = min(bound, psi)
+    return {
+        'stack': st, 'status': {2: 'optimal', 9: 'timelimit'}.get(g.Status, str(g.Status)),
+        'obj': psi, 'dual_bound': bound, 'gap': (psi - bound) / max(abs(psi), 1e-10),
+        'vals': vals, 'first_cost': fc, 'scen_cost': per,
+        'worth_cost': [fc + x for x in per],
+        'time_build': build, 'time_solve': time.time() - t0,
+        'kl': {'radius': radius, 'rho': rho.tolist(), 'eta': eta,
+               'kl': kl_div(rho, q), 'expected_cost': float(q @ c) + m.getObjoffset(),
+               'solves': len(rounds), 'refinements': rounds, 'lambda': lam.X, 'mu': mu.X},
+    }
+
+
 class PlayerPricing:
     """eq:sup_vlrj for one prosumer: a two-stage stochastic MILP of its own.
 
@@ -559,11 +753,21 @@ class PlayerPricing:
         self.rows = self.stack.link_terms(player)
         self.names = list(self.stack.vars)
         self.base = {n: self.stack.scaled_cost(n) for n in self.names}
+        # unscaled costs, for a pricing measure other than rho_hat (KL master)
+        self._cw = [(n, self.stack.cost[n], self.stack.scen_of[n]) for n in self.names]
         self.adj = sorted({n for terms in self.rows.values() for n, _ in terms})
         self.last = None        # (duals, obj, Column) of the latest call
 
     def _coef(self, duals, farkas):
-        coef = dict.fromkeys(self.adj, 0.0) if farkas else dict(self.base)
+        if farkas:
+            coef = dict.fromkeys(self.adj, 0.0)
+        elif rho_key(0) in duals:
+            # the KL master prices at its worst-case measure rho_bar, carried in the
+            # duals so smoothing and the stability center treat it like any price
+            rho = [duals[rho_key(w)] for w in range(len(self.stack.scenarios))]
+            coef = {n: c * (1.0 if w is None else rho[w]) for n, c, w in self._cw}
+        else:
+            coef = dict(self.base)
         for key, terms in self.rows.items():
             pi = duals.get(key, 0.0)
             if pi:
@@ -1644,6 +1848,8 @@ class DirectMaster:
         block_of_t = {t: i for i, blk in enumerate(blocks) for t in blk}
         sym = p.get('reserve_product', 'symmetric') == 'symmetric'
         x0_cost = {}
+        # unscaled parts of each x0 cost: first stage, and {scenario: cost}
+        self.x0_first, self.x0_scen = {}, {}
         if self.enable_reserve:
             pi_res = p.get('pi_res', 0.0)
             for i, blk in enumerate(blocks):
@@ -1651,6 +1857,7 @@ class DirectMaster:
                 for nm in names:
                     price = pi_res if sym else p.get(f'pi_{nm[0][2:]}', pi_res)
                     x0_cost[nm] = -len(blk) * price
+                    self.x0_first[nm], self.x0_scen[nm] = -len(blk) * price, {}
                     self.x0_rows[nm] = [(k, 1.0) for k in self.row_keys
                                         if k[0] in ('up', 'dn')
                                         and block_of_t[k[1]] == i
@@ -1658,6 +1865,8 @@ class DirectMaster:
         if self.enable_peak:
             for w, rho in enumerate(self.probs):
                 x0_cost[('p', w)] = rho * p.get('pi_E_peak', 0.0)
+                self.x0_first[('p', w)] = 0.0
+                self.x0_scen[('p', w)] = {w: p.get('pi_E_peak', 0.0)}
                 self.x0_rows[('p', w)] = [(('peak', t, w), -1.0) for t in self.T]
         self.x0_obj = dict(x0_cost)
         self.conv = {u: lp.add_row(1.0, 1.0) for u in self.players}
@@ -1668,11 +1877,12 @@ class DirectMaster:
                 else lp.add_row(-INF, 0.0)
         for nm, cost in x0_cost.items():
             agg = self._aggregate(dict(self.x0_rows[nm]))
-            self.x0[nm] = lp.add_col(cost, 0.0, INF, [self.row[f] for f in agg],
+            self.x0[nm] = lp.add_col(self._obj0(cost), 0.0, INF, [self.row[f] for f in agg],
                                      list(agg.values()))
         # penalty slacks, created disabled (ub 0)
         for name in fams:
             self._add_pen(name)
+        self.y_cost = {}            # grid column -> (scenario, unscaled cost)
         if self.doi:
             for w, (rho, prm) in enumerate(self.scenarios):
                 for t in self.T:
@@ -1680,12 +1890,21 @@ class DirectMaster:
                         for side, sgn, cost in (
                                 ('imp', -1.0, rho * prm[f'pi_{k}_gri_import_{t}']),
                                 ('exp', 1.0, -rho * prm[f'pi_{k}_gri_export_{t}'])):
+                            if (k, side) in self.doi_skip:
+                                continue
                             coef = {(k, t, w): sgn}
                             if k == 'E' and self.enable_peak:
                                 coef[('peak', t, w)] = -sgn
+                            cost += rho * self.doi_markup
                             agg = self._aggregate(coef)
                             self.y[(k, t, w, side)] = lp.add_col(
-                                cost, 0.0, INF, [self.row[f] for f in agg], list(agg.values()))
+                                self._obj0(cost), 0.0, INF, [self.row[f] for f in agg],
+                                list(agg.values()))
+                            self.y_cost[(k, t, w, side)] = (w, cost / rho)
+
+    def _obj0(self, cost):
+        """Master objective of a column whose rho_hat-weighted cost is `cost`."""
+        return cost
 
     def _register_family(self, name, members):
         self.families[name] = members
@@ -1789,12 +2008,20 @@ class DirectMaster:
             self._set_penalty(*self._pen_state)     # the new rows' slacks too
         return added
 
+    def _col_entries(self, col):
+        """(objective, rows, coefficients) of a prosumer column in the master."""
+        agg = self._aggregate(col.coef)
+        return (col.cost, [self.conv[col.player]] + [self.row[f] for f in agg],
+                [1.0] + list(agg.values()))
+
+    def _col_cost(self, col, duals):
+        """The column's cost under the pricing measure in `duals`."""
+        return col.cost
+
     def add_column(self, col):
         u = col.player
-        agg = self._aggregate(col.coef)
-        rows = [self.conv[u]] + [self.row[f] for f in agg]
-        coefs = [1.0] + list(agg.values())
-        h = self.lp.add_col(col.cost, 0.0, self.lp.INF, rows, coefs)
+        obj, rows, coefs = self._col_entries(col)
+        h = self.lp.add_col(obj, 0.0, self.lp.INF, rows, coefs)
         self.col_idx[u].append(h)
         self.columns[u].append(col)
         self.last_used[h] = self.iteration
@@ -2001,6 +2228,76 @@ class DirectMaster:
         xval = self.lp.x_shadow if shadow else self.lp.x
         return sum(xval(j) for j in self.y.values())
 
+    # fallback_purge_age: before the DOI switch-off, drop every prosumer column unused
+    # for this many passes (and pricing out), whatever the column count. Measured
+    # (KL master, n=60): the no-DOI master grows to ~9,900 columns and 3.4M nonzeros
+    # at |Omega|=10, 10-20 s per LP, and the fallback took 66-85% of the CG time.
+    # 0 keeps the ordinary purge only. Off by default: at n=60, |Omega|=5, r=0.5 it
+    # dropped 1,352 of 4,572 columns and changed nothing (fallback 323 s -> 322 s);
+    # the no-DOI master asks ~48 new plans a pass and is back at 6,200 columns. The
+    # cost is the degeneracy, not the size.
+    fallback_purge_age = 0
+
+    # DOI taper: when the master settles with grid trade y > 0, cap the total with a
+    # budget row sum(y) <= B and shrink B = Y0 * factor^k over a few column
+    # generation passes, before (and ideally instead of) switching the grid columns
+    # off. They stay in the master as the partners that break its degeneracy, only
+    # fewer of them, so pricing is asked for the y-free combinations a bit at a time.
+    # Off by default: at n=60, |Omega|=5, r=0.5 (KL) the grid trade filled every budget
+    # (999 -> 0.22 over 8 steps, the RMP rising only 0.007) and no y-free upper bound
+    # appeared before the last step: 441 s against 323 s for the plain switch-off.
+    doi_taper_steps, doi_taper_factor = 0, 0.3
+
+    def _taper_doi(self, rounds, t0):
+        js = list(self.y.values())
+        y0 = self._y_total()
+        status = None
+        if y0 <= 1e-7:
+            return status
+        twin = isinstance(self.lp, _TwinLP)
+        b = self.lp.add_col(0.0, 0.0, y0, [], [])
+        self.lp.add_row_with(-self.lp.INF, 0.0, js + [b], [1.0] * len(js) + [-1.0])
+        self.doi_budget = b
+        for k in range(1, self.doi_taper_steps + 1):
+            B = y0 * self.doi_taper_factor ** k
+            self.lp.set_cols([b], ub=[B])
+            if twin:
+                self.lp.shadow.set_cols([b], ub=[B])
+            self._set_penalty(None, 0.0, 0.0)
+            status, obj = self._cg(f'taper{k}', True)
+            if status != 'done':
+                self._update_ub()
+                if self._converged():
+                    status = 'done'
+            rounds.append({'round': len(rounds) + 1, 'eps': 0.0, 'delta': 0.0, 'obj': obj,
+                           'lb': self.lb, 'ub': self.ub, 'slack': 0.0,
+                           'iterations': self.iteration, 'time': time.time() - t0,
+                           'certified': status == 'done', 'status': status,
+                           'doi_budget': B, 'y_total': self._y_total()})
+            if self.verbose:
+                print(f'  -- DOI taper {k}: sum(y) <= {B:.4g} (y {self._y_total():.4g}) '
+                      f'RMP {obj:.4f} LB {self.lb:.4f} UB {self.ub:.4f} [{status}] '
+                      f'{time.time() - t0:.0f}s')
+            if status == 'done':
+                break
+        return status
+
+    def _purge_before_fallback(self):
+        if not self.fallback_purge_age or not self.purge_every:
+            return 0
+        saved = (self.purge_age, self.purge_cap)
+        self.purge_age, self.purge_cap = self.fallback_purge_age, 0
+        before = sum(len(v) for v in self.col_idx.values())
+        try:
+            n = self._purge(self.lb if np.isfinite(self.lb) else 0.0)
+        finally:
+            self.purge_age, self.purge_cap = saved
+        self.fallback_purged = n
+        if self.verbose:
+            print(f'  -- before the DOI switch-off: purged {n} of {before} prosumer columns '
+                  f'(unused for {self.fallback_purge_age}+ passes)')
+        return n
+
     def _disable_doi(self):
         js = list(self.y.values())
         self.lp.set_cols(js, ub=[0.0] * len(js))
@@ -2012,6 +2309,21 @@ class DirectMaster:
 
     def _converged(self):
         return np.isfinite(self.ub) and self.ub - self.lb <= self._gap_tol(self.ub)
+
+    # hooks for the KL master (KLMaster); the plain master has no distribution cuts
+    kl_nested, round_frac, doi_markup = False, 1.0, 0.0
+    # (carrier, side) pairs left without a grid column, e.g. {('G', 'exp')}. At n=60,
+    # |Omega|=5 (KL) 81% of the grid trade left when the master settled was hydrogen
+    # export, a near-tie with the electrolyzer owners exporting themselves.
+    doi_skip = frozenset()
+    ub_with_y = False       # KL: _update_ub can bound an RMP that trades with the grid
+
+    def _separate_dist(self, lp_obj):
+        return 0
+
+    def _final_ub(self, obj):
+        if obj < self.ub:
+            self.ub = obj
 
     def _tighten_pricing(self, res):
         """No column prices, yet LB is short of the RMP value: only the pricing MILPs'
@@ -2062,6 +2374,15 @@ class DirectMaster:
                                  'ub': self.ub, 'mode': 'lazy', 'added': 0,
                                  'round': tag, 't_lp': t_lp, 't_price': 0.0})
                 continue
+            # distribution cuts (KL master; none otherwise), before the upper bound:
+            # the UB is the worst case of this solution, which separation computes
+            cuts = self._separate_dist(lp_obj)
+            if cuts and self.kl_nested:
+                # nested: finish the row generation at these columns before pricing
+                self.log.append({'iter': self.iteration, 'lp': lp_obj, 'lb': self.lb,
+                                 'ub': self.ub, 'mode': 'cut', 'added': 0, 'cuts': cuts,
+                                 'round': tag, 't_lp': t_lp, 't_price': 0.0})
+                continue
             if not self._penalized() and not viol and self._y_total() <= 1e-7:
                 # (under dyn-SAR, only a solution of the aggregated master that
                 # violates no original row is feasible, and so bounds z_MP; with the
@@ -2078,7 +2399,7 @@ class DirectMaster:
             status = None
             if self._converged():
                 status = 'done'
-            elif self.lb >= lp_obj - tol:
+            elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                 status = 'round'
             if status is None and self.pool_on:
                 added = self._pool_price(duals, conv, adm)
@@ -2096,8 +2417,8 @@ class DirectMaster:
                     self._record(st, res)
                     mode = 'smooth'
                     for u, (_, _, col) in res.items():
-                        rc = col.cost - sum(duals.get(k, 0.0) * a
-                                            for k, a in col.coef.items()) - conv[u]
+                        rc = self._col_cost(col, duals) - sum(
+                            duals.get(k, 0.0) * a for k, a in col.coef.items()) - conv[u]
                         min_rc = min(min_rc, rc)
                         if rc < -adm:
                             self.add_column(col)
@@ -2107,7 +2428,7 @@ class DirectMaster:
             if status is None and not added and mode != 'pool':
                 if self._converged():
                     status = 'done'
-                elif self.lb >= lp_obj - tol:
+                elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                     status = 'round'
                 else:
                     res = self._price_all(duals)
@@ -2118,10 +2439,10 @@ class DirectMaster:
                         if rc < -adm:
                             self.add_column(col)
                             added += 1
-                    if not added:
+                    if not added and not cuts:
                         if self._converged():
                             status = 'done'
-                        elif self.lb >= lp_obj - tol:
+                        elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                             status = 'round'
                         elif self._tighten_pricing(res):
                             mode = 'tighten'
@@ -2158,20 +2479,22 @@ class DirectMaster:
                 if n_add:
                     status, mode = None, 'separate'
             since_ub += 1
-            if status is None and self._penalized() and since_ub >= self.ub_every:
+            if status is None and since_ub >= self.ub_every and (
+                    self._penalized() or (self.ub_with_y and self._y_total() > 1e-7)):
                 self._update_ub()
                 since_ub = 0
                 if self._converged():
                     status = 'done'
             self.log.append({'iter': self.iteration, 'lp': lp_obj, 'lb': self.lb,
                              'ub': self.ub, 'alpha': alpha, 'mode': mode,
-                             'min_rc': min_rc, 'added': added, 'round': tag,
+                             'min_rc': min_rc, 'added': added, 'cuts': cuts, 'round': tag,
                              't_lp': t_lp, 't_price': self._it_price,
                              'lp_stats': getattr(self.lp, 'stats', None)})
             if self.verbose and (self.iteration % 25 == 0 or status or mode == 'tighten'):
                 print(f'  CG {self.iteration:4d} | RMP {lp_obj:13.4f} | LB {self.lb:13.4f} '
                       f'| UB {self.ub:13.4f} | a {alpha:.2f} {mode:8s} '
-                      f'| min rc {min_rc:11.4e} | +{added}' + (f'  [{status}]' if status else '')
+                      f'| min rc {min_rc:11.4e} | +{added}' + (f' +{cuts}cut' if cuts else '')
+                      + (f'  [{status}]' if status else '')
                       + (f' | lp {t_lp:.2f}s solver {self.lp.stats[0]:.2f}s '
                          f'{self.lp.stats[1]:.0f} it {self.lp.stats[2]} cols {self.lp.stats[3]} nz'
                          if getattr(self.lp, 'stats', None) else ''))
@@ -2315,24 +2638,43 @@ class DirectMaster:
             eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
             if eps < 1e-4:
                 eps = delta = 0.0
-        while status != 'done' and self.doi_active:
+        if status != 'done' and self.doi_active and self.doi_taper_steps:
+            status = self._taper_doi(rounds, t0)
+        if status != 'done' and self.doi_active:
+            self._purge_before_fallback()
             self._disable_doi()
-            self._set_penalty(None, 0.0, 0.0)
-            status, obj = self._cg(len(rounds) + 1, True)
-            if status != 'done':
-                self._update_ub()
-                if self._converged():
-                    status = 'done'
-            rounds.append({'round': len(rounds) + 1, 'eps': 0.0, 'delta': 0.0, 'obj': obj,
-                           'lb': self.lb, 'ub': self.ub, 'slack': 0.0,
-                           'iterations': self.iteration, 'time': time.time() - t0,
-                           'certified': status == 'done', 'status': status,
-                           'doi_off': True})
+            # Without the grid columns the collected plans may no longer combine, and
+            # the master is back at a degenerate vertex where unstabilized column
+            # generation was seen to stall for 5000+ passes (KL master, n = 6).
+            # Restart the penalty rounds, small, around the current center.
+            eps = delta = (self.pen_eps * self.pen_shrink ** 2 if self.pen_eps > 0.0
+                           else 0.0)
+            while True:
+                last = eps <= 0.0
+                self._set_penalty(None if last else self.center, eps, delta)
+                status, obj = self._cg(len(rounds) + 1, last)
+                if status != 'done':
+                    self._update_ub()
+                    if self._converged():
+                        status = 'done'
+                rounds.append({'round': len(rounds) + 1, 'eps': eps, 'delta': delta,
+                               'obj': obj, 'lb': self.lb, 'ub': self.ub, 'slack': 0.0,
+                               'iterations': self.iteration, 'time': time.time() - t0,
+                               'certified': status == 'done', 'status': status,
+                               'doi_off': True})
+                if self.verbose:
+                    print(f'  -- penalty round {len(rounds)} (no DOI): eps {eps:.3g} '
+                          f'RMP {obj:.4f} LB {self.lb:.4f} UB {self.ub:.4f} [{status}] '
+                          f'{time.time() - t0:.0f}s')
+                if status == 'done' or last:
+                    break
+                eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
+                if eps < 1e-4:
+                    eps = delta = 0.0
         # report the unpenalized restricted master
         self._set_penalty(None, 0.0, 0.0)
         obj = self.lp.solve()
-        if obj < self.ub:
-            self.ub = obj
+        self._final_ub(obj)
         duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
         return {'status': 'optimal' if status == 'done' else status,
                 'obj': obj, 'lb': self.lb, 'ub': self.ub,
@@ -2349,6 +2691,7 @@ class DirectMaster:
                            'pricing_calls': sum(s.calls for s in self.subs.values()),
                            'pricing_tightened': self.pricing_tightened,
                            'purged': self.purged, 'pool_hits': self.pool_hits,
+                           'fallback_purged': getattr(self, 'fallback_purged', 0),
                            'omega_tol': self.omega_tol, 'pricing_abs_final': self._abs_set,
                            'pool_rounds': self.pool_rounds,
                            'seed_residual': self.seed_residual,
@@ -2370,6 +2713,368 @@ class DirectMaster:
             obj, _, col = sub.price(duals)
             out[u] = (obj, col)
         return out
+
+
+class KLMaster(DirectMaster):
+    """The KL-ball DRO master (ieee_owen/robust_core.md, sec. 2.3), column-and-cut.
+
+    Cost convention: the master minimizes rho_hat . cost(lambda, x0, y) + theta, the
+    worst expected community cost written as the reference expectation plus a
+    premium theta, subject to one distribution cut per rho^k in D,
+
+        sum_w (rho^k_w - rho_hat_w) cost_w(lambda, x0, y) - theta <= 0   [mu_k <= 0]
+
+    plus the linking rows [pi^w] and the convexity rows [sigma_j] of DirectMaster.
+    The objective is DirectMaster's own; the cuts carry only the cost differences
+    across scenarios. D starts as {rho_hat}, whose cut is theta >= 0, so without
+    further cuts this is DirectMaster exactly (radius 0 checks it). No exponential
+    cone: the cuts are the tilted distributions of kl_worst.
+    (A first version put every cost into the cuts and left theta alone in the
+    objective: the same LP, but at n=60, |Omega|=5 each primal simplex solve took
+    ~1100 iterations and 1.6 s against ~0.1 s, and the master LP was 84% of CG.)
+
+      pricing  theta >= 0 carries rho_hat's cut as a bound, and its column forces
+               sum_k (-mu_k) <= 1; rho_bar = sum_k -mu_k rho^k + (1 - sum_k -mu_k) rho_hat
+               is a mixture of points of the ball, hence in it. A column's reduced
+               cost is first + rho_bar . scen - pi a - sigma: the same pricing MILP
+               with rho_hat replaced by rho_bar. rho_bar rides in the duals dict
+               (rho_key), so Wentges smoothing mixes it like any price.
+      LB       L(rho_bar, pi) from the pricing MILPs' dual bounds: valid for any
+               rho_bar in the ball, since min_x max_rho >= min_x E_rho_bar.
+      UB       psi(cost of the unpenalized RMP solution), the true worst case of a
+               feasible plan (kl_worst's dual value); the RMP value itself bounds
+               nothing, as the cuts restrict the adversary.
+      cuts     each pass evaluates psi at the RMP solution and adds the tilted
+               distribution if theta falls short of psi by more than kl_cut_frac of
+               the CG tolerance. A cut never invalidates a column, and a column never
+               a cut. Interleaved by default (cut and price in the same pass);
+               kl_nested re-solves the master until no cut is violated first.
+
+    UB - LB = (psi - z) + (z - LB), z = rho_hat . cost + theta the RMP's worst case:
+    cut violation plus pricing violation.
+    """
+    def __init__(self, *args, kl_radius=0.0, kl_nested=False, kl_cut_frac=0.05,
+                 doi_markup=0.0, **kw):
+        if kw.get('sar') or kw.get('lazy_kinds') or kw.get('column_pool'):
+            raise ValueError('the KL master supports neither dyn-SAR, lazy rows nor '
+                             'the column pool')
+        self.kl_radius, self.kl_nested, self.kl_cut_frac = kl_radius, kl_nested, kl_cut_frac
+        # doi_markup [EUR per unit]: the grid columns cost this much more than the
+        # market (both sides), a tie-break against settling with grid trade. Off by
+        # default: at n=60, |Omega|=5, r=0 a markup of 1e-3 made penalty rounds 1-7
+        # take 501 s instead of 160 s (the stochastic master: 147 s). The DOIs break
+        # the master's degeneracy only when they price the grid exactly at market.
+        # A settled y > 0 is left to _ub_no_grid and the stabilized DOI switch-off.
+        self.doi_markup = doi_markup
+        # a pass that settles a penalty round must leave room for the cut violation
+        # it did not separate: UB - LB <= kl_cut_frac tol + round_frac tol < tol
+        self.round_frac = 0.9
+        self.cut_rows, self.cut_rho, self._cvec = [], [], {}
+        self.kl_log = []
+        self._psi_main = None
+        super().__init__(*args, **kw)
+
+    # --- model ---------------------------------------------------------------
+    def _build(self):
+        super()._build()
+        S = len(self.scenarios)
+        self._ref = np.array(self.probs)
+        # x0 and grid columns: their cost per scenario, as vectors over Omega
+        for nm, j in self.x0.items():
+            v = np.full(S, self.x0_first[nm])
+            for w, c in self.x0_scen[nm].items():
+                v[w] += c
+            self._cvec[j] = v
+        for key, j in self.y.items():
+            v = np.zeros(S)
+            w, c = self.y_cost[key]
+            v[w] = c                            # doi_markup included
+            self._cvec[j] = v
+        # theta >= 0 is rho_hat's own cut, kept as a bound rather than a row: with a
+        # free theta and the row theta >= 0 the master LP was the stochastic one plus
+        # a free column, yet at n=60, |Omega|=5, r=0 each primal simplex solve took
+        # 3-4x the iterations. rho_hat's weight in rho_bar is theta's reduced cost.
+        self.theta = self.lp.add_col(1.0, 0.0, self.lp.INF, [], [])
+
+    def _add_cut(self, rho):
+        """A distribution cut over every column so far (and theta)."""
+        handles, coefs = [], []
+        d = np.asarray(rho, float) - self._ref
+        for j, v in self._cvec.items():        # every live column (purge prunes it)
+            a = float(d @ v)
+            if a:
+                handles.append(j)
+                coefs.append(a)
+        handles.append(self.theta)
+        coefs.append(-1.0)
+        self.cut_rows.append(self.lp.add_row_with(-self.lp.INF, 0.0, handles, coefs))
+        self.cut_rho.append(np.asarray(rho, float))
+
+    kl_master = 'cut'
+
+    def _model_worst(self, xval, c):
+        """The RMP's own value of the worst case at a solution with scenario costs c."""
+        return float(self._ref @ c) + xval(self.theta)
+
+    def _refine(self, rho):
+        self._add_cut(rho)
+
+    def _n_cuts(self):
+        return len(self.cut_rows) + 1       # rho_hat's cut is theta's bound
+
+    def _col_entries(self, col):
+        obj, rows, coefs = super()._col_entries(col)
+        v = np.asarray(col.scen, float)         # first stage: same in every scenario
+        for r, rho in zip(self.cut_rows, self.cut_rho):
+            a = float((rho - self._ref) @ v)
+            if a:
+                rows.append(r)
+                coefs.append(a)
+        return obj, rows, coefs
+
+    def add_column(self, col):
+        super().add_column(col)
+        self._cvec[self.col_idx[col.player][-1]] = col.first + np.asarray(col.scen, float)
+
+    def _purge(self, ref):
+        n = super()._purge(ref)
+        if n:
+            live = set(self.x0.values()) | set(self.y.values()) | {
+                h for u in self.players for h in self.col_idx[u]}
+            self._cvec = {j: v for j, v in self._cvec.items() if j in live}
+        return n
+
+    # --- duals and bounds ----------------------------------------------------
+    def _rho_bar(self):
+        """sum_k w_k rho^k + (1 - sum_k w_k) rho_hat, w_k = -mu_k; the last weight is
+        theta's reduced cost (its bound theta >= 0 is rho_hat's cut)."""
+        if not self.cut_rows:
+            return np.array(self.probs)
+        w = np.maximum(np.array([-self.lp.pi(r) for r in self.cut_rows]), 0.0)
+        if w.sum() > 1.0:
+            w = w / w.sum()
+        rho = w @ np.array(self.cut_rho) + (1.0 - w.sum()) * self._ref
+        return rho / rho.sum()
+
+    def _duals(self):
+        duals, conv = super()._duals()
+        for w, r in enumerate(self._rho_bar()):
+            duals[rho_key(w)] = float(r)
+        return duals, conv
+
+    @staticmethod
+    def rho_of(duals, S):
+        return np.array([duals[rho_key(w)] for w in range(S)])
+
+    def _col_cost(self, col, duals):
+        return col.first + float(self.rho_of(duals, len(self.scenarios)) @ col.scen)
+
+    def _lagrangian(self, duals, bounds):
+        rho = self.rho_of(duals, len(self.scenarios))
+        for k, rows in self.x0_rows.items():
+            cost = self.x0_first[k] + sum(rho[w] * c for w, c in self.x0_scen[k].items())
+            rc = cost - sum(duals.get(r, 0.0) * a for r, a in rows)
+            if rc < -1e-9 * (1.0 + abs(cost)):
+                return -np.inf
+        if any(v > 1e-9 for (kind, _, _), v in duals.items()
+               if kind not in CARRIERS and kind != 'rho'):
+            return -np.inf
+        return sum(bounds)
+
+    def _scen_costs(self, xval):
+        c = np.zeros(len(self.scenarios))
+        for j, v in self._cvec.items():
+            x = xval(j)
+            if x > 1e-12:
+                c += x * v
+        return c
+
+    def _separate_dist(self, lp_obj):
+        """Evaluate psi at the RMP solution; add the tilted distribution as a cut if
+        theta falls short. Caches psi for the upper bound. Returns cuts added."""
+        c = self._scen_costs(self.lp.x)
+        psi, rho, eta = kl_worst(c, self.probs, self.kl_radius)
+        theta = self._model_worst(self.lp.x, c)         # the RMP's worst case
+        self._psi_main = psi
+        viol = psi - theta
+        if viol > self.kl_cut_frac * self._gap_tol(lp_obj):
+            self._refine(rho)
+            self.kl_log.append({'iter': self.iteration, 'theta': theta, 'psi': psi,
+                                'viol': viol, 'eta': eta, 'kl': kl_div(rho, self.probs),
+                                'shadow': False})
+            return 1
+        return 0
+
+    def _update_ub(self, lp_obj=None):
+        """UB = psi(cost of an unpenalized RMP solution with no grid trade).
+
+        An RMP solution that trades with the grid bounds nothing. Rather than switch
+        the DOIs off (and fall back into the degenerate master, which at n=60 cost
+        more than the rest of the run), re-solve the unpenalized twin with the grid
+        columns held at 0: a feasible plan of the original master over the columns
+        so far, whose worst case is an upper bound.
+        """
+        t0 = time.time()
+        if not self._penalized() and self._y_total() <= 1e-7:
+            if lp_obj is None:
+                lp_obj = self.lp.solve()
+                self._separate_dist(lp_obj)
+            ub = self._psi_main if self._y_total() <= 1e-7 else self._ub_no_grid()
+        else:
+            ub = self._ub_no_grid()
+            self.n_ub += 1
+        self.t_lp += time.time() - t0
+        if ub < self.ub:
+            self.ub = ub
+        return ub
+
+    ub_with_y = True
+
+    def _ub_no_grid(self):
+        """psi at the unpenalized RMP optimum over the current columns with y = 0 (the
+        twin LP when there is one, else the master itself); inf if infeasible. Adds
+        the tilted distribution as a cut if the twin's theta falls short of it."""
+        twin = isinstance(self.lp, _TwinLP)
+        lp = self.lp.shadow if twin else self.lp
+        js = list(self.y.values()) if self.doi_active else []
+        if js:
+            lp.set_cols(js, ub=[0.0] * len(js))
+        try:
+            lp.solve()
+            c = self._scen_costs(lp.x)
+            ub, rho, eta = kl_worst(c, self.probs, self.kl_radius)
+            theta = self._model_worst(lp.x, c)
+        except RuntimeError:        # not yet feasible without slacks or grid trade
+            ub = np.inf
+        finally:
+            if js:
+                lp.set_cols(js, ub=[lp.INF] * len(js))
+        if np.isfinite(ub) and ub - theta > self.kl_cut_frac * self._gap_tol(ub):
+            # the plan's worst case is a valid cut for the main LP too
+            self._refine(rho)
+            self.kl_log.append({'iter': self.iteration, 'theta': theta, 'psi': ub,
+                                'viol': ub - theta, 'eta': eta,
+                                'kl': kl_div(rho, self.probs), 'shadow': True})
+        self.n_ub_no_grid = getattr(self, 'n_ub_no_grid', 0) + 1
+        return ub
+
+    def _final_ub(self, obj):
+        if self._y_total() <= 1e-7:
+            psi = kl_worst(self._scen_costs(self.lp.x), self.probs, self.kl_radius)[0]
+            if psi < self.ub:
+                self.ub = psi
+
+    def solve(self, init_vals=None, init_cols=None, init_duals=None):
+        res = super().solve(init_vals, init_cols, init_duals)
+        S = len(self.scenarios)
+        rho = self.rho_of(res['duals'], S)
+        # the final (unpenalized) RMP solution: its scenario costs and worst case
+        c = self._scen_costs(self.lp.x)
+        psi, rho_x, _ = kl_worst(c, self.probs, self.kl_radius)
+        res['obj'] = self.ub
+        res['gap'] = (self.ub - self.lb) / (1.0 + abs(self.ub))
+        res['kl'] = {'radius': self.kl_radius, 'nested': self.kl_nested,
+                     'rho_star': rho.tolist(), 'kl_rho_star': kl_div(rho, self.probs),
+                     'rho_primal': rho_x.tolist(), 'psi_final': psi,
+                     'expected_cost_final': float(np.array(self.probs) @ c),
+                     'theta_final': self._model_worst(self.lp.x, c),
+                     'master': self.kl_master,
+                     'cuts': self._n_cuts(), 'cut_log': self.kl_log,
+                     'ub_no_grid_solves': getattr(self, 'n_ub_no_grid', 0)}
+        return res
+
+
+class KLDualMaster(KLMaster):
+    """The KL master in the dual form of the inner max (Love & Bayraksan, eq. 9):
+
+        min  mu + r kappa + sum_w rho_hat_w t_w
+        s.t. sum_{j,q} lambda_jq h^q_w + (x0, y costs)_w - H_w = 0        [nu_w]
+             e^s (H_w - mu) + (e^s - 1 - s e^s) kappa - t_w <= 0   for s in S_w  [xi]
+             -kappa - t_w <= 0                                             (s -> -inf)
+             linking rows, convexity rows as in DirectMaster;  kappa >= 0
+
+    kappa is the multiplier of the KL constraint (lambda in the paper; renamed so it
+    does not clash with the column weights). The tangent planes of the perspective
+    kappa (exp((H - mu)/kappa) - 1) are valid everywhere, so a grid of them goes in at
+    the start, one set per scenario: the master sees the whole ball from the first
+    iteration instead of one distribution at a time. Every column carries its cost
+    in the H rows only (objective 0).
+
+      pricing  the H rows' duals give the measure: rho_bar_w = -nu_w. The dual
+               constraints of H, t and mu make it rho_hat_w times a convex
+               combination of the grid ratios e^s, summing to 1, and kappa's makes
+               the interpolated divergence <= r, hence rho_bar lies in the ball.
+      refine   at the RMP solution, psi(h) exactly (kl_worst); if the master's
+               value falls short by more than kl_cut_frac of the tolerance, add the
+               tangents at the worst case's own ratios s_w = ln(p_w / rho_hat_w).
+    LB and UB as in KLMaster.
+    """
+    kl_master = 'dual'
+
+    def _obj0(self, cost):
+        return 0.0
+
+    def _build(self):
+        DirectMaster._build(self)
+        lp, INF = self.lp, self.lp.INF
+        S = len(self.scenarios)
+        self._ref = np.array(self.probs)
+        for nm, j in self.x0.items():
+            v = np.full(S, self.x0_first[nm])
+            for w, c in self.x0_scen[nm].items():
+                v[w] += c
+            self._cvec[j] = v
+        for key, j in self.y.items():
+            v = np.zeros(S)
+            w, c = self.y_cost[key]
+            v[w] = c
+            self._cvec[j] = v
+        self.mu = lp.add_col(1.0, -INF, INF, [], [])
+        self.kappa = lp.add_col(self.kl_radius, 0.0, INF, [], [])
+        self.t = [lp.add_col(self._ref[w], -INF, INF, [], []) for w in range(S)]
+        self.hrow = []
+        for w in range(S):
+            hs = [j for j, v in self._cvec.items() if v[w]]
+            self.hrow.append(lp.add_row_with(0.0, 0.0, hs, [self._cvec[j][w] for j in hs]))
+        self.H = [lp.add_col(0.0, -INF, INF, [self.hrow[w]], [-1.0]) for w in range(S)]
+        self.n_tangents = 0
+        for w in range(S):
+            lp.add_row_with(-INF, 0.0, [self.kappa, self.t[w]], [-1.0, -1.0])
+            self._tangents(w, np.arange(-8.0, np.log(1.0 / self._ref[w]) + 0.25, 0.25))
+        self.theta = None
+
+    def _tangents(self, w, ss):
+        for s_ in ss:
+            a, b = _kl_tangent(s_)
+            self.lp.add_row_with(-self.lp.INF, 0.0, [self.H[w], self.mu, self.kappa, self.t[w]],
+                                 [a, -a, b, -1.0])
+            self.n_tangents += 1
+
+    def _col_entries(self, col):
+        _, rows, coefs = DirectMaster._col_entries(self, col)
+        v = col.first + np.asarray(col.scen, float)
+        for w, r in enumerate(self.hrow):
+            if v[w]:
+                rows.append(r)
+                coefs.append(float(v[w]))
+        return 0.0, rows, coefs
+
+    def _model_worst(self, xval, c):
+        return (xval(self.mu) + self.kl_radius * xval(self.kappa)
+                + float(sum(self._ref[w] * xval(self.t[w]) for w in range(len(self.t)))))
+
+    def _refine(self, rho):
+        for w in np.nonzero(rho > 0)[0]:
+            self._tangents(w, [float(np.log(rho[w] / self._ref[w]))])
+
+    def _n_cuts(self):
+        return self.n_tangents
+
+    def _rho_bar(self):
+        rho = np.maximum(np.array([-self.lp.pi(r) for r in self.hrow]), 0.0)
+        if rho.sum() <= 0.0:
+            return np.array(self.probs)
+        return rho / rho.sum()
 
 
 class BundleMaster(DirectMaster):
@@ -2641,6 +3346,17 @@ def solve_dwr_direct(players, T, scenarios, params, init_vals=None, dual_init=No
     return master.solve(init_vals=init_vals, init_duals=duals), master
 
 
+def solve_dwr_kl(players, T, scenarios, params, init_vals=None, kl_radius=0.0,
+                 kl_nested=False, kl_cut_frac=0.05, doi_markup=0.0, kl_master='cut', **kw):
+    """The KL-ball DRO master, no exp cone: distribution cuts (KLMaster, 'cut') or
+    the dual form with tangent planes (KLDualMaster, 'dual')."""
+    cls = {'cut': KLMaster, 'dual': KLDualMaster}[kl_master]
+    master = cls(players, T, scenarios, params, kl_radius=kl_radius,
+                      kl_nested=kl_nested, kl_cut_frac=kl_cut_frac,
+                      doi_markup=doi_markup, **kw)
+    return master.solve(init_vals=init_vals), master
+
+
 def solve_dwr_stab(players, T, scenarios, params, init_vals=None, pen_eps=0.1,
                    pen_delta=0.05, pen_shrink=0.25, max_rounds=12, **kw):
     """(DWR_N^Omega) with smoothing AND a three-piece penalty around the center.
@@ -2807,6 +3523,34 @@ def scenario_allocation(ef, dw, master):
     }
 
 
+def robust_allocation(ef, dw, master):
+    """Robust Owen solution of the KL master, profit convention.
+
+    owen_j = -sigma_j = max_{x_j} {E_rho*[f_j] - pi*^T A_j x_j} at the dual point that
+    attains LB (robust_core.md, Proposition: robust Owen), rho* = rho_bar there.
+    omega^LR,rob = v^LR,rob - v^MIP,rob = EF value - sum_j sigma_j, and
+    Ex_j = owen_j - omega/n is budget balanced against v^MIP,rob(N) and lies in the weak
+    eps-core with eps = omega/n. The certified interval of omega is
+    [EF bound - UB, EF value - LB]. No scenario-wise allocation (Algorithm S1): its
+    robust (contingent) version is an open question of the notes.
+    """
+    players, n = master.players, len(master.players)
+    sigma = dw['sigma']
+    owen = {u: -sigma[u] for u in players}
+    omega = ef['obj'] - sum(sigma.values())
+    S = len(master.scenarios)
+    rho = KLMaster.rho_of(dw['duals'], S)
+    return {
+        'owen': owen, 'Ex': {u: owen[u] - omega / n for u in players},
+        'omega_LR': omega, 'eps_LR': omega / n,
+        'omega_interval': [ef['dual_bound'] - dw['ub'], ef['obj'] - dw['lb']],
+        'rho_star': rho.tolist(),
+        'budget_residual': abs(sum(owen[u] - omega / n for u in players) + ef['obj']),
+        'duality_residual': omega - (ef['obj'] - dw['lb']),
+        'pricing_residual': {u: 0.0 for u in players},
+    }
+
+
 def standalone_values(players, T, scenarios, **kw):
     """val(DP_{j}^Omega), profit convention: the scenario-expanded single-member problem."""
     return {u: -solve_extensive_form([u], T, scenarios, **kw)['obj'] for u in players}
@@ -2854,14 +3598,26 @@ def run(args):
                           rho=args.rho,
                           price_carriers=tuple(args.price_carriers.split(',')),
                           load_carriers=tuple(args.load_carriers.split(',')))
+    kl = args.kl_radius is not None
     mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap,
                   solver=args.mip_solver)
+    if kl:
+        mip_kw['kl_radius'] = args.kl_radius
     tag = f'{name}_S{args.scenarios}_seed{args.seed}' + ('' if args.doi else '_nodoi') \
         + ('_sar' if args.sar else '') + ('_nosmooth' if args.no_smoothing else '') \
         + ('_grb' if args.pricing_solver == 'gurobi' else '') \
         + ('_nopen' if args.no_penalty else '') \
-        + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '')         + (f'_{args.tag}' if args.tag else '')
+        + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '') \
+        + (f'_kl{args.kl_radius:g}' + ('_nested' if args.kl_nested else '')
+           + ('_dual' if args.kl_master == 'dual' else '') if kl else '') \
+        + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
+    if args.fallback_purge_age is not None:
+        DirectMaster.fallback_purge_age = args.fallback_purge_age
+    if args.doi_taper_steps is not None:
+        DirectMaster.doi_taper_steps = args.doi_taper_steps
+    if args.doi_skip:
+        DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
 
     if args.deterministic_check:
         det = LocalEnergyMarket(players, T, scen[0][1], model_type='mip')
@@ -2873,10 +3629,23 @@ def run(args):
     ef = solve_extensive_form(players, T, scen, **mip_kw)
     print(f'  obj {ef["obj"]:.6f}  status {ef["status"]}  gap {ef["gap"]:.2e}  '
           f'{ef["time_solve"]:.1f}s  vars {ef["stack"].model.getNVars()}')
+    if kl:
+        k = ef['kl']
+        print(f'  KL r={k["radius"]:g}: worst case {ef["obj"]:.6f} vs expected '
+              f'{k["expected_cost"]:.6f}; {k["solves"]} MILP solve(s); rho* '
+              + ' '.join(f'{r:.3f}' for r in k['rho']) + f' (KL {k["kl"]:.4f})')
 
     print('\n[2] column generation (DWR_N^Omega)')
     if args.engine == 'direct':
         solver_fn = solve_dwr_bundle if args.bundle else solve_dwr_direct
+        if kl:
+            if args.bundle or args.dual_init != 'none':
+                raise SystemExit('--kl-radius does not combine with --bundle or --dual-init')
+            solver_fn = functools.partial(solve_dwr_kl, kl_radius=args.kl_radius,
+                                          kl_nested=args.kl_nested,
+                                          kl_cut_frac=args.kl_cut_frac,
+                                          doi_markup=args.doi_markup,
+                                          kl_master=args.kl_master)
         extra_d = ({'dual_init': args.dual_init, 'ef': ef}
                    if args.dual_init != 'none' and not args.bundle else {})
         extra_b = ({'bundle_t': args.bundle_t, 'bundle_age': args.bundle_age,
@@ -2912,6 +3681,13 @@ def run(args):
         print(f'  obj {dw["obj"]:.6f}  LB {dw["lb"]:.6f}  gap {dw["gap"]:.2e}  '
               f'iters {dw["iterations"]}  {dw["time"]:.1f}s  '
               f'rounds {len(dw["penalty"]["rounds"])}  status {dw["status"]}')
+        if kl:
+            k = dw['kl']
+            print(f'  KL r={k["radius"]:g}: {k["cuts"]} '
+                  + ('tangent planes' if k['master'] == 'dual' else
+                     'distribution cuts (rho_hat included)') + '; rho* '
+                  + ' '.join(f'{r:.3f}' for r in k['rho_star'])
+                  + f' (KL {k["kl_rho_star"]:.4f})')
         if dw.get('lazy'):
             print(f'  lazy rows: {dw["lazy"]["added"]} added, master {dw["lazy"]["final_rows"]} '
                   f'of {dw["lazy"]["original_rows"]} linking rows')
@@ -2939,9 +3715,15 @@ def run(args):
           f'{dw["time"]:.1f}s  DOI {dw["doi"]}  SAR {dw.get("sar", {}).get("phases")}  '
           f'PEN {dw.get("penalty", {}).get("rounds")}')
 
-    print('\n[3] Algorithm S1')
-    al = scenario_allocation(ef, dw, master)
-    print(f'  omega_LR {al["omega_LR"]:.6f}  eps_LR {al["eps_LR"]:.6f}')
+    if kl:
+        print('\n[3] robust Owen allocation')
+        al = robust_allocation(ef, dw, master)
+        print(f'  omega_LR,rob {al["omega_LR"]:.6f}  eps_LR {al["eps_LR"]:.6f}  '
+              f'certified [{al["omega_interval"][0]:.6f}, {al["omega_interval"][1]:.6f}]')
+    else:
+        print('\n[3] Algorithm S1')
+        al = scenario_allocation(ef, dw, master)
+        print(f'  omega_LR {al["omega_LR"]:.6f}  eps_LR {al["eps_LR"]:.6f}')
     print(f'  checks: budget {al["budget_residual"]:.2e}  duality '
           f'{al["duality_residual"]:.2e}  pricing '
           f'{max(abs(v) for v in al["pricing_residual"].values()):.2e}')
@@ -2983,17 +3765,24 @@ def run(args):
             'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
             'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start',
             'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp',
-            'dual_init', 'omega_tol', 'pricing_abs')},
+            'dual_init', 'omega_tol', 'pricing_abs', 'kl_radius', 'kl_nested',
+            'kl_cut_frac', 'kl_master')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
-        'allocation': {k: al[k] for k in ('owen', 'Ex', 'x', 'g', 'worth', 'omega_LR',
-                                          'eps_LR', 'budget_residual',
-                                          'duality_residual', 'pricing_residual')},
+        'allocation': {k: al.get(k) for k in ('owen', 'Ex', 'x', 'g', 'worth', 'omega_LR',
+                                              'eps_LR', 'budget_residual',
+                                              'duality_residual', 'pricing_residual',
+                                              'omega_interval', 'rho_star')},
+        'kl': {'radius': args.kl_radius, 'nested': args.kl_nested,
+               'ef': ef.get('kl'), 'master': dw.get('kl')} if kl else None,
         'standalone': alone, 'chi_LR': chi_lr,
         'weak_eps': core,
-        'coupling_prices': {f'{k}_{t}_s{w}': d / master.probs[w]
-                            for (k, t, w), d in dw['duals'].items()},
+        # a row's price: its dual over the pricing measure's weight of the scenario
+        'coupling_prices': {f'{k}_{t}_s{w}': d / (dw['duals'][rho_key(w)] if kl
+                                                  else master.probs[w])
+                            for (k, t, w), d in dw['duals'].items()
+                            if k != 'rho' and (not kl or dw['duals'][rho_key(w)] > 0)},
     }
     os.makedirs(args.out, exist_ok=True)
     path = os.path.join(args.out, f'{tag}.json')
@@ -3120,6 +3909,32 @@ def main():
                          'e.g. E (the carrier whose price is uncertain)')
     ap.add_argument('--sar-cap', type=float, default=1.0,
                     help='rows added per dyn-SAR round, as a share of the original rows')
+    ap.add_argument('--kl-radius', type=float, default=None,
+                    help='KL-ball DRO (robust_core.md sec. 2.3): worst expected cost over '
+                         'KL(rho || rho_hat) <= r, by column-and-cut generation. 0 reproduces '
+                         'the stochastic model. Needs --mip-solver gurobi')
+    ap.add_argument('--kl-nested', action='store_true',
+                    help='KL: finish the cut generation before each pricing pass '
+                         '(default: interleaved, cut and price in the same pass)')
+    ap.add_argument('--kl-cut-frac', type=float, default=0.05,
+                    help='KL: add a cut once theta falls short of the worst case by this '
+                         'share of the CG tolerance')
+    ap.add_argument('--doi-skip', default='',
+                    help="grid columns to leave out, as carrier:side pairs, e.g. 'G:exp' "
+                         "or 'G:exp,E:imp'")
+    ap.add_argument('--doi-taper-steps', type=int, default=None,
+                    help='when the master settles with grid trade, shrink a budget on '
+                         'it this many times before switching the DOIs off (default 0: off; did not help)')
+    ap.add_argument('--fallback-purge-age', type=int, default=None,
+                    help='before the DOI switch-off, purge prosumer columns unused for '
+                         'this many passes (default 0: off; did not help, see DirectMaster)')
+    ap.add_argument('--kl-master', default='cut', choices=['cut', 'dual'],
+                    help="KL: master form. 'cut' = distribution cuts (robust_core.md "
+                         "2.3); 'dual' = Love & Bayraksan's dual with tangent planes")
+    ap.add_argument('--doi-markup', type=float, default=0.0,
+                    help='KL: extra cost per unit on the grid (DOI) columns, a tie-break '
+                         'against settling with grid trade (default 0: any markup slows '
+                         'the master, see KLMaster)')
     ap.add_argument('--skip-standalone', action='store_true',
                     help='stop after Algorithm S1 (no stand-alone solves)')
     ap.add_argument('--no-smoothing', action='store_true',
