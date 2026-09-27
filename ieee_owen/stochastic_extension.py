@@ -2317,6 +2317,10 @@ class DirectMaster:
     # export, a near-tie with the electrolyzer owners exporting themselves.
     doi_skip = frozenset()
     ub_with_y = False       # KL: _update_ub can bound an RMP that trades with the grid
+    # accept_doi_master: stop once the master WITH the grid columns has converged
+    # (LB within tolerance of its RMP value), instead of switching them off to find
+    # a y = 0 upper bound. See solve(). Off by default.
+    accept_doi_master = False
 
     def _separate_dist(self, lp_obj):
         return 0
@@ -2638,6 +2642,19 @@ class DirectMaster:
             eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
             if eps < 1e-4:
                 eps = delta = 0.0
+        self.doi_master_certified, self.ub_doi_master = False, None
+        if (status != 'done' and self.doi_active and self.accept_doi_master
+                and not self._penalized() and obj - self.lb <= self._gap_tol(obj)):
+            # Converged on the master WITH the grid columns: LB is within tolerance
+            # of its RMP value. LB, the dual point it came from, and with them the
+            # Owen allocation, its stability and eps = (EF value - LB)/n, are all
+            # certified; only the claim that LB is v^LR itself rests on the grid
+            # columns being dual-optimal (at 5 and 10 scenarios the y = 0 bound found
+            # by the switch-off ended 0.02-0.03 above this RMP value).
+            status, self.doi_master_certified, self.ub_doi_master = 'done', True, obj
+            if self.verbose:
+                print(f'  -- converged on the master with grid columns: RMP {obj:.4f} '
+                      f'LB {self.lb:.4f} (y {self._y_total():.4g}); no switch-off')
         if status != 'done' and self.doi_active and self.doi_taper_steps:
             status = self._taper_doi(rounds, t0)
         if status != 'done' and self.doi_active:
@@ -2684,7 +2701,9 @@ class DirectMaster:
                 'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
                 'columns': {u: len(self.columns[u]) for u in self.players},
                 'y_total': self._y_total(), 'penalty': {'rounds': rounds},
-                'doi': {'used': self.doi, 'active_at_end': self.doi_active},
+                'doi': {'used': self.doi, 'active_at_end': self.doi_active,
+                        'master_certified': self.doi_master_certified,
+                        'ub_doi_master': self.ub_doi_master},
                 'time': time.time() - t0,
                 'timing': {'lp': self.t_lp, 'pricing': self.t_price,
                            'pricing_by_player': {u: s.time for u, s in self.subs.items()},
@@ -2754,7 +2773,7 @@ class KLMaster(DirectMaster):
     cut violation plus pricing violation.
     """
     def __init__(self, *args, kl_radius=0.0, kl_nested=False, kl_cut_frac=0.05,
-                 doi_markup=0.0, **kw):
+                 doi_markup=0.0, kl_seed=None, **kw):
         if kw.get('sar') or kw.get('lazy_kinds') or kw.get('column_pool'):
             raise ValueError('the KL master supports neither dyn-SAR, lazy rows nor '
                              'the column pool')
@@ -2773,6 +2792,19 @@ class KLMaster(DirectMaster):
         self.kl_log = []
         self._psi_main = None
         super().__init__(*args, **kw)
+        # kl_seed: distributions known up front (the robust EF's worst case), put in
+        # as cuts before the first pass. The EF's worst case is within ~0.03 of the
+        # master's final rho* at 5 and 10 scenarios; without it the master spends
+        # rounds 2-4 finding it again, one cut at a time. Measured (n=60, r=0.5, A,
+        # --accept-doi-master): no gain, 166/841/6859 s -> 172/886/7128 s at 5/10/20
+        # scenarios, and more cuts (the worst case follows the master's h, which
+        # moves a lot early on). Off by default (--kl-seed-ef).
+        self.kl_seeded = 0
+        for rho in (kl_seed or []):
+            rho = np.asarray(rho, float)
+            if kl_div(rho, self.probs) <= self.kl_radius + 1e-9 and np.abs(rho - self._ref).max() > 1e-9:
+                self._refine(rho)
+                self.kl_seeded += 1
 
     # --- model ---------------------------------------------------------------
     def _build(self):
@@ -2971,8 +3003,11 @@ class KLMaster(DirectMaster):
         # the final (unpenalized) RMP solution: its scenario costs and worst case
         c = self._scen_costs(self.lp.x)
         psi, rho_x, _ = kl_worst(c, self.probs, self.kl_radius)
-        res['obj'] = self.ub
-        res['gap'] = (self.ub - self.lb) / (1.0 + abs(self.ub))
+        # converged on the master with grid columns: report its value (the seed's
+        # y = 0 bound, still in self.ub, is far above it)
+        ub = self.ub_doi_master if self.doi_master_certified else self.ub
+        res['obj'] = ub
+        res['gap'] = (ub - self.lb) / (1.0 + abs(ub))
         res['kl'] = {'radius': self.kl_radius, 'nested': self.kl_nested,
                      'rho_star': rho.tolist(), 'kl_rho_star': kl_div(rho, self.probs),
                      'rho_primal': rho_x.tolist(), 'psi_final': psi,
@@ -2980,7 +3015,8 @@ class KLMaster(DirectMaster):
                      'theta_final': self._model_worst(self.lp.x, c),
                      'master': self.kl_master,
                      'cuts': self._n_cuts(), 'cut_log': self.kl_log,
-                     'ub_no_grid_solves': getattr(self, 'n_ub_no_grid', 0)}
+                     'ub_no_grid_solves': getattr(self, 'n_ub_no_grid', 0),
+                     'seeded': self.kl_seeded}
         return res
 
 
@@ -3347,13 +3383,14 @@ def solve_dwr_direct(players, T, scenarios, params, init_vals=None, dual_init=No
 
 
 def solve_dwr_kl(players, T, scenarios, params, init_vals=None, kl_radius=0.0,
-                 kl_nested=False, kl_cut_frac=0.05, doi_markup=0.0, kl_master='cut', **kw):
+                 kl_nested=False, kl_cut_frac=0.05, doi_markup=0.0, kl_master='cut',
+                 kl_seed=None, **kw):
     """The KL-ball DRO master, no exp cone: distribution cuts (KLMaster, 'cut') or
     the dual form with tangent planes (KLDualMaster, 'dual')."""
     cls = {'cut': KLMaster, 'dual': KLDualMaster}[kl_master]
     master = cls(players, T, scenarios, params, kl_radius=kl_radius,
                       kl_nested=kl_nested, kl_cut_frac=kl_cut_frac,
-                      doi_markup=doi_markup, **kw)
+                      doi_markup=doi_markup, kl_seed=kl_seed, **kw)
     return master.solve(init_vals=init_vals), master
 
 
@@ -3610,12 +3647,16 @@ def run(args):
         + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '') \
         + (f'_kl{args.kl_radius:g}' + ('_nested' if args.kl_nested else '')
            + ('_dual' if args.kl_master == 'dual' else '') if kl else '') \
+        + ('_accdoi' if args.accept_doi_master else '') \
+        + ('_seed' if kl and args.kl_seed_ef else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
     if args.fallback_purge_age is not None:
         DirectMaster.fallback_purge_age = args.fallback_purge_age
     if args.doi_taper_steps is not None:
         DirectMaster.doi_taper_steps = args.doi_taper_steps
+    if args.accept_doi_master:
+        DirectMaster.accept_doi_master = True
     if args.doi_skip:
         DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
 
@@ -3645,7 +3686,8 @@ def run(args):
                                           kl_nested=args.kl_nested,
                                           kl_cut_frac=args.kl_cut_frac,
                                           doi_markup=args.doi_markup,
-                                          kl_master=args.kl_master)
+                                          kl_master=args.kl_master,
+                                          kl_seed=[ef['kl']['rho']] if args.kl_seed_ef else None)
         extra_d = ({'dual_init': args.dual_init, 'ef': ef}
                    if args.dual_init != 'none' and not args.bundle else {})
         extra_b = ({'bundle_t': args.bundle_t, 'bundle_age': args.bundle_age,
@@ -3919,6 +3961,13 @@ def main():
     ap.add_argument('--kl-cut-frac', type=float, default=0.05,
                     help='KL: add a cut once theta falls short of the worst case by this '
                          'share of the CG tolerance')
+    ap.add_argument('--kl-seed-ef', action='store_true',
+                    help="KL: start the master with the robust EF's worst-case distribution "
+                         'as a cut (tangents for --kl-master dual)')
+    ap.add_argument('--accept-doi-master', action='store_true',
+                    help='stop once the master with the grid columns has converged, '
+                         'without switching them off for a y = 0 upper bound (LB, Owen '
+                         'and eps stay certified; UB is then the DOI master value)')
     ap.add_argument('--doi-skip', default='',
                     help="grid columns to leave out, as carrier:side pairs, e.g. 'G:exp' "
                          "or 'G:exp,E:imp'")
