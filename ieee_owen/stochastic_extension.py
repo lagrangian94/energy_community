@@ -43,6 +43,12 @@ and cut n=60, |Omega|=5 from 1443-1716 s to 299-313 s with the same omega^LR. Pr
 is parallel, heavy prosumers dealt out first; columns are purged; gaps are EF 1e-6,
 CG 1e-6 or omega^LR to 2% (OMEGA_TOL), whichever comes first, with the pricing MILPs
 on the absolute gap that needs.
+Nested DW (default): a prosumer without first-stage variables is priced one scenario
+at a time (one column and convexity row per prosumer and scenario, --split-scenarios);
+an electrolyzer owner's plan enters as a commitment-pattern column plus one column per
+scenario, tied by sum lambda = mu (MP1-2 of Maher & Muter, --mp12). conv X_j and so
+v^LR are unchanged, non-anticipativity is kept; columns are 1/|Omega| as dense and
+purged harder (cap 5, age 20). KL, n=60, 20 scenarios: CG 6,859 s -> 717 s.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
 give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
 
@@ -408,7 +414,7 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
 # Column generation
 # =============================================================================
 class Column:
-    __slots__ = ('player', 'cost', 'coef', 'first', 'scen', 'fs')
+    __slots__ = ('player', 'cost', 'coef', 'first', 'scen', 'fs', 'extra', 'noconv')
 
     def __init__(self, player, stack, rows, names, vals):
         self.player = player
@@ -421,6 +427,22 @@ class Column:
         self.first, self.scen = stack.cost_split(vals, names)
         # the plan's commitment, kept for reporting
         self.fs = {n: round(vals.get(n, 0.0)) for n in names if n in stack.first_stage}
+
+    @classmethod
+    def total(cls, player, cols):
+        """The sum of a prosumer's per-scenario columns (scenario-split pricing):
+        one plan over every scenario, as the unsplit pricing would return it."""
+        new = cls.__new__(cls)
+        new.player = player
+        new.cost = sum(c.cost for c in cols)
+        new.coef = {}
+        for c in cols:
+            for k, a in c.coef.items():
+                new.coef[k] = new.coef.get(k, 0.0) + a
+        new.first = sum(c.first for c in cols)
+        new.scen = [sum(c.scen[i] for c in cols) for i in range(len(cols[0].scen))]
+        new.fs = {}
+        return new
 
     @classmethod
     def combine(cls, cols, weights):
@@ -724,11 +746,19 @@ class PlayerPricing:
     highspy, changing only the objective between calls.
     """
     def __init__(self, player, T, scenarios, time_limit=None, gap=None, solver='highs',
-                 env=None):
+                 env=None, scen_ids=None, n_scen=None, unit=None):
         if solver not in ('highs', 'gurobi'):
             raise ValueError(f"pricing solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
         self.player = player
+        # scenario-split pricing: this stack holds the scenarios scen_ids of the
+        # n_scen of the master; rows and costs are mapped back to those indices
+        self.unit = player if unit is None else unit
+        self.scen_ids = list(range(len(scenarios))) if scen_ids is None else list(scen_ids)
+        self.n_scen = len(scenarios) if n_scen is None else n_scen
         self.stack = ScenarioStack(f'price_{player}', [player], T, scenarios, dwr=True)
+        if scen_ids is not None and self.stack.first_stage:
+            raise ValueError(f'{player} has first-stage variables: its scenarios cannot be '
+                             'priced apart')
         self.model = self.stack.model
         _set_mip_params(self.model, time_limit, gap)
         self.solver = solver
@@ -750,7 +780,8 @@ class PlayerPricing:
         elif solver != 'scip':
             raise ValueError("pricing solver must be 'scip', 'gurobi' or 'highs', "
                              f'got {solver!r}')
-        self.rows = self.stack.link_terms(player)
+        self.rows = {(k, t, self.scen_ids[w]): terms
+                     for (k, t, w), terms in self.stack.link_terms(player).items()}
         self.names = list(self.stack.vars)
         self.base = {n: self.stack.scaled_cost(n) for n in self.names}
         # unscaled costs, for a pricing measure other than rho_hat (KL master)
@@ -764,7 +795,7 @@ class PlayerPricing:
         elif rho_key(0) in duals:
             # the KL master prices at its worst-case measure rho_bar, carried in the
             # duals so smoothing and the stability center treat it like any price
-            rho = [duals[rho_key(w)] for w in range(len(self.stack.scenarios))]
+            rho = [duals[rho_key(g)] for g in self.scen_ids]
             coef = {n: c * (1.0 if w is None else rho[w]) for n, c, w in self._cw}
         else:
             coef = dict(self.base)
@@ -829,7 +860,7 @@ class PlayerPricing:
                 raise RuntimeError(f'pricing {self.player}: no solution, status {m.getStatus()}')
             vals = self.stack.values()
             obj, bound = m.getObjVal(), m.getDualbound()
-        col = Column(self.player, self.stack, self.rows, self.names, vals)
+        col = self._column(vals)
         if not farkas:
             self.last = (dict(duals), obj, col)
         return obj, bound, col
@@ -890,9 +921,31 @@ class PlayerPricing:
         bound = min(getattr(info, 'mip_dual_bound', obj) or obj, obj)
         return obj, bound, vals
 
+    def _column(self, vals):
+        col = Column(self.unit, self.stack, self.rows, self.names, vals)
+        if self.scen_ids != list(range(self.n_scen)):
+            scen = [0.0] * self.n_scen
+            for w, g in enumerate(self.scen_ids):
+                scen[g] = col.scen[w]
+            col.scen = scen
+        return col
+
     def column_from(self, ef_vals):
         """Project a grand-coalition solution onto this player's plan."""
-        return Column(self.player, self.stack, self.rows, self.names, ef_vals)
+        if self.scen_ids == list(range(self.n_scen)):
+            return self._column(ef_vals)
+        # scenario block w of this stack is scenario scen_ids[w] of the EF: names end
+        # in _s<w> here and _s<scen_ids[w]> there (first-stage names carry no suffix)
+        vals = {}
+        for n in self.names:
+            w = self.stack.scen_of[n]
+            if w is None:
+                vals[n] = ef_vals.get(n, 0.0)
+            else:
+                suf = f'_s{w}'
+                assert n.endswith(suf), n
+                vals[n] = ef_vals.get(n[:-len(suf)] + f'_s{self.scen_ids[w]}', 0.0)
+        return self._column(vals)
 
 
 class _MasterPricer(Pricer):
@@ -1706,6 +1759,20 @@ class DirectMaster:
                  mip_start=False, balance_pricing=True, omega_tol=OMEGA_TOL,
                  pricing_abs=True):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
+        # pricing units: a prosumer, or (prosumer, scenario) for a prosumer without
+        # first-stage variables when split_scenarios is on. Such a prosumer's set is a
+        # product over scenarios, so conv(X_j) is the product of the per-scenario hulls
+        # and one convexity row per (j, w) gives the same master LP value, with columns
+        # 1/|Omega| as dense. The electrolyzer owners' commitment ties their scenarios:
+        # they stay whole.
+        tied = set(params.get('players_with_electrolyzers', []))
+        self.units = []
+        for u in self.players:
+            if self.split_scenarios and u not in tied and len(scenarios) > 1:
+                self.units += [(u, w) for w in range(len(scenarios))]
+            else:
+                self.units.append(u)
+        self.unit_player = {x: (x[0] if isinstance(x, tuple) else x) for x in self.units}
         # dyn-SAR (Costa, Contardo, Desaulniers & Yarkony 2022): the master starts
         # from aggregated linking rows and separates the original rows it violates
         self.sar, self.sar_block, self.sar_cap = sar, sar_block, sar_cap
@@ -1764,7 +1831,7 @@ class DirectMaster:
         self.pen_eps, self.pen_delta = pen_eps, pen_delta
         self.pen_shrink, self.max_rounds, self.max_iter = pen_shrink, max_rounds, max_iter
         self.pricing_workers = os.cpu_count() if pricing_workers == 0 else pricing_workers
-        self.pricing_workers = max(1, min(self.pricing_workers, len(self.players)))
+        self.pricing_workers = max(1, min(self.pricing_workers, len(self.units)))
         # one Gurobi environment (one WLS session) per worker; prosumer u is priced
         # by worker u mod k, in sequence with that worker's other prosumers
         k = self.pricing_workers
@@ -1782,16 +1849,21 @@ class DirectMaster:
         # snake order, then the rest the same way.
         heavy = (set(params.get('players_with_electrolyzers', [])) |
                  set(params.get('players_with_heatpumps', []))) if balance_pricing else set()
-        order = ([u for u in self.players if u in heavy]
-                 + [u for u in self.players if u not in heavy])
+        order = ([x for x in self.units if self.unit_player[x] in heavy]
+                 + [x for x in self.units if self.unit_player[x] not in heavy])
         self._group = {}
         for i, u in enumerate(order):
             r, c = divmod(i, k)
             self._group[u] = c if (r % 2 == 0 or not balance_pricing) else k - 1 - c
-        self.subs = subs or {u: PlayerPricing(u, T, scenarios, pricing_time_limit,
-                                              pricing_gap, pricing_solver,
-                                              env=self._envs[self._group[u]])
-                             for u in self.players}
+        def unit_pricing(x):
+            if isinstance(x, tuple):
+                return PlayerPricing(x[0], T, [scenarios[x[1]]], pricing_time_limit,
+                                     pricing_gap, pricing_solver,
+                                     env=self._envs[self._group[x]], scen_ids=[x[1]],
+                                     n_scen=len(scenarios), unit=x)
+            return PlayerPricing(x, T, scenarios, pricing_time_limit, pricing_gap,
+                                 pricing_solver, env=self._envs[self._group[x]])
+        self.subs = subs or {x: unit_pricing(x) for x in self.units}
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
         self.row_keys = [(k, t, w) for w in range(len(scenarios)) for t in self.T
@@ -1815,8 +1887,9 @@ class DirectMaster:
         self.lp_backend = lp_solver
         self.lp = (_TwinLP(lp_solver, lp_method, lp_presolve) if pen_eps > 0.0
                    else _LP(lp_solver, method=lp_method, presolve=lp_presolve))
-        self.columns = {u: [] for u in self.players}
-        self.col_idx = {u: [] for u in self.players}
+        self.columns = {u: [] for u in self.units}
+        self.col_idx = {u: [] for u in self.units}
+        self.patterns, self.mp12_patterns = {}, 0
         self.iteration, self.lb, self.L_bar = 0, -np.inf, -np.inf
         self.center, self.best, self.log = None, None, []
         self._build()
@@ -1869,7 +1942,7 @@ class DirectMaster:
                 self.x0_scen[('p', w)] = {w: p.get('pi_E_peak', 0.0)}
                 self.x0_rows[('p', w)] = [(('peak', t, w), -1.0) for t in self.T]
         self.x0_obj = dict(x0_cost)
-        self.conv = {u: lp.add_row(1.0, 1.0) for u in self.players}
+        self.conv = {u: lp.add_row(1.0, 1.0) for u in self.units}
         for name, members in fams.items():
             self._register_family(name, members)
             kind = members[0][0][0]
@@ -1929,7 +2002,7 @@ class DirectMaster:
         self._register_family(name, members)
         mem = dict(members)
         handles, coefs = [], []
-        for u in self.players:
+        for u in self.units:
             for h, col in zip(self.col_idx[u], self.columns[u]):
                 a = sum(w * col.coef.get(k, 0.0) for k, w in mem.items())
                 if a:
@@ -1957,7 +2030,7 @@ class DirectMaster:
             if x:
                 for k, c in rows:
                     act[k] = act.get(k, 0.0) + c * x
-        for u in self.players:
+        for u in self.units:
             for h, col in zip(self.col_idx[u], self.columns[u]):
                 lam = xval(h)
                 if lam > 1e-12:
@@ -2011,20 +2084,81 @@ class DirectMaster:
     def _col_entries(self, col):
         """(objective, rows, coefficients) of a prosumer column in the master."""
         agg = self._aggregate(col.coef)
-        return (col.cost, [self.conv[col.player]] + [self.row[f] for f in agg],
-                [1.0] + list(agg.values()))
+        rows, coefs = [self.row[f] for f in agg], list(agg.values())
+        if not getattr(col, 'noconv', False):
+            rows.insert(0, self.conv[col.player])
+            coefs.insert(0, 1.0)
+        for r, a in getattr(col, 'extra', None) or ():
+            rows.append(r)
+            coefs.append(a)
+        return col.cost, rows, coefs
 
     def _col_cost(self, col, duals):
         """The column's cost under the pricing measure in `duals`."""
         return col.cost
 
     def add_column(self, col):
+        if self.mp12 and col.fs and not isinstance(col.player, tuple):
+            key = tuple(sorted(col.fs.items()))
+            for piece in self._mp12_pieces(col):
+                h = self._add_one(piece)
+                if not piece.noconv:            # the pattern column
+                    self.patterns[col.player][key]['mu'] = h
+        else:
+            self._add_one(col)
+
+    def _add_one(self, col):
         u = col.player
         obj, rows, coefs = self._col_entries(col)
         h = self.lp.add_col(obj, 0.0, self.lp.INF, rows, coefs)
         self.col_idx[u].append(h)
         self.columns[u].append(col)
         self.last_used[h] = self.iteration
+        return h
+
+    # MP1-2 (Maher & Muter, nested decomposition, eq. 6) for the prosumers whose
+    # first-stage commitment z ties their scenarios: a plan (z, y_1..y_W) enters as
+    # a pattern column mu_{j,z} (first-stage cost, the prosumer's convexity row) and
+    # one scenario column per w (that scenario's cost and linking rows), tied by
+    #     sum_p lambda_{j,z,w,p} - mu_{j,z} = 0          for every w,
+    # rows created with the pattern. conv(X_j) = conv over z of prod_w conv Y_jw(z),
+    # which is exactly this, so the master LP value is unchanged; the master can now
+    # mix scenario plans of different pricing calls that share a commitment.
+    # Columns still come from the full pricing MILP (its bound keeps LB valid).
+    mp12 = False
+
+    def _mp12_pieces(self, col):
+        j, S = col.player, len(self.scenarios)
+        key = tuple(sorted(col.fs.items()))
+        pats = self.patterns.setdefault(j, {})
+        pat = pats.get(key)
+        pieces = []
+        if pat is None:
+            rows = [self.lp.add_row(0.0, 0.0) for _ in range(S)]
+            pat = pats[key] = {'rows': rows, 'mu': None}
+        mu = pat['mu']
+        if mu is None or self._lp_pos(mu) < 0:
+            m = Column.__new__(Column)
+            m.player, m.cost, m.coef, m.first = j, col.first, {}, col.first
+            m.scen, m.fs, m.noconv = [0.0] * S, dict(col.fs), False
+            m.extra = [(r, -1.0) for r in pat['rows']]
+            pieces.append(m)
+            pat['mu_pending'] = True
+        for w in range(S):
+            c = Column.__new__(Column)
+            c.player, c.first, c.fs, c.noconv = j, 0.0, None, True
+            c.coef = {k: a for k, a in col.coef.items() if k[2] == w}
+            c.scen = [0.0] * S
+            c.scen[w] = col.scen[w]
+            c.cost = self.probs[w] * col.scen[w]
+            c.extra = [(pat['rows'][w], 1.0)]
+            pieces.append(c)
+        self.mp12_patterns = sum(len(v) for v in self.patterns.values())
+        return pieces
+
+    def _lp_pos(self, h):
+        lp = self.lp.main if isinstance(self.lp, _TwinLP) else self.lp
+        return lp.pos[h]
 
     def _purge(self, ref):
         """Remove prosumer columns unused for purge_age iterations with reduced cost
@@ -2032,21 +2166,21 @@ class DirectMaster:
         and before the next one: positions shift."""
         tol = 1e-9 * (1.0 + abs(ref))
         ncol = sum(len(v) for v in self.col_idx.values())
-        cap = self.purge_cap * len(self.players)
+        cap = self.purge_cap * len(self.units)
         if ncol <= cap:
             return 0
         # candidates: unused for purge_age iterations and pricing out now, the
         # longest-unused first, until the column count is back under the cap. The
         # master is primal degenerate here -- a new plan only pays off together with
         # other prosumers' plans -- so columns must be given time to find partners.
-        cand = sorted(((self.last_used[h], h) for u in self.players for h in self.col_idx[u]
+        cand = sorted(((self.last_used[h], h) for u in self.units for h in self.col_idx[u]
                        if h not in self.protected
                        and self.iteration - self.last_used[h] >= self.purge_age
                        and self.lp.rc(h) > tol))
         drop = set(h for _, h in cand[:ncol - cap])
-        self._dropped_cols = [c for u in self.players
+        self._dropped_cols = [c for u in self.units
                               for h, c in zip(self.col_idx[u], self.columns[u]) if h in drop]
-        for u in self.players:
+        for u in self.units:
             keep = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u]) if h not in drop]
             self.col_idx[u] = [h for h, _ in keep]
             self.columns[u] = [c for _, c in keep]
@@ -2063,6 +2197,7 @@ class DirectMaster:
 
     def _set_penalty(self, center, eps, delta):
         self._pen_state = (center, eps, delta)
+        self._dual_next = True
         js, obj = [], []
         for key, (up, dn) in self.pen.items():
             # the center lives in the original rows; a family's is the least-squares
@@ -2125,10 +2260,10 @@ class DirectMaster:
             self._pool_mat = csr_matrix((data, (rows, cols)),
                                         shape=(len(self.pool), len(self.row_keys)))
             self._pool_cost = np.array([c.cost for c in self.pool])
-            pidx = {u: i for i, u in enumerate(self.players)}
+            pidx = {u: i for i, u in enumerate(self.units)}
             self._pool_owner = np.array([pidx[c.player] for c in self.pool])
         pi = np.array([duals.get(k, 0.0) for k in self.row_keys])
-        sig = np.array([conv[u] for u in self.players])
+        sig = np.array([conv[u] for u in self.units])
         rc = self._pool_cost - self._pool_mat @ pi - sig[self._pool_owner]
         pick = np.nonzero(rc < -adm)[0]
         if len(pick) == 0:
@@ -2158,13 +2293,13 @@ class DirectMaster:
             res = {u: s.price(duals) for u, s in self.subs.items()}
         else:
             groups = {}
-            for u in self.players:
+            for u in self.units:
                 groups.setdefault(self._group[u], []).append(u)
             futs = [self._pool.submit(self._price_group, m, duals) for m in groups.values()]
             res = {}
             for f in futs:
                 res.update(f.result())
-            res = {u: res[u] for u in self.players}
+            res = {u: res[u] for u in self.units}
         dt = time.time() - t0
         self.t_price += dt
         self._it_price += dt
@@ -2184,7 +2319,7 @@ class DirectMaster:
 
     def _set_pricing_abs(self, tol):
         """Absolute pricing gap tol / (2 n), refreshed when it moves by 20%."""
-        d = max(tol / (2.0 * len(self.players)), 1e-9)
+        d = max(tol / (2.0 * len(self.units)), 1e-9)
         if self._abs_set is None or abs(d - self._abs_set) > 0.2 * self._abs_set:
             for sub in self.subs.values():
                 sub.set_abs_gap(d)
@@ -2299,6 +2434,7 @@ class DirectMaster:
         return n
 
     def _disable_doi(self):
+        self._dual_next = True
         js = list(self.y.values())
         self.lp.set_cols(js, ub=[0.0] * len(js))
         if isinstance(self.lp, _TwinLP):
@@ -2321,6 +2457,15 @@ class DirectMaster:
     # (LB within tolerance of its RMP value), instead of switching them off to find
     # a y = 0 upper bound. See solve(). Off by default.
     accept_doi_master = False
+    # lp_mixed: primal simplex as usual, but dual simplex for the one solve after the
+    # master changed in a way that leaves the old basis dual feasible rather than
+    # primal feasible: rows added (distribution cuts, tangents), penalty slacks
+    # re-priced or re-bounded (a new round), grid columns switched off. Off by
+    # default: n=60, 10 scenarios (KL, --accept-doi-master), those ~20 solves took
+    # 3.17 s with dual simplex against 2.53 s with primal; 841 s -> 799 s overall,
+    # within run-to-run noise.
+    lp_mixed, _dual_next = False, False
+    split_scenarios = False
 
     def _separate_dist(self, lp_obj):
         return 0
@@ -2360,13 +2505,15 @@ class DirectMaster:
         since_ub = 0
         while True:
             t0 = time.time()
-            lp_obj = self.lp.solve()
+            use_dual = self.lp_mixed and self._dual_next
+            self._dual_next = False
+            lp_obj = self.lp.solve(method='dual' if use_dual else None)
             t_lp = time.time() - t0
             self.t_lp += t_lp
             self._it_price = 0.0
             duals, conv = self._duals()
             if self.purge_every:
-                for u in self.players:
+                for u in self.units:
                     for h in self.col_idx[u]:
                         if self.lp.x(h) > 1e-9:
                             self.last_used[h] = self.iteration
@@ -2542,7 +2689,7 @@ class DirectMaster:
         for key in self.row_keys:
             kind, t, w = key
             con = r.getConstrByName(f'{self.EF_ROW[kind]}_{t}_s{w}')
-            ref = next(((n, a) for u in self.players
+            ref = next(((n, a) for u in self.players if u in self.subs
                         for n, a in self.subs[u].rows.get(key, ()) if a), None)
             if con is None or ref is None:
                 missing += 1
@@ -2563,7 +2710,7 @@ class DirectMaster:
     def _add_seeds(self, init_vals, init_cols):
         """The first column per prosumer: its plan in the extensive-form solution."""
         cols = list(init_cols) if init_cols is not None else [
-            self.subs[u].column_from(init_vals) for u in self.players]
+            self.subs[u].column_from(init_vals) for u in self.units]
         # The seed plans come from a MIP solved to its feasibility tolerance, so they
         # balance the carrier rows only to ~1e-7. With every prosumer on its single
         # seed column those equality rows are then feasible or not at the LP's own
@@ -2587,7 +2734,7 @@ class DirectMaster:
                   + (' (repaired)' if init_cols is None and self.seed_residual else ''))
         for c in cols:
             self.add_column(c)
-        self.protected = {h for u in self.players for h in self.col_idx[u]}
+        self.protected = {h for u in self.units for h in self.col_idx[u]}
         if self.lp_backend == 'gurobi' and isinstance(self.lp, _LP):
             m = self.lp.m
             m.optimize()
@@ -2693,13 +2840,18 @@ class DirectMaster:
         obj = self.lp.solve()
         self._final_ub(obj)
         duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
+        if len(self.units) != len(self.players):
+            unit_sigma = sigma
+            sigma = {u: 0.0 for u in self.players}
+            for x, v in unit_sigma.items():
+                sigma[self.unit_player[x]] += v
         return {'status': 'optimal' if status == 'done' else status,
                 'obj': obj, 'lb': self.lb, 'ub': self.ub,
                 'gap': (self.ub - self.lb) / (1.0 + abs(self.ub)), 'duals': duals,
                 'sigma': sigma, 'iterations': self.iteration,
-                'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.players},
+                'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.units},
                 'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
-                'columns': {u: len(self.columns[u]) for u in self.players},
+                'columns': {u: len(self.columns[u]) for u in self.units},
                 'y_total': self._y_total(), 'penalty': {'rounds': rounds},
                 'doi': {'used': self.doi, 'active_at_end': self.doi_active,
                         'master_certified': self.doi_master_certified,
@@ -2711,6 +2863,7 @@ class DirectMaster:
                            'pricing_tightened': self.pricing_tightened,
                            'purged': self.purged, 'pool_hits': self.pool_hits,
                            'fallback_purged': getattr(self, 'fallback_purged', 0),
+                           'mp12_patterns': self.mp12_patterns,
                            'omega_tol': self.omega_tol, 'pricing_abs_final': self._abs_set,
                            'pool_rounds': self.pool_rounds,
                            'seed_residual': self.seed_residual,
@@ -2726,11 +2879,18 @@ class DirectMaster:
 
     def terminal_columns(self, duals):
         if self.best is not None and duals is self.best[0]:
-            return {u: (self.best[1][u], self.best[2][u]) for u in self.players}
+            per = {x: (self.best[1][x], self.best[2][x]) for x in self.units}
+        else:
+            per = {}
+            for x, sub in self.subs.items():
+                obj, _, col = sub.price(duals)
+                per[x] = (obj, col)
+        if len(self.units) == len(self.players):
+            return per
         out = {}
-        for u, sub in self.subs.items():
-            obj, _, col = sub.price(duals)
-            out[u] = (obj, col)
+        for u in self.players:
+            xs = [x for x in self.units if self.unit_player[x] == u]
+            out[u] = (sum(per[x][0] for x in xs), Column.total(u, [per[x][1] for x in xs]))
         return out
 
 
@@ -2850,6 +3010,7 @@ class KLMaster(DirectMaster):
 
     def _refine(self, rho):
         self._add_cut(rho)
+        self._dual_next = True
 
     def _n_cuts(self):
         return len(self.cut_rows) + 1       # rho_hat's cut is theta's bound
@@ -2864,15 +3025,16 @@ class KLMaster(DirectMaster):
                 coefs.append(a)
         return obj, rows, coefs
 
-    def add_column(self, col):
-        super().add_column(col)
-        self._cvec[self.col_idx[col.player][-1]] = col.first + np.asarray(col.scen, float)
+    def _add_one(self, col):
+        h = super()._add_one(col)
+        self._cvec[h] = col.first + np.asarray(col.scen, float)
+        return h
 
     def _purge(self, ref):
         n = super()._purge(ref)
         if n:
             live = set(self.x0.values()) | set(self.y.values()) | {
-                h for u in self.players for h in self.col_idx[u]}
+                h for u in self.units for h in self.col_idx[u]}
             self._cvec = {j: v for j, v in self._cvec.items() if j in live}
         return n
 
@@ -3100,6 +3262,7 @@ class KLDualMaster(KLMaster):
                 + float(sum(self._ref[w] * xval(self.t[w]) for w in range(len(self.t)))))
 
     def _refine(self, rho):
+        self._dual_next = True
         for w in np.nonzero(rho > 0)[0]:
             self._tangents(w, [float(np.log(rho[w] / self._ref[w]))])
 
@@ -3648,6 +3811,9 @@ def run(args):
         + (f'_kl{args.kl_radius:g}' + ('_nested' if args.kl_nested else '')
            + ('_dual' if args.kl_master == 'dual' else '') if kl else '') \
         + ('_accdoi' if args.accept_doi_master else '') \
+        + ('_ndw' if args.split_scenarios and args.mp12 else
+           '_split' if args.split_scenarios else '_mp12' if args.mp12 else '') \
+        + ('_lpmix' if args.lp_mixed else '') \
         + ('_seed' if kl and args.kl_seed_ef else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
@@ -3657,6 +3823,15 @@ def run(args):
         DirectMaster.doi_taper_steps = args.doi_taper_steps
     if args.accept_doi_master:
         DirectMaster.accept_doi_master = True
+    if args.lp_mixed:
+        DirectMaster.lp_mixed = True
+    DirectMaster.split_scenarios = args.split_scenarios
+    DirectMaster.mp12 = args.mp12
+    # the split units carry 1/|Omega| of a plan each: purge them harder
+    if args.purge_age is None:
+        args.purge_age = 20 if args.split_scenarios else 50
+    if args.purge_cap is None:
+        args.purge_cap = 5 if args.split_scenarios else 40
     if args.doi_skip:
         DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
 
@@ -3807,7 +3982,8 @@ def run(args):
             'max_rounds', 'pricing_workers', 'round_tol', 'ub_every', 'lp_method',
             'purge_every', 'purge_age', 'purge_cap', 'lp_presolve', 'cold_start',
             'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp',
-            'dual_init', 'omega_tol', 'pricing_abs', 'kl_radius', 'kl_nested',
+            'dual_init', 'omega_tol', 'pricing_abs', 'kl_radius', 'kl_nested', 'lp_mixed',
+            'split_scenarios', 'mp12',
             'kl_cut_frac', 'kl_master')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
@@ -3886,10 +4062,12 @@ def main():
                          'unpenalized RMP value and LB the Lagrangian bound')
     ap.add_argument('--purge-every', type=int, default=10,
                     help='column management: purge every k iterations (0: never)')
-    ap.add_argument('--purge-age', type=int, default=50,
-                    help='iterations a column may sit unused before it can be purged')
-    ap.add_argument('--purge-cap', type=int, default=40,
-                    help='purge only while there are more than this many columns per prosumer')
+    ap.add_argument('--purge-age', type=int, default=None,
+                    help='iterations a column may sit unused before it can be purged '
+                         '(default 20 with --split-scenarios, 50 without)')
+    ap.add_argument('--purge-cap', type=int, default=None,
+                    help='purge only while there are more than this many columns per '
+                         'pricing unit (default 5 with --split-scenarios, 40 without)')
     ap.add_argument('--lp-presolve', default='auto', choices=['auto', 'off'],
                     help='presolve of the master LP')
     ap.add_argument('--lp-method', default='primal',
@@ -3961,6 +4139,20 @@ def main():
     ap.add_argument('--kl-cut-frac', type=float, default=0.05,
                     help='KL: add a cut once theta falls short of the worst case by this '
                          'share of the CG tolerance')
+    ap.add_argument('--mp12', dest='mp12', action='store_true', default=True,
+                    help='prosumers with first-stage commitment enter as a pattern column '
+                         'plus one column per scenario, tied by sum lambda = mu (MP1-2; '
+                         'default on)')
+    ap.add_argument('--no-mp12', dest='mp12', action='store_false')
+    ap.add_argument('--split-scenarios', dest='split_scenarios', action='store_true',
+                    default=True,
+                    help='price prosumers without first-stage variables one scenario at a '
+                         'time: one column and one convexity row per (prosumer, scenario); '
+                         'same master LP value, columns 1/|Omega| as dense (default on)')
+    ap.add_argument('--no-split-scenarios', dest='split_scenarios', action='store_false')
+    ap.add_argument('--lp-mixed', action='store_true',
+                    help='master LP: dual simplex for the one solve after rows are added, '
+                         'the penalty changes or the DOIs are switched off; primal otherwise')
     ap.add_argument('--kl-seed-ef', action='store_true',
                     help="KL: start the master with the robust EF's worst-case distribution "
                          'as a cut (tangents for --kl-master dual)')
