@@ -878,7 +878,10 @@ class PlayerPricing:
                 g.optimize()
                 break
             except Exception as e:      # WLS token renewal hiccup: wait and retry
-                if 'license' not in str(e).lower() or attempt == 4:
+                # (also 'Token validation error (status 6)': it killed 2 of 30 runs at
+                # n=60, 20 scenarios, ~140k pricing calls each)
+                msg = str(e).lower()
+                if ('license' not in msg and 'token' not in msg) or attempt == 4:
                     raise
                 time.sleep(2.0 * (attempt + 1))
         if g.SolCount == 0:
@@ -3791,7 +3794,9 @@ def run(args):
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
-    players, _, T, base, name = build_instance(args.n)
+    players, _, T, base, name = build_instance(args.n, day=args.day)
+    if args.day is not None:
+        name = f'{name}_day{args.day}'
     scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
                           wind_sigma=args.wind_sigma, solar_sigma=args.wind_sigma,
                           load_sigma=args.load_sigma, price_sigma=args.price_sigma,
@@ -4018,6 +4023,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--n', type=int, default=6, help='community size (6, 15, 30, 60)')
     ap.add_argument('--scenarios', type=int, default=5)
+    ap.add_argument('--day', type=int, default=None,
+                    help='calendar day of the data (as run_multiday.py); default: the '
+                         "instance's default day")
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--wind-sigma', type=float, default=0.25,
                     help='renewable forecast error (std of the multiplicative factor)')
@@ -4032,7 +4040,7 @@ def main():
                     help=f'relative gap of the extensive form and stand-alone MILPs '
                          f'(default {EF_GAP})')
     ap.add_argument('--mip-time-limit', type=float, default=None)
-    ap.add_argument('--mip-solver', default='highs', choices=['highs', 'gurobi'],
+    ap.add_argument('--mip-solver', default='gurobi', choices=['highs', 'gurobi'],
                     help='extensive form and stand-alone MILPs (DP_S^Omega)')
     ap.add_argument('--cg-time-limit', type=float, default=None)
     ap.add_argument('--cold-start', action='store_true',
@@ -4045,9 +4053,9 @@ def main():
     ap.add_argument('--engine', default='direct', choices=['scip', 'direct'],
                     help="'direct': our own loop on a HiGHS or Gurobi LP; 'scip' "
                          '(SCIP master with its pricer plugin) is no longer supported')
-    ap.add_argument('--lp-solver', default='highs', choices=['highs', 'gurobi'],
+    ap.add_argument('--lp-solver', default='gurobi', choices=['highs', 'gurobi'],
                     help='master LP solver for --engine direct')
-    ap.add_argument('--pricing-solver', default='highs', choices=['highs', 'gurobi'])
+    ap.add_argument('--pricing-solver', default='gurobi', choices=['highs', 'gurobi'])
     ap.add_argument('--pricing-gap', type=float, default=MIP_GAP,
                     help=f'relative gap of the pricing MILPs (default {MIP_GAP})')
     ap.add_argument('--pricing-workers', type=int, default=0,

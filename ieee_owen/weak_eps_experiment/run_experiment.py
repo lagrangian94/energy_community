@@ -86,8 +86,12 @@ def _qty_by_player(results, key, players, T):
     return out
 
 # ----------------------------------------------------------------------------- instances
-def build_instance(n):
-    """Return (players, configuration, time_periods, parameters, scenario_name)."""
+def build_instance(n, day=None):
+    """Return (players, configuration, time_periods, parameters, scenario_name).
+
+    day: the calendar day of the data (as run_multiday's sens['day']); None keeps
+    the default day. Only for n = 15, 30, 60.
+    """
     T = list(range(24))
     if n == 6:
         players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
@@ -132,6 +136,8 @@ def build_instance(n):
     else:
         raise ValueError(f"unsupported size {n}")
 
+    if day is not None:
+        sens['day'] = day
     sens['reserve_price'] = RESERVE_PRICE
     sens['peak_penalty'] = PEAK_PENALTY
     sens['reserve_block_hours'] = RESERVE_BLOCK_HOURS
