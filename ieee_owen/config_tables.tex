@@ -19,8 +19,9 @@
 \label{sec:setup}
 The community of Section~\ref{sec:model} is instantiated at $|N|\in\{6,15,30,60\}$ over
 $|T|=24$ hourly periods, with Korean (Jeju) load and price data and DK2 wind. Both
-community-level channels are active: a symmetric FCR-N-type reserve product sold in six
-four-hour blocks at $56$~\euro/MW$\cdot$h and a coincident-peak charge of
+community-level channels are active: a symmetric reserve product sold hour by hour as
+in the Nordic FCR-N market, paid the hourly DK2 FCR-N prices of January 2025 (mean
+$21.1$~\euro/MW$\cdot$h), and a coincident-peak charge of
 $150$~\euro/MW, so $m=(|K|+3)|T|=144$ at every size. Each size is run over $31$ daily
 instances; aggregates are geometric means, which is the appropriate summary for a
 quantity whose scaling in $n$ is the object of interest. The dispatch MILP, the
@@ -73,8 +74,8 @@ Parameter & Value & Unit & Note \\
 \quad Round-trip efficiency & 0.90 & -- & each way, every carrier \\
 \midrule
 \multicolumn{4}{@{}l}{\emph{Reserve and peak coupling}} \\
-\quad Reserve price $\pi^{\mathrm{res}}$ & 56 & \euro/MW$\cdot$h & Nordic FCR-N, DK2 \\
-\quad Reserve product & \multicolumn{3}{l}{symmetric, 4-hour blocks} \\
+\quad Reserve price $\pi^{\mathrm{res}}_t$ & hourly & \euro/MW$\cdot$h & FCR-N DK2, Jan.\ 2025, mean 21.1 \\
+\quad Reserve product & \multicolumn{3}{l}{symmetric, hourly (Nordic FCR-N)} \\
 \quad Peak penalty $\delta^{\mathrm{peak}}$ & 150 & \euro/MW &  \\
 \bottomrule
 \end{tabular}

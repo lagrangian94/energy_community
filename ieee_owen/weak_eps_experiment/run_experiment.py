@@ -40,7 +40,8 @@ sys.path.insert(0, _ROOT)
 os.chdir(_ROOT)
 
 import numpy as np
-from data_generator import setup_lem_parameters, log_reserve_calibration
+from data_generator import (setup_lem_parameters, log_reserve_calibration,
+                            reserve_price_series)
 from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
                              print_report as _report_reserve_peak)
 from stability_check import check_allocations
@@ -53,19 +54,24 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 
 # Reserve/peak scenario in ABSOLUTE units (reserve.txt sec.2.1 / sec.3.1), same
 # across sizes so results stay comparable.
-#   RESERVE_PRICE [EUR/MW.h]  0 = channel off, 11 = low regime (Johnsen),
-#                             56 = baseline (Nordic FCR-N, DK2 -- the zone the
-#                             wind CF series comes from)
+#   RESERVE_PRICE [EUR/MW.h]  a flat number (0 = channel off, 11 = low regime,
+#                             56 = 2022-01..2023-03 FCR-N average) or the name of an
+#                             hourly series: 'fcrn_dk2' = Nordic FCR-N, DK2, January
+#                             2025 (data_generator.RESERVE_PRICE_DATA), the baseline
 #   PEAK_PENALTY  [EUR/MW]    0 = channel off, 150-200 = Cornelusse et al. 2019
 # Sweeping these is the sec.3.1 scenario axis; the channel-decomposition runs
 # (balance only / +reserve / +peak / both) just zero out one or the other.
-RESERVE_PRICE = 56.0
+RESERVE_PRICE = 'fcrn_dk2'
 PEAK_PENALTY = 150.0
-# Reserve market design. 4-hour blocks match Continental Europe FCR as operated since
-# 2020; the 24-hour product the code used before exists in no current FCR market and
-# let a single bad hour cap the whole day. 'symmetric' is the default product.
-RESERVE_BLOCK_HOURS = 4
+# Reserve market design: hourly products, as the Nordic FCR-N market is cleared
+# (D-2 and D-1 auctions, one product per hour). The earlier 4-hour blocks were the
+# Continental Europe FCR design, which did not match the FCR-N price.
+RESERVE_BLOCK_HOURS = 1
 RESERVE_PRODUCT = 'symmetric'
+# Reserve shortfall treatment (compact_utility.reserve_mode): 'penalty' (default)
+# charges k * pi_res_t per MW.h short, 'hard' forbids a shortfall.
+RESERVE_MODE = 'penalty'
+RESERVE_PENALTY_FACTOR = 5.0
 
 # ----------------------------------------------------------------------------- helpers
 def _jsonable(x):
@@ -107,11 +113,21 @@ def build_instance(n, day=None):
         }
         # base defaults, then switch reserve/peak on at the scenario prices
         params = setup_lem_parameters(players, config, T)
-        params['pi_res'] = RESERVE_PRICE
+        params.pop('pi_res_t', None)
+        if isinstance(RESERVE_PRICE, str):
+            # the default instance is day 9 of the calendar (data_generator)
+            params['pi_res_t'] = reserve_price_series(RESERVE_PRICE, 1, 9, T)
+            params['reserve_price_source'] = RESERVE_PRICE
+            params['pi_res'] = float(np.mean(list(params['pi_res_t'].values())))
+        else:
+            params['pi_res'] = RESERVE_PRICE
+        params['pi_up'] = params['pi_dn'] = params['pi_res']
         params['pi_E_peak'] = PEAK_PENALTY
         params['reserve_block_hours'] = RESERVE_BLOCK_HOURS
         params['reserve_product'] = RESERVE_PRODUCT
-        params['enable_reserve'] = RESERVE_PRICE > 0.0
+        params['reserve_mode'] = RESERVE_MODE
+        params['reserve_penalty_factor'] = RESERVE_PENALTY_FACTOR
+        params['enable_reserve'] = params['pi_res'] > 0.0
         params['enable_peak'] = PEAK_PENALTY > 0.0
         # This branch overrides the prices after setup_lem_parameters, so the
         # sec.2.2 headroom-calibration check has to be re-run by hand.
@@ -142,6 +158,8 @@ def build_instance(n, day=None):
     sens['peak_penalty'] = PEAK_PENALTY
     sens['reserve_block_hours'] = RESERVE_BLOCK_HOURS
     sens['reserve_product'] = RESERVE_PRODUCT
+    sens['reserve_mode'] = RESERVE_MODE
+    sens['reserve_penalty_factor'] = RESERVE_PENALTY_FACTOR
     params = setup_lem_parameters(players, config, T, sens)
     params = override_fn(params, T)
     return players, config, T, params, scenario

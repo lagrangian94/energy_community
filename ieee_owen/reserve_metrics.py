@@ -109,6 +109,12 @@ def _blocks(T, params):
     return reserve_blocks(T, params.get('reserve_block_hours', 24))
 
 
+def _pay(params, blk, key='pi_res'):
+    """EUR/MW for holding the product over `blk` (hourly series or flat price)."""
+    from compact_utility import block_reserve_payment
+    return block_reserve_payment(params, blk, key)
+
+
 def _r_sym_dict(results, n_blocks):
     """r_sym as {block index: MW}; tolerates the pre-block scalar form."""
     v = results.get('r_sym') if isinstance(results, dict) else None
@@ -285,7 +291,7 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
             'pi_res_eur_per_mw_h': pi_res,
             'pi_E_peak_eur_per_mw': pi_peak,
             # r_sym is held for the whole horizon (reserve.txt sec.2.1)
-            'horizon_payment_per_mw': len(T) * pi_res,
+            'horizon_payment_per_mw': _pay(params, T),
         },
         'checks': {},
     }
@@ -321,11 +327,11 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
                     up_max, dn_max, blk, players, r_sym.get(i, 0.0),
                     standalone_i=_solo('sym', i))
                 per_block[i] = {'hours': list(blk), 'r_sym': r_sym.get(i, 0.0),
-                                'revenue': len(blk) * pi_res * r_sym.get(i, 0.0), **pool}
+                                'revenue': _pay(params, blk) * r_sym.get(i, 0.0), **pool}
                 per_player_sym[i] = pps
                 sum_up.update(su); sum_dn.update(sd)
             qty_mwh = float(sum(len(b) * r_sym.get(i, 0.0) for i, b in enumerate(blocks)))
-            revenue = pi_res * qty_mwh
+            revenue = float(sum(pb['revenue'] for pb in per_block.values()))
         else:
             # two independent products; pooling is computed per direction and only
             # the time channel exists (see _pooling_one_sided)
@@ -337,8 +343,8 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
                 per_block[i] = {
                     'hours': list(blk),
                     'r_up': r_up_b.get(i, 0.0), 'r_dn': r_dn_b.get(i, 0.0),
-                    'revenue': len(blk) * (pi_up * r_up_b.get(i, 0.0)
-                                           + pi_dn * r_dn_b.get(i, 0.0)),
+                    'revenue': (_pay(params, blk, 'pi_up') * r_up_b.get(i, 0.0)
+                                + _pay(params, blk, 'pi_dn') * r_dn_b.get(i, 0.0)),
                     'up': pu_, 'dn': pd_,
                 }
                 per_player_sym[i] = {'up': ppu, 'dn': ppd}
@@ -346,7 +352,7 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
             up_mwh = float(sum(len(b) * r_up_b.get(i, 0.0) for i, b in enumerate(blocks)))
             dn_mwh = float(sum(len(b) * r_dn_b.get(i, 0.0) for i, b in enumerate(blocks)))
             qty_mwh = up_mwh + dn_mwh
-            revenue = pi_up * up_mwh + pi_dn * dn_mwh
+            revenue = float(sum(pb['revenue'] for pb in per_block.values()))
             out['r_up_mwh'], out['r_dn_mwh'] = up_mwh, dn_mwh
 
         out['blocks'] = {'block_hours': params.get('reserve_block_hours', 24),
@@ -357,6 +363,18 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
         # MW.h actually contracted over the day, comparable across block lengths
         out['r_sym_mwh'] = qty_mwh
         out['reserve_revenue'] = revenue
+        # reserve_mode 'penalty': shortfall sold beyond the headroom and its charge
+        from compact_utility import reserve_mode, reserve_penalty_price
+        out['reserve_mode'] = reserve_mode(params)
+        short_up = {int(t): float(v) for t, v in (results.get('s_res_up') or {}).items()}
+        short_dn = {int(t): float(v) for t, v in (results.get('s_res_dn') or {}).items()}
+        sym = product == 'symmetric'
+        out['reserve_shortfall_mwh'] = float(sum(short_up.values()) + sum(short_dn.values()))
+        out['reserve_penalty_cost'] = float(
+            sum(reserve_penalty_price(params, t, 'pi_res' if sym else 'pi_up') * v
+                for t, v in short_up.items())
+            + sum(reserve_penalty_price(params, t, 'pi_res' if sym else 'pi_dn') * v
+                  for t, v in short_dn.items()))
         out['r_plus_by_player'] = up
         out['r_minus_by_player'] = dn
         out['r_plus_total_by_player'] = {u: float(sum(up[u].values())) for u in players}
@@ -497,7 +515,7 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
             # Conditional on r_sym > 0. At r_sym = 0 the variable sits nonbasic at its
             # lower bound, its reduced cost is >= 0, and the identity relaxes to <=.
             mu_sum = float(sum(mu_p.values()) + sum(mu_m.values()))
-            target = len(T) * pi_res
+            target = _pay(params, T)
             out['checks']['dual_sum_mu'] = mu_sum
             out['checks']['dual_sum_mu_target'] = target
             # The identity is per BLOCK -- sum_{t in T_i} (mu+ + mu-) = |T_i| pi_res --
@@ -507,13 +525,13 @@ def reserve_peak_metrics(results, params, players, time_periods, prices=None,
                 if product == 'symmetric':
                     # one variable spans both directions of the block
                     pairs = [(sum(mu_p.get(t, 0.0) + mu_m.get(t, 0.0) for t in blk),
-                              len(blk) * pi_res, r_sym.get(i, 0.0), 'sym')]
+                              _pay(params, blk), r_sym.get(i, 0.0), 'sym')]
                 else:
                     # each direction has its own variable, price and identity
                     pairs = [(sum(mu_p.get(t, 0.0) for t in blk),
-                              len(blk) * pi_up, r_up_b.get(i, 0.0), 'up'),
+                              _pay(params, blk, 'pi_up'), r_up_b.get(i, 0.0), 'up'),
                              (sum(mu_m.get(t, 0.0) for t in blk),
-                              len(blk) * pi_dn, r_dn_b.get(i, 0.0), 'dn')]
+                              _pay(params, blk, 'pi_dn'), r_dn_b.get(i, 0.0), 'dn')]
                 binding[i] = {}
                 for s_i, tgt_i, q, lbl in pairs:
                     basic = q > tol

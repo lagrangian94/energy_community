@@ -59,15 +59,24 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 T = list(range(24))
 DAYS = list(range(1, 32))                      # 31 days, matching results_53
 # Reserve/peak scenario in ABSOLUTE units (reserve.txt sec.2.1 / sec.3.1).
-#   RESERVE_PRICE [EUR/MW.h]  0 = channel off, 11 = low regime (Johnsen),
-#                             56 = baseline (Nordic FCR-N, DK2)
+#   RESERVE_PRICE [EUR/MW.h]  a flat number (0 = channel off, 11 = low regime,
+#                             56 = 2022-01..2023-03 FCR-N average) or 'fcrn_dk2', the
+#                             hourly Nordic FCR-N DK2 prices of January 2025 (baseline)
 #   PEAK_PENALTY  [EUR/MW]    0 = channel off, 150-200 = Cornelusse range
-RESERVE_PRICE, PEAK_PENALTY = 56.0, 150.0
-# Reserve market design. 4-hour blocks match Continental Europe FCR as operated since
-# 2020; the 24-hour product the code used before exists in no current FCR market and
-# let a single bad hour cap the whole day. 'symmetric' is the default product.
-RESERVE_BLOCK_HOURS = 4
+RESERVE_PRICE, PEAK_PENALTY = 'fcrn_dk2', 150.0
+# Monthly mean of the fcrn_dk2 series, the label the baseline carries on the
+# reserve-price sweep axis below.
+FCRN_MEAN = 21.1
+# Reserve market design: hourly products, as the Nordic FCR-N market is cleared.
+# The earlier 4-hour blocks were the Continental Europe FCR design.
+RESERVE_BLOCK_HOURS = 1
 RESERVE_PRODUCT = 'symmetric'
+# How a reserve shortfall is treated (compact_utility.reserve_mode). 'penalty' (the
+# default) lets the sold capacity exceed a scenario's headroom at k * pi_res_t per
+# MW.h short; 'hard' forbids it, the formulation used before 2026-09-29. Every run is
+# also registered under 'hard' as <name>_hard (group 'hard'), below.
+RESERVE_MODE = 'penalty'
+RESERVE_PENALTY_FACTOR = 5.0
 # Stand-alone r_sym({j}) baseline for the sec.3.3 pooling gain: one extra small
 # MIP per prosumer per day. Turn off if the added solve time ever matters.
 STANDALONE_BASELINE = True
@@ -175,24 +184,27 @@ RUNS = [
 
     # ---- reserve.txt sec.3.1 scenario axes (6p, on top of the baseline instance) ----
     # Channel toggle, for the sec.3.3 metric 1 decomposition of v(N). baseline_6p
-    # IS the "+both" corner (56/150), so only the other three are needed here.
+    # IS the "+both" corner (FCR-N/150), so only the other three are needed here.
     dict(name='channel_balance_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 0.0, 'peak_penalty': 0.0}, ovfn=None, budget=300),
     dict(name='channel_reserve_6p', group='scenario', players=P6, config=C6, base=BASE6,
-         ov={'reserve_price': 56.0, 'peak_penalty': 0.0}, ovfn=None, budget=300),
+         ov={'reserve_price': 'fcrn_dk2', 'peak_penalty': 0.0}, ovfn=None, budget=300),
     dict(name='channel_peak_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 0.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
-    # reserve_price sweep 0 / 11 / 56 at peak=150. The 0 and 56 ends are
-    # channel_peak_6p and baseline_6p, so only the low regime is new.
+    # reserve_price sweep 0 / 11 / FCR-N (hourly, mean 21.1) / 56 at peak=150. The 0
+    # end and the FCR-N baseline are channel_peak_6p and baseline_6p; 56 is the
+    # 2022-01..2023-03 FCR-N average, a high-price regime.
     dict(name='reserve_low_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 11.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
-    # peak_penalty sweep 0 / 150 / 200 at reserve=56. The 0 and 150 ends are
-    # channel_reserve_6p and baseline_6p, so only the top of the Cornelusse range.
+    dict(name='reserve_high_6p', group='scenario', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 56.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+    # peak_penalty sweep 0 / 150 / 200 at the FCR-N reserve price. The 0 and 150 ends
+    # are channel_reserve_6p and baseline_6p, so only the top of the Cornelusse range.
     dict(name='peak_200_6p', group='scenario', players=P6, config=C6, base=BASE6,
-         ov={'reserve_price': 56.0, 'peak_penalty': 200.0}, ovfn=None, budget=300),
+         ov={'reserve_price': 'fcrn_dk2', 'peak_penalty': 200.0}, ovfn=None, budget=300),
     # sec.3.3 metric 6: reserve_price x low_h2_margin interaction -- does reserve
     # revenue substitute for the hydrogen margin and change the commitment pattern?
-    # low_h2_margin_6p already covers this cell at reserve_price = 56.
+    # low_h2_margin_6p already covers this cell at the FCR-N baseline price.
     dict(name='low_h2_reserve0_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'base_h2_price_eur': 2.0, 'import_factor': 3.0,
              'reserve_price': 0.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
@@ -211,17 +223,25 @@ RUNS = [
 RUNS += [dict(r, name=r['name'] + '_legacycaps', group='legacycaps',
               ov={**r['ov'], 'grid_caps': 'legacy'})
          for r in list(RUNS) if r['ov'].get('grid_caps') != 'legacy']
+# The hard reserve formulation (no shortfall), kept as its own group so it can be
+# rerun and compared: <name>_hard for every run above except the legacy-cap ones.
+RUNS += [dict(r, name=r['name'] + '_hard', group='hard',
+              ov={**r['ov'], 'reserve_mode': 'hard'})
+         for r in list(RUNS) if r['group'] != 'legacycaps']
 
 # sec.3.3 metric 1/6 groupings: (label, run at that cell). Consumed by summarize.py.
 CHANNEL_CELLS = {
-    'balance':      'channel_balance_6p',    # reserve 0,  peak 0
-    'reserve_only': 'channel_reserve_6p',    # reserve 56, peak 0
-    'peak_only':    'channel_peak_6p',       # reserve 0,  peak 150
-    'both':         'baseline_6p',           # reserve 56, peak 150
+    'balance':      'channel_balance_6p',    # reserve 0,     peak 0
+    'reserve_only': 'channel_reserve_6p',    # reserve FCR-N, peak 0
+    'peak_only':    'channel_peak_6p',       # reserve 0,     peak 150
+    'both':         'baseline_6p',           # reserve FCR-N, peak 150
 }
-RESERVE_SWEEP = {0.0: 'channel_peak_6p', 11.0: 'reserve_low_6p', 56.0: 'baseline_6p'}
+# price axes keyed by EUR/MW.h; the FCR-N baseline sits at its monthly mean
+RESERVE_SWEEP = {0.0: 'channel_peak_6p', 11.0: 'reserve_low_6p',
+                 FCRN_MEAN: 'baseline_6p', 56.0: 'reserve_high_6p'}
 PEAK_SWEEP = {0.0: 'channel_reserve_6p', 150.0: 'baseline_6p', 200.0: 'peak_200_6p'}
-LOW_H2_SWEEP = {0.0: 'low_h2_reserve0_6p', 11.0: 'low_h2_reserve11_6p', 56.0: 'low_h2_margin_6p'}
+LOW_H2_SWEEP = {0.0: 'low_h2_reserve0_6p', 11.0: 'low_h2_reserve11_6p',
+                FCRN_MEAN: 'low_h2_margin_6p'}
 
 # --------------------------------------------------------------------------- helpers
 def _jsonable(x):
@@ -245,6 +265,8 @@ def build_params(run, day):
     sens['peak_penalty'] = PEAK_PENALTY
     sens['reserve_block_hours'] = RESERVE_BLOCK_HOURS
     sens['reserve_product'] = RESERVE_PRODUCT
+    sens['reserve_mode'] = RESERVE_MODE
+    sens['reserve_penalty_factor'] = RESERVE_PENALTY_FACTOR
     sens.update(run['ov'])
     sens['day'] = day
     params = setup_lem_parameters(run['players'], run['config'], T, sens)

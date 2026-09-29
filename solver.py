@@ -617,7 +617,7 @@ class MasterProblem:
             # under min-cost). Each block is paid for its own length, and each hour's
             # row carries its own block's variable, so the row count is unchanged and
             # only dim(x_0) grows. Mirrors LocalEnergyMarket._add_reserve_constraints.
-            from compact_utility import reserve_blocks as _rblocks
+            from compact_utility import reserve_blocks as _rblocks, block_reserve_payment
             self.reserve_blocks = _rblocks(self.time_periods, self.reserve_block_hours)
             block_of_t = {t: i for i, blk in enumerate(self.reserve_blocks) for t in blk}
             sym = self.reserve_product == 'symmetric'
@@ -625,18 +625,32 @@ class MasterProblem:
                 if sym:
                     self.r_sym[i] = self.model.addVar(
                         vtype="C", name=f"r_sym_{i}", lb=0.0,
-                        obj=-1.0 * len(blk) * self.pi_res)
+                        obj=-block_reserve_payment(self.params, blk))
                 else:
                     self.r_up[i] = self.model.addVar(
                         vtype="C", name=f"r_up_{i}", lb=0.0,
-                        obj=-1.0 * len(blk) * self.pi_up)
+                        obj=-block_reserve_payment(self.params, blk, 'pi_up'))
                     self.r_dn[i] = self.model.addVar(
                         vtype="C", name=f"r_dn_{i}", lb=0.0,
-                        obj=-1.0 * len(blk) * self.pi_dn)
+                        obj=-block_reserve_payment(self.params, blk, 'pi_dn'))
+            # reserve_mode 'penalty': an EC-level shortfall variable per row, priced at
+            # the penalty (compact_utility.reserve_penalty_price), as in the compact model
+            from compact_utility import reserve_mode, reserve_penalty_price
+            penalty = reserve_mode(self.params) == 'penalty'
+            self.s_res_up, self.s_res_dn = {}, {}
             for t in self.time_periods:
                 i = block_of_t[t]
                 up_expr = 1.0 * (self.r_sym[i] if sym else self.r_up[i])
                 dn_expr = 1.0 * (self.r_sym[i] if sym else self.r_dn[i])
+                if penalty:
+                    self.s_res_up[t] = self.model.addVar(
+                        vtype="C", name=f"s_res_up_{t}", lb=0.0,
+                        obj=reserve_penalty_price(self.params, t, 'pi_res' if sym else 'pi_up'))
+                    self.s_res_dn[t] = self.model.addVar(
+                        vtype="C", name=f"s_res_dn_{t}", lb=0.0,
+                        obj=reserve_penalty_price(self.params, t, 'pi_res' if sym else 'pi_dn'))
+                    up_expr += -1.0 * self.s_res_up[t]
+                    dn_expr += -1.0 * self.s_res_dn[t]
                 for u in self.players:
                     var = self.model.data["vars"][u][0]["var"]
                     solution = self.model.data["vars"][u][0]["solution"]

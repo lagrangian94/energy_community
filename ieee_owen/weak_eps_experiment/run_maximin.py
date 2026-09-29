@@ -31,7 +31,8 @@ from chp import ColumnGenerationSolver
 from maximin import MaximinSelector, owen_gap_corrected
 from stability_check import check_allocations
 from run_experiment import (build_instance, _jsonable, RESERVE_PRICE, PEAK_PENALTY,
-                            RESERVE_BLOCK_HOURS, RESERVE_PRODUCT)
+                            RESERVE_BLOCK_HOURS, RESERVE_PRODUCT, RESERVE_MODE,
+                            RESERVE_PENALTY_FACTOR)
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 
@@ -91,7 +92,8 @@ def set_electrolyzer_count(k, players, config, T, params, scenario):
     sens = {key: v[0] for key, v in
             (LC.BASELINE_CANDIDATES_15 if n == 15 else LC.BASELINE_CANDIDATES_30).items()}
     sens.update(reserve_price=RESERVE_PRICE, peak_penalty=PEAK_PENALTY,
-                reserve_block_hours=RESERVE_BLOCK_HOURS, reserve_product=RESERVE_PRODUCT)
+                reserve_block_hours=RESERVE_BLOCK_HOURS, reserve_product=RESERVE_PRODUCT,
+                reserve_mode=RESERVE_MODE, reserve_penalty_factor=RESERVE_PENALTY_FACTOR)
     p = setup_lem_parameters(players, cfg, T, sens)
     p = (LC.apply_15player_overrides if n == 15 else LC.apply_30player_overrides)(p, T)
     print(f"  [composition] electrolyzer owners: {len(owners)} -> {owners}")
@@ -150,6 +152,7 @@ def set_day(day, n, players, config, T, reserve_price=None, peak_penalty=None):
     sens.update(reserve_price=RESERVE_PRICE if reserve_price is None else reserve_price,
                 peak_penalty=PEAK_PENALTY if peak_penalty is None else peak_penalty,
                 reserve_block_hours=RESERVE_BLOCK_HOURS, reserve_product=RESERVE_PRODUCT,
+                reserve_mode=RESERVE_MODE, reserve_penalty_factor=RESERVE_PENALTY_FACTOR,
                 day=day)
     p = setup_lem_parameters(players, config, T, sens)
     return ovfn(p, T) if ovfn else p

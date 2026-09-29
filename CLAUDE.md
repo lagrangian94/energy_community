@@ -89,16 +89,28 @@ subproblems via column generation), *not* `model_type='lp'`. Do not conflate the
 
 Two community-level channels beyond the carrier balances (`reserve.txt`):
 
-- **Reserve**: one symmetric FCR-N-type capacity product `r_sym` — a single scalar,
-  no time index — that must be deliverable in *both* directions in *every* hour.
-  The same variable enters both coupling row families, so at the optimum
-  `r_sym* = min_t min(sum_j r+, sum_j r-)` without that min ever being written down.
-  Held for the whole horizon, so the payment is `|T| * pi_res * r_sym`
-  (baseline `24 * 56 = 1344` EUR/MW/day) — the `|T|` factor is easy to drop by mistake.
+- **Reserve**: a symmetric capacity product `r_sym_i`, one per delivery block T_i
+  (`reserve_block_hours`), that must be deliverable in *both* directions in *every*
+  hour of its block. The same variable enters both coupling row families, so at the
+  optimum `r_sym_i* = min_{t in T_i} min(sum_j r+, sum_j r-)` without that min ever
+  being written down. The block is paid `compact_utility.block_reserve_payment`: the
+  sum of its hours' prices (`pi_res_t`) or `|T_i| * pi_res` at a flat price — the
+  block-length factor is easy to drop by mistake. Baseline (since 2026-09-29) is the
+  Nordic FCR-N design: 1-hour blocks, hourly DK2 FCR-N prices of January 2025
+  (`reserve_price='fcrn_dk2'`, `data/fcr_n_dk2_2025_01.csv`, mean 21.1 EUR/MW.h).
+- **Reserve shortfall** (`reserve_mode`, `compact_utility.reserve_mode`): `'penalty'`
+  (default since 2026-09-29) adds an EC-level shortfall `s_res_up/dn` per row (and
+  scenario) charged `k * pi_res_t` per MW.h, k = `reserve_penalty_factor` = 5; `'hard'`
+  is the earlier formulation with no shortfall. k -> inf reproduces 'hard'; with
+  1-hour blocks and k >= 1 the deterministic model gives the same solution either way.
+  run_multiday registers every run also as `<name>_hard` (group `hard`), and
+  stochastic_extension takes `--reserve-mode hard` (file name `_hard`). The code and
+  results before the switch are tagged `backup/reserve-hard-4h-56-2026-09-29`.
 - **Peak**: `sum_j (i_E_gri - e_E_gri) <= p`, cost `delta_peak * p`.
 
 Prices are **absolute**, not fractions of the import price:
-`reserve_price` [EUR/MW.h] ∈ {0, 11, 56}, `peak_penalty` [EUR/MW] ∈ {0, 150, 200}.
+`reserve_price` [EUR/MW.h] ∈ {0, 11, 'fcrn_dk2', 56} (a flat number or a named hourly
+series), `peak_penalty` [EUR/MW] ∈ {0, 150, 200}.
 Both default to 0, which leaves the model byte-identical to the pre-reserve version.
 
 Per-asset headroom is private (it enters every subproblem); the coupling rows and

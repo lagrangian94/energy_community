@@ -52,6 +52,7 @@ import numpy as np
 from pyscipopt import Model, quicksum
 
 from solver import calculate_column_cost
+from compact_utility import block_reserve_payment, reserve_mode, reserve_penalty_price
 
 
 # --------------------------------------------------------------------------- pool extraction
@@ -237,10 +238,19 @@ class MaximinSelector:
             for blk in mp.reserve_blocks:
                 if sym:
                     mdl.addCons(quicksum(pi[('resup', t)] + pi[('resdn', t)] for t in blk)
-                                <= -len(blk) * mp.pi_res)
+                                <= -block_reserve_payment(mp.params, blk))
                 else:
-                    mdl.addCons(quicksum(pi[('resup', t)] for t in blk) <= -len(blk) * mp.pi_up)
-                    mdl.addCons(quicksum(pi[('resdn', t)] for t in blk) <= -len(blk) * mp.pi_dn)
+                    mdl.addCons(quicksum(pi[('resup', t)] for t in blk)
+                                <= -block_reserve_payment(mp.params, blk, 'pi_up'))
+                    mdl.addCons(quicksum(pi[('resdn', t)] for t in blk)
+                                <= -block_reserve_payment(mp.params, blk, 'pi_dn'))
+            # reserve_mode 'penalty': each shortfall s_t sits at -1 in its row with
+            # objective +pi_pen_t, so its reduced cost reads -pi_t <= pi_pen_t
+            if reserve_mode(mp.params) == 'penalty':
+                for t in self.T:
+                    for row, key in ((('resup', t), 'pi_res' if sym else 'pi_up'),
+                                     (('resdn', t), 'pi_res' if sym else 'pi_dn')):
+                        mdl.addCons(-pi[row] <= reserve_penalty_price(mp.params, t, key))
         if mp.enable_peak:
             mdl.addCons(quicksum(pi[('peak', t)] for t in self.T) >= -mp.pi_peak)
 

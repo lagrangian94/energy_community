@@ -78,18 +78,17 @@ class ColumnGenerationSolver:
             rp = init_sol.get('r_plus') or {}
             rm = init_sol.get('r_minus') or {}
             if rp and rm:
-                from compact_utility import reserve_blocks as _rblocks
+                from compact_utility import reserve_blocks as _rblocks, block_reserve_payment
                 sym = params.get('reserve_product', 'symmetric') == 'symmetric'
-                pi = params.get('pi_res', 0.0)
-                pu, pd = params.get('pi_up', pi), params.get('pi_dn', pi)
                 for blk in _rblocks(T, params.get('reserve_block_hours', 24)):
                     up = [sum(rp.get((u, t), 0.0) for u in self.players) for t in blk]
                     dn = [sum(rm.get((u, t), 0.0) for u in self.players) for t in blk]
                     if sym:
-                        cost -= len(blk) * pi * max(0.0, min(min(up), min(dn)))
+                        cost -= (block_reserve_payment(params, blk)
+                                 * max(0.0, min(min(up), min(dn))))
                     else:
-                        cost -= len(blk) * (pu * max(0.0, min(up))
-                                            + pd * max(0.0, min(dn)))
+                        cost -= (block_reserve_payment(params, blk, 'pi_up') * max(0.0, min(up))
+                                 + block_reserve_payment(params, blk, 'pi_dn') * max(0.0, min(dn)))
 
         if params.get('enable_peak'):
             imp = init_sol.get('i_E_gri') or {}

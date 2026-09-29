@@ -31,6 +31,31 @@ RESERVE_CALIBRATION_RANGES = {
 }
 
 
+# Hourly reserve capacity prices that `reserve_price` may name instead of a number.
+# fcrn_dk2: Nordic FCR-N marginal price for DK2, 'Total' auction (volume-weighted
+# over D-1 early and late), January 2025, from Energinet Energi Data Service
+# (dataset FcrNdDK2). The experiments' calendar is January (month = 1), so day d of a
+# run takes the 24 prices of 2025-01-d; the data do not reach back to 2019, the year
+# of the wind series.
+RESERVE_PRICE_DATA = {'fcrn_dk2': ('./data/fcr_n_dk2_2025_01.csv', 1)}
+
+
+def reserve_price_series(spec, month, day, time_periods):
+    """{t: EUR/MW.h} for one day of a named hourly reserve price series."""
+    if spec not in RESERVE_PRICE_DATA:
+        raise ValueError(f"unknown reserve price series {spec!r}; "
+                         f"known: {sorted(RESERVE_PRICE_DATA)}")
+    path, data_month = RESERVE_PRICE_DATA[spec]
+    if month != data_month:
+        raise ValueError(f"{spec} covers month {data_month} only, got month={month}")
+    df = pd.read_csv(path, parse_dates=['HourDK'])
+    prices = df[df.HourDK.dt.day == int(day)].sort_values('HourDK')['price_eur_per_mw_h']
+    T = list(time_periods)
+    if len(prices) != len(T):
+        raise ValueError(f"{spec} has {len(prices)} hours on day {day}, need {len(T)}")
+    return {t: float(p) for t, p in zip(T, prices)}
+
+
 def log_reserve_calibration(parameters):
     """Cross-check the ratios that drive reserve headroom against the literature.
 
@@ -42,8 +67,10 @@ def log_reserve_calibration(parameters):
     """
     if not parameters.get('enable_reserve'):
         return
-    print(f"[reserve] pi_res = {parameters['pi_res']:.4g} EUR/MW.h "
-          f"(24h hold => {24*parameters['pi_res']:.4g} EUR/MW/day)")
+    src = parameters.get('reserve_price_source')
+    print(f"[reserve] pi_res = {parameters['pi_res']:.4g} EUR/MW.h"
+          + (f" (daily mean of {src} hourly prices)" if src else " (flat)")
+          + f", {parameters.get('reserve_block_hours', 24)}h blocks")
     for key, (lo, hi, what) in RESERVE_CALIBRATION_RANGES.items():
         val = parameters.get(key)
         if val is None:
@@ -86,6 +113,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     Returns:
         dict: Complete parameter dictionary
     """
+    # compact_utility imports this module at load time, so its defaults are read here
+    from compact_utility import DEFAULT_RESERVE_MODE, DEFAULT_RESERVE_PENALTY_FACTOR
     if sensitivity_analysis:
         use_korean_price = sensitivity_analysis['use_korean_price']
         use_tou_elec = sensitivity_analysis['use_tou_elec']
@@ -117,6 +146,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         reserve_product = sensitivity_analysis.get('reserve_product', 'symmetric')
         reserve_price_up = sensitivity_analysis.get('reserve_price_up', None)
         reserve_price_dn = sensitivity_analysis.get('reserve_price_dn', None)
+        reserve_mode = sensitivity_analysis.get('reserve_mode', DEFAULT_RESERVE_MODE)
+        reserve_penalty_factor = sensitivity_analysis.get(
+            'reserve_penalty_factor', DEFAULT_RESERVE_PENALTY_FACTOR)
         wind_el_ratio = sensitivity_analysis['wind_el_ratio']
         solar_el_ratio = sensitivity_analysis['solar_el_ratio']
         storage_power_ratio_E = sensitivity_analysis['storage_power_ratio_E']
@@ -152,6 +184,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         reserve_block_hours = 24
         reserve_product = 'symmetric'
         reserve_price_up = reserve_price_dn = None
+        reserve_mode = DEFAULT_RESERVE_MODE
+        reserve_penalty_factor = DEFAULT_RESERVE_PENALTY_FACTOR
         wind_el_ratio = 1.0# [1.0, 2.0]
         solar_el_ratio = 1.0
         storage_power_ratio_E = 0.25
@@ -295,9 +329,16 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     # Symmetric reserve capacity price pi_res [EUR/MW.h] -- electricity-side, no
     # carrier index (reserve.txt sec.2.1). ABSOLUTE, not a fraction of the import
     # price: the product is Nordic FCR-N (symmetric two-sided, matching r_sym),
-    # priced from Energinet DK2 data -- 56 baseline, 11 low regime. DK2 is the
-    # same bidding zone as the wind CF series, so the two are consistent.
-    # Scalar bid; extend to a per-t series only if a time-varying price is needed.
+    # priced from Energinet DK2 data. A number is a flat price (11 low regime, 56 the
+    # 2022-01..2023-03 average); 'fcrn_dk2' is the hourly January 2025 series.
+    # reserve_price may name an hourly price series instead of a flat number
+    # (RESERVE_PRICE_DATA); pi_res then holds that day's mean, used for the on/off
+    # flag and for reporting, while pi_res_t carries the prices the model is paid.
+    if isinstance(reserve_price, str):
+        parameters["pi_res_t"] = reserve_price_series(reserve_price, month, day,
+                                                      time_periods)
+        parameters["reserve_price_source"] = reserve_price
+        reserve_price = float(np.mean(list(parameters["pi_res_t"].values())))
     parameters["pi_res"] = float(reserve_price)
     # Delivery-block length and product type. Defaults (24h, symmetric) reproduce the
     # horizon-constant product, so nothing changes unless deliberately set.
@@ -306,6 +347,10 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     #     directions are priced separately and pi_dn = 0 gives the up-only product.
     parameters["reserve_block_hours"] = int(reserve_block_hours)
     parameters["reserve_product"] = reserve_product
+    # 'hard' (no shortfall) or 'penalty' (shortfall charged k * pi_res_t per MW.h);
+    # see compact_utility.reserve_penalty_price
+    parameters["reserve_mode"] = reserve_mode
+    parameters["reserve_penalty_factor"] = float(reserve_penalty_factor)
     parameters["pi_up"] = float(reserve_price_up if reserve_price_up is not None
                                 else reserve_price)
     parameters["pi_dn"] = float(reserve_price_dn if reserve_price_dn is not None

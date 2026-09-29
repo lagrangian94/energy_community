@@ -79,7 +79,8 @@ os.chdir(_ROOT)
 
 import numpy as np
 from pyscipopt import Model, Pricer, SCIP_RESULT, SCIP_PARAMSETTING, quicksum
-from compact_utility import LocalEnergyMarket, reserve_blocks
+from compact_utility import (LocalEnergyMarket, reserve_blocks, block_reserve_payment,
+                             reserve_mode, reserve_penalty_price)
 
 OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
 # Relative gaps. omega^LR = v^MIP - v^LR is a difference of two values of ~2e4 whose
@@ -1091,25 +1092,38 @@ class StochasticMaster:
         block_of_t = {t: i for i, blk in enumerate(blocks) for t in blk}
         sym = p.get('reserve_product', 'symmetric') == 'symmetric'
         if self.enable_reserve:
-            pi = p.get('pi_res', 0.0)
             for i, blk in enumerate(blocks):
                 if sym:
-                    self.x0[('r_sym', i)] = m.addVar(name=f'r_sym_{i}', lb=0.0,
-                                                     obj=-len(blk) * pi)
+                    self.x0[('r_sym', i)] = m.addVar(
+                        name=f'r_sym_{i}', lb=0.0, obj=-block_reserve_payment(p, blk))
                 else:
-                    self.x0[('r_up', i)] = m.addVar(name=f'r_up_{i}', lb=0.0,
-                                                    obj=-len(blk) * p.get('pi_up', pi))
-                    self.x0[('r_dn', i)] = m.addVar(name=f'r_dn_{i}', lb=0.0,
-                                                    obj=-len(blk) * p.get('pi_dn', pi))
+                    self.x0[('r_up', i)] = m.addVar(
+                        name=f'r_up_{i}', lb=0.0,
+                        obj=-block_reserve_payment(p, blk, 'pi_up'))
+                    self.x0[('r_dn', i)] = m.addVar(
+                        name=f'r_dn_{i}', lb=0.0,
+                        obj=-block_reserve_payment(p, blk, 'pi_dn'))
         if self.enable_peak:
             for w, rho in enumerate(self.probs):
                 self.x0[('p', w)] = m.addVar(name=f'p_s{w}', lb=0.0,
                                              obj=rho * p.get('pi_E_peak', 0.0))
+        penalty = self.enable_reserve and reserve_mode(p) == 'penalty'
+        if penalty:
+            for w, rho in enumerate(self.probs):
+                for t in self.T:
+                    for d in ('up', 'dn'):
+                        self.x0[(f's_{d}', t, w)] = m.addVar(
+                            name=f's_res_{d}_{t}_s{w}', lb=0.0,
+                            obj=rho * reserve_penalty_price(
+                                p, t, 'pi_res' if sym else f'pi_{d}'))
 
         def x0_terms(kind, t, w):
             if kind in ('up', 'dn'):
                 i = block_of_t[t]
-                return [(1.0, self.x0[('r_sym', i)] if sym else self.x0[(f'r_{kind}', i)])]
+                out = [(1.0, self.x0[('r_sym', i)] if sym else self.x0[(f'r_{kind}', i)])]
+                if penalty:
+                    out.append((-1.0, self.x0[(f's_{kind}', t, w)]))
+                return out
             if kind == 'peak':
                 return [(-1.0, self.x0[('p', w)])]
             return []
@@ -1121,6 +1135,8 @@ class StochasticMaster:
             if kind in ('up', 'dn'):
                 x0k = ('r_sym', block_of_t[t]) if sym else (f'r_{kind}', block_of_t[t])
                 self.x0_rows.setdefault(x0k, []).append((key, 1.0))
+                if penalty:
+                    self.x0_rows.setdefault((f's_{kind}', t, w), []).append((key, -1.0))
             elif kind == 'peak':
                 self.x0_rows.setdefault(('p', w), []).append((key, -1.0))
         self.terms_x0 = {k: list(v) for k, v in terms.items()}
@@ -1947,17 +1963,28 @@ class DirectMaster:
         # unscaled parts of each x0 cost: first stage, and {scenario: cost}
         self.x0_first, self.x0_scen = {}, {}
         if self.enable_reserve:
-            pi_res = p.get('pi_res', 0.0)
             for i, blk in enumerate(blocks):
                 names = [('r_sym', i)] if sym else [('r_up', i), ('r_dn', i)]
                 for nm in names:
-                    price = pi_res if sym else p.get(f'pi_{nm[0][2:]}', pi_res)
-                    x0_cost[nm] = -len(blk) * price
-                    self.x0_first[nm], self.x0_scen[nm] = -len(blk) * price, {}
+                    pay = block_reserve_payment(p, blk, 'pi_res' if sym else f'pi_{nm[0][2:]}')
+                    x0_cost[nm] = -pay
+                    self.x0_first[nm], self.x0_scen[nm] = -pay, {}
                     self.x0_rows[nm] = [(k, 1.0) for k in self.row_keys
                                         if k[0] in ('up', 'dn')
                                         and block_of_t[k[1]] == i
                                         and (sym or k[0] == nm[0].split('_')[1])]
+        if self.enable_reserve and reserve_mode(p) == 'penalty':
+            # shortfall per reserve row (t, scenario, direction): a scenario cost like
+            # the peak p^w, so the KL cuts weight it by the worst-case distribution
+            for w, rho in enumerate(self.probs):
+                for t in self.T:
+                    for d in ('up', 'dn'):
+                        nm = (f's_{d}', t, w)
+                        pen = reserve_penalty_price(
+                            p, t, 'pi_res' if sym else f'pi_{d}')
+                        x0_cost[nm] = rho * pen
+                        self.x0_first[nm], self.x0_scen[nm] = 0.0, {w: pen}
+                        self.x0_rows[nm] = [((d, t, w), -1.0)]
         if self.enable_peak:
             for w, rho in enumerate(self.probs):
                 x0_cost[('p', w)] = rho * p.get('pi_E_peak', 0.0)
@@ -3971,6 +3998,8 @@ def run(args):
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n, day=args.day)
     base['grid_caps'] = args.grid_caps
+    if args.reserve_mode is not None:
+        base['reserve_mode'] = args.reserve_mode
     if args.day is not None:
         name = f'{name}_day{args.day}'
     scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
@@ -3996,6 +4025,7 @@ def run(args):
            '_split' if args.split_scenarios else '_mp12' if args.mp12 else '') \
         + ('_lpmix' if args.lp_mixed else '')         + ('_repair' if args.doi_repair else '')         + ('_legacycaps' if args.grid_caps == 'legacy' else '') \
         + ('_seed' if kl and args.kl_seed_ef else '') \
+        + ('_hard' if base.get('reserve_mode') == 'hard' else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
     if args.fallback_purge_age is not None:
@@ -4265,6 +4295,9 @@ def main():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--reserve-mode', choices=['hard', 'penalty'], default=None,
+                    help="reserve shortfall treatment; default is run_experiment's "
+                         "RESERVE_MODE ('penalty'). 'hard' adds _hard to the file name")
     ap.add_argument('--cg-gap', type=float, default=CG_GAP,
                     help='relative CG gap: stop once (UB - LB) <= cg_gap (1 + |UB|), UB the '
                          'unpenalized RMP value and LB the Lagrangian bound')

@@ -361,6 +361,46 @@ def reserve_blocks(time_periods, block_hours):
     return [T[k:k + n] for k in range(0, len(T), n)]
 
 
+def block_reserve_payment(params, blk, key='pi_res'):
+    """Payment per MW for holding a reserve product over block `blk` [EUR/MW].
+
+    With an hourly price series params[f'{key}_t'] (indexed by period, e.g. Nordic
+    FCR-N marginal prices) the block earns the sum of its hours' prices; without one it
+    earns |blk| * params[key], the flat-price convention. The two agree when the series
+    is constant, so a flat run is unchanged.
+    """
+    series = params.get(f'{key}_t')
+    if series is not None:
+        return float(sum(series[t] for t in blk))
+    return len(blk) * float(params.get(key, 0.0) or 0.0)
+
+
+# How the reserve coupling rows treat a shortfall (params['reserve_mode']):
+#   'hard'    r_sym <= sum_j r+ in every hour (and scenario): no shortfall allowed.
+#   'penalty' r_sym <= sum_j r+ + s with s >= 0 charged pi_pen_t = k * pi_res_t per MW
+#             short in that hour (and scenario). k = reserve_penalty_factor, 5 by
+#             default after the penalty-to-reservation-price ratio Lunde et al. assume
+#             for Energinet's substitution-cost penalty. k -> inf recovers 'hard'.
+RESERVE_MODES = ('hard', 'penalty')
+DEFAULT_RESERVE_MODE = 'penalty'
+DEFAULT_RESERVE_PENALTY_FACTOR = 5.0
+
+
+def reserve_mode(params):
+    mode = params.get('reserve_mode', DEFAULT_RESERVE_MODE)
+    if mode not in RESERVE_MODES:
+        raise ValueError(f"reserve_mode must be one of {RESERVE_MODES}, got {mode!r}")
+    return mode
+
+
+def reserve_penalty_price(params, t, key='pi_res'):
+    """Penalty per MW of reserve shortfall in hour t [EUR/MW.h] under 'penalty'."""
+    k = float(params.get('reserve_penalty_factor', DEFAULT_RESERVE_PENALTY_FACTOR))
+    series = params.get(f'{key}_t')
+    price = series[t] if series is not None else params.get(key, 0.0)
+    return k * float(price or 0.0)
+
+
 def solve_and_extract_results(model):
     """
     모델을 풀고 결과를 반환합니다.
@@ -1184,7 +1224,8 @@ class LocalEnergyMarket:
         if self.reserve_product == 'symmetric':
             for i, blk in enumerate(self.reserve_blocks):
                 self.r_sym[i] = self.model.addVar(
-                    vtype="C", name=f"r_sym_{i}", lb=0, obj=-1 * len(blk) * pi_res)
+                    vtype="C", name=f"r_sym_{i}", lb=0,
+                    obj=-block_reserve_payment(self.params, blk))
             self.model.data["vars"]["r_sym"] = self.r_sym
         else:
             # ONE-SIDED products: up and down are sold separately, so each row family
@@ -1193,28 +1234,49 @@ class LocalEnergyMarket:
             # channel; time pooling within the block survives. pi_dn = 0 gives the
             # up-only product (FCR-D Up), where a unit at full load sells its entire
             # upward headroom at no opportunity cost.
-            pi_up = self.params.get('pi_up', pi_res)
-            pi_dn = self.params.get('pi_dn', pi_res)
             for i, blk in enumerate(self.reserve_blocks):
                 self.r_up[i] = self.model.addVar(
-                    vtype="C", name=f"r_up_{i}", lb=0, obj=-1 * len(blk) * pi_up)
+                    vtype="C", name=f"r_up_{i}", lb=0,
+                    obj=-block_reserve_payment(self.params, blk, 'pi_up'))
                 self.r_dn[i] = self.model.addVar(
-                    vtype="C", name=f"r_dn_{i}", lb=0, obj=-1 * len(blk) * pi_dn)
+                    vtype="C", name=f"r_dn_{i}", lb=0,
+                    obj=-block_reserve_payment(self.params, blk, 'pi_dn'))
             self.model.data["vars"]["r_up"] = self.r_up
             self.model.data["vars"]["r_dn"] = self.r_dn
 
+        # Under reserve_mode 'penalty' each row also carries a community shortfall
+        # variable s >= 0 priced at the penalty (see reserve_penalty_price); like
+        # r_sym it is an EC-level variable of x_0, so the rows stay homogeneous and
+        # the pricing subproblem is unchanged. Its dual constraint caps each row's
+        # dual at the penalty price.
+        penalty = reserve_mode(self.params) == 'penalty'
+        sym = self.reserve_product == 'symmetric'
+        self.s_res_up, self.s_res_dn = {}, {}
+        if penalty:
+            for t in self.time_periods:
+                self.s_res_up[t] = self.model.addVar(
+                    vtype="C", name=f"s_res_up_{t}", lb=0,
+                    obj=reserve_penalty_price(self.params, t, 'pi_res' if sym else 'pi_up'))
+                self.s_res_dn[t] = self.model.addVar(
+                    vtype="C", name=f"s_res_dn_{t}", lb=0,
+                    obj=reserve_penalty_price(self.params, t, 'pi_res' if sym else 'pi_dn'))
+            self.model.data["vars"]["s_res_up"] = self.s_res_up
+            self.model.data["vars"]["s_res_dn"] = self.s_res_dn
+
         # One row pair per HOUR either way, carrying that hour's block variable, so
         # the row count stays 2|T| and m is unchanged. Only dim(x_0) differs:
-        # |blocks| under symmetric, 2|blocks| under asymmetric.
+        # |blocks| under symmetric, 2|blocks| under asymmetric (+2|T| shortfalls).
         for t in self.time_periods:
             i = self.reserve_block_of_t[t]
-            v_up = self.r_sym[i] if self.reserve_product == 'symmetric' else self.r_up[i]
-            v_dn = self.r_sym[i] if self.reserve_product == 'symmetric' else self.r_dn[i]
+            v_up = self.r_sym[i] if sym else self.r_up[i]
+            v_dn = self.r_sym[i] if sym else self.r_dn[i]
+            s_up = self.s_res_up[t] if penalty else 0.0
+            s_dn = self.s_res_dn[t] if penalty else 0.0
             self.reserve_cons["up"][f"reserve_up_coupling_{t}"] = self.model.addCons(
-                v_up - quicksum(self.r_plus.get((u,t),0) for u in self.players) <= 0.0,
+                v_up - quicksum(self.r_plus.get((u,t),0) for u in self.players) - s_up <= 0.0,
                 name=f"reserve_up_coupling_{t}")
             self.reserve_cons["dn"][f"reserve_dn_coupling_{t}"] = self.model.addCons(
-                v_dn - quicksum(self.r_minus.get((u,t),0) for u in self.players) <= 0.0,
+                v_dn - quicksum(self.r_minus.get((u,t),0) for u in self.players) - s_dn <= 0.0,
                 name=f"reserve_dn_coupling_{t}")
         return
 
@@ -2103,6 +2165,7 @@ class LocalEnergyMarket:
                 'storage_cost': 0.0,
                 'peak_penalty': 0.0,
                 'reserve_revenue': 0.0,
+                'reserve_shortfall_penalty': 0.0,
                 'net': 0.0
             },
             'hydrogen': {
@@ -2158,18 +2221,22 @@ class LocalEnergyMarket:
         # model (reserve.txt sec.2.1: the product is held for the whole horizon), so
         # the same |T| factor has to appear here or the breakdown will not reconcile
         # with the objective.
-        pi_res = self.params.get('pi_res', 0.0)
         blocks = getattr(self, 'reserve_blocks', [list(self.time_periods)])
         _as_d = lambda x: x if isinstance(x, dict) else ({0: x} if x is not None else {})
-        # each block is paid for its own length; symmetric has one product per block,
-        # asymmetric two priced separately
-        for key, price in (('r_sym', pi_res),
-                           ('r_up', self.params.get('pi_up', pi_res)),
-                           ('r_dn', self.params.get('pi_dn', pi_res))):
+        # each block is paid for its own hours (block_reserve_payment); symmetric has
+        # one product per block, asymmetric two priced separately
+        for key, pkey in (('r_sym', 'pi_res'), ('r_up', 'pi_up'), ('r_dn', 'pi_dn')):
             if key in results:
                 revenue_analysis['electricity']['reserve_revenue'] += sum(
-                    len(blocks[i]) * price * v
+                    block_reserve_payment(self.params, blocks[i], pkey) * v
                     for i, v in _as_d(results[key]).items() if i < len(blocks))
+        # reserve_mode 'penalty': the shortfall charge, a cost like peak_penalty
+        sym = self.params.get('reserve_product', 'symmetric') == 'symmetric'
+        for key, pkey in (('s_res_up', 'pi_res' if sym else 'pi_up'),
+                          ('s_res_dn', 'pi_res' if sym else 'pi_dn')):
+            for t, v in (results.get(key) or {}).items():
+                revenue_analysis['electricity']['reserve_shortfall_penalty'] += (
+                    reserve_penalty_price(self.params, t, pkey) * v)
         # Non-flexible demand utility
         if 'nfl_d' in results:
             for (u, resource_type, t), val in results['nfl_d'].items():
@@ -2291,7 +2358,8 @@ class LocalEnergyMarket:
             revenue_analysis['electricity']['nfl_demand_utility'] -
             revenue_analysis['electricity']['storage_cost'] -
             revenue_analysis['electricity']['peak_penalty'] +
-            revenue_analysis['electricity']['reserve_revenue']
+            revenue_analysis['electricity']['reserve_revenue'] -
+            revenue_analysis['electricity']['reserve_shortfall_penalty']
         )
 
         # Hydrogen net
@@ -2341,9 +2409,10 @@ class LocalEnergyMarket:
             # peak_penalty is a COST; it was subtracted here, which flipped its sign
             # in net_profit (= revenue - total_cost + utility) and overstated profit
             # by 2 * peak_penalty.
-            revenue_analysis['electricity']['peak_penalty']
+            revenue_analysis['electricity']['peak_penalty'] +
+            revenue_analysis['electricity']['reserve_shortfall_penalty']
         )
-        
+
         revenue_analysis['net_profit'] = revenue_analysis['total_revenue'] - revenue_analysis['total_cost'] + revenue_analysis['total_consumption_utility']
         
         # # ========== PRINT SUMMARY ==========
