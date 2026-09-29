@@ -205,6 +205,9 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         'e_E_cap_ratio': e_E_cap_ratio,
         'e_H_cap_ratio': e_H_cap_ratio,
         'e_G_cap_ratio': e_G_cap_ratio,
+        # trade bounds: 'bnd_size' (manuscript eq:bnd_size, per member; default) or
+        # 'legacy' (the earlier shared import caps); see compact_utility.trade_bounds
+        'grid_caps': (sensitivity_analysis or {}).get('grid_caps', 'bnd_size'),
         'c_res': 0.05,
         'c_hp': 2.69,
         'c_els': 0.05,

@@ -414,7 +414,7 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
 # Column generation
 # =============================================================================
 class Column:
-    __slots__ = ('player', 'cost', 'coef', 'first', 'scen', 'fs', 'extra', 'noconv')
+    __slots__ = ('player', 'cost', 'coef', 'first', 'scen', 'fs', 'extra', 'noconv', 'trade')
 
     def __init__(self, player, stack, rows, names, vals):
         self.player = player
@@ -788,6 +788,23 @@ class PlayerPricing:
         self._cw = [(n, self.stack.cost[n], self.stack.scen_of[n]) for n in self.names]
         self.adj = sorted({n for terms in self.rows.values() for n, _ in terms})
         self.last = None        # (duals, obj, Column) of the latest call
+        # the member's four trade variables per balance row (k, t, w), in the order
+        # (market import, market export, community import, community export), name
+        # or None where the member has no such variable, and their upper bounds
+        # (inf: unbounded). DirectMaster's grid certificate reads them.
+        self.trade_vars, self.trade_ub = {}, {}
+        for w, lem in enumerate(self.stack.blocks):
+            for t in self.stack.T:
+                for k in CARRIERS:
+                    vs = [getattr(lem, f'{a}_{k}_{b}').get((player, t))
+                          for a, b in (('i', 'gri'), ('e', 'gri'), ('i', 'com'), ('e', 'com'))]
+                    if any(v is not None for v in vs):
+                        key = (k, t, self.scen_ids[w])
+                        self.trade_vars[key] = tuple(None if v is None else v.name for v in vs)
+                        self.trade_ub[key] = tuple(
+                            0.0 if v is None else
+                            (np.inf if v.getUbOriginal() >= 1e19 else v.getUbOriginal())
+                            for v in vs)
 
     def _coef(self, duals, farkas):
         if farkas:
@@ -926,6 +943,8 @@ class PlayerPricing:
 
     def _column(self, vals):
         col = Column(self.unit, self.stack, self.rows, self.names, vals)
+        col.trade = {key: tuple(0.0 if n is None else vals.get(n, 0.0) for n in names)
+                     for key, names in self.trade_vars.items()}
         if self.scen_ids != list(range(self.n_scen)):
             scen = [0.0] * self.n_scen
             for w, g in enumerate(self.scen_ids):
@@ -1894,6 +1913,7 @@ class DirectMaster:
         self.col_idx = {u: [] for u in self.units}
         self.patterns, self.mp12_patterns = {}, 0
         self.iteration, self.lb, self.L_bar = 0, -np.inf, -np.inf
+        self._stall, self._stall_ref = 0, (np.inf, -np.inf)
         self.center, self.best, self.log = None, None, []
         self._build()
 
@@ -2151,6 +2171,8 @@ class DirectMaster:
             c = Column.__new__(Column)
             c.player, c.first, c.fs, c.noconv = j, 0.0, None, True
             c.coef = {k: a for k, a in col.coef.items() if k[2] == w}
+            c.trade = {k: v for k, v in (getattr(col, 'trade', None) or {}).items()
+                       if k[2] == w}
             c.scen = [0.0] * S
             c.scen[w] = col.scen[w]
             c.cost = self.probs[w] * col.scen[w]
@@ -2436,15 +2458,130 @@ class DirectMaster:
                   f'(unused for {self.fallback_purge_age}+ passes)')
         return n
 
-    def _disable_doi(self):
+    # doi_repair: before the switch-off, hand the grid trade the master settled on to
+    # the members. A member that imports at the grid and sells to the community in
+    # row r (or buys from the community and exports) has, per unit, exactly the
+    # reduced cost of y^+_r (y^-_r), which is 0 at the settled master. Pricing every
+    # member once at duals moved past the price box on those rows only,
+    #     pi_r - delta rho_w   (y^+_r > 0),      pi_r + delta rho_w   (y^-_r > 0),
+    # with delta = frac * import price of the row, makes that trade strictly
+    # profitable, so the MILPs return plans that take it up to their own caps: the
+    # y-free combinations the switched-off master otherwise waits ~1,300 s for
+    # (n=60, 20 scenarios). One pricing pass per frac; the columns are ordinary
+    # plans (feasible, from the MILP), and the Lagrangian bound of those passes is
+    # valid as any. () = off.
+    doi_repair = ()
+
+    def _repair_doi(self):
+        if not self.doi_repair:
+            return 0
+        t0 = time.time()
+        self._set_penalty(None, 0.0, 0.0)
+        self.lp.solve()
+        duals, conv = self._duals()
+        hot = [(key, self.lp.x(j)) for key, j in self.y.items() if self.lp.x(j) > 1e-7]
+        added = 0
+        for frac in self.doi_repair:
+            d = dict(duals)
+            for (k, t, w, side), _ in hot:
+                rho = duals.get(rho_key(w), self.probs[w])
+                imp = self.y_cost.get((k, t, w, 'imp'), (w, 0.0))[1]
+                delta = frac * max(abs(imp), 1e-3) * rho
+                d[(k, t, w)] = d.get((k, t, w), 0.0) + (-delta if side == 'imp' else delta)
+            res = self._price_all(d)
+            self._record(d, res)
+            for u, (_, _, col) in res.items():
+                self.add_column(col)
+                added += 1
+        self.doi_repaired = {'rows': len(hot), 'y': sum(v for _, v in hot),
+                             'columns': added, 'time': time.time() - t0}
+        if self.verbose:
+            print(f'  -- DOI repair: {len(hot)} rows with grid trade (y {self.doi_repaired["y"]:.4g}),'
+                  f' +{added} member plans at frac {list(self.doi_repair)} '
+                  f'({time.time() - t0:.0f}s)')
+        return added
+
+    def _disable_doi(self, keys=None):
+        """Switch grid columns off: all of them, or only `keys`."""
         self._dual_next = True
-        js = list(self.y.values())
+        off = getattr(self, 'y_off', set())
+        keys = [k for k in (self.y if keys is None else keys) if k not in off]
+        js = [self.y[k] for k in keys]
         self.lp.set_cols(js, ub=[0.0] * len(js))
         if isinstance(self.lp, _TwinLP):
             self.lp.shadow.set_cols(js, ub=[0.0] * len(js))
-        self.doi_active = False
+        self.y_off = off | set(keys)
+        if len(self.y_off) == len(self.y):
+            self.doi_active = False
         if self.verbose:
-            print('  -- DOI: the master settled with y > 0; grid columns switched off')
+            print(f'  -- DOI: the master settled with y > 0; {len(keys)} grid columns '
+                  f'switched off ({len(self.y) - len(self.y_off)} left)')
+
+    # --- grid certificate ------------------------------------------------------
+    # A grid column y^+_r (the community buys at the market in row r = (k, t, w)) and
+    # a member trade that imports at the market and passes the unit on to the
+    # community -- more community export, or less community import -- have the same
+    # cost (the market price, scenario weight included), the same balance
+    # coefficient and the same peak coefficient; y^-_r likewise with a member that
+    # exports at the market what it takes from the community. The trade changes none
+    # of the member's own constraints (its balance keeps i_gri - e_gri + i_com -
+    # e_com). So if the plans in use have room for it,
+    #     sum_q lambda_q cap_q(r) >= y_r        for every row r with y_r > 0,
+    #     cap^+_q(r) = min(ub_ig - ig, (ub_ec - ec) + ic),
+    #     cap^-_q(r) = min(ub_eg - eg, (ub_ic - ic) + ec),
+    # moving the trade into those plans gives a solution of the ORIGINAL master (no
+    # grid columns; every modified plan is a point of X_j with its binaries unchanged)
+    # with exactly the same scenario costs, hence the same objective: the RMP value
+    # itself (psi of it under KL) is then an upper bound on z_MP. Nothing is assumed
+    # about duals, so it holds whatever the pricing tolerance. doi_certify=False
+    # restores the y = 0 bound alone.
+    doi_certify = True
+    doi_switch_passes = 20
+    # stall_reset: after this many passes with neither the RMP value nor LB moving,
+    # one pass drops the smoothing (alpha = 1) and re-centres at the RMP duals. 0: off.
+    stall_reset = 10
+
+    def _grid_uncovered(self):
+        """Grid columns with y > 0 that the plans in use cannot take over."""
+        need = {k: self.lp.x(j) for k, j in self.y.items() if self.lp.x(j) > 1e-9}
+        if not need:
+            return []
+        room = dict.fromkeys(need, 0.0)
+        for u in self.units:
+            ubs = self.subs[u].trade_ub
+            for h, col in zip(self.col_idx[u], self.columns[u]):
+                lam = self.lp.x(h)
+                tr = getattr(col, 'trade', None)
+                if lam <= 1e-12 or not tr:
+                    continue
+                for key in need:
+                    v = tr.get(key[:3])
+                    if v is None:
+                        continue
+                    ig, eg, ic, ec = v
+                    Uig, Ueg, Uic, Uec = ubs[key[:3]]
+                    c = (min(Uig - ig, (Uec - ec) + ic) if key[3] == 'imp'
+                         else min(Ueg - eg, (Uic - ic) + ec))
+                    if c > 0.0:
+                        room[key] += lam * c
+        return [k for k, y in need.items() if room[k] < y - 1e-7 * (1.0 + y)]
+
+    def _grid_value(self, lp_obj):
+        """Objective of the current RMP solution (the KL master: psi of it)."""
+        return lp_obj
+
+    def _certify_grid(self, lp_obj):
+        """UB from an RMP solution with grid trade the plans in use can absorb."""
+        t0 = time.time()
+        miss = self._grid_uncovered()
+        self.t_certify = getattr(self, 't_certify', 0.0) + time.time() - t0
+        self.n_certify = getattr(self, 'n_certify', 0) + 1
+        if not miss:
+            ub = self._grid_value(lp_obj)
+            self.n_certified = getattr(self, 'n_certified', 0) + 1
+            if ub < self.ub:
+                self.ub = ub
+        return miss
 
     def _converged(self):
         return np.isfinite(self.ub) and self.ub - self.lb <= self._gap_tol(self.ub)
@@ -2551,6 +2688,9 @@ class DirectMaster:
                 raise RuntimeError('column generation: iteration limit')
             alpha, added, min_rc, mode = 1.0, 0, 0.0, 'std'
             status = None
+            if (self.doi_certify and self.doi_active and not self._penalized() and not viol
+                    and not cuts and self.lb >= lp_obj - tol and self._y_total() > 1e-7):
+                self._certify_grid(lp_obj)
             if self._converged():
                 status = 'done'
             elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
@@ -2560,10 +2700,25 @@ class DirectMaster:
                 if added:
                     mode = 'pool'
                     self.pool_rounds += 1
+            # stall guard: count the passes in which neither the RMP value nor LB moved
+            prog = 1e-3 * tol
+            if (lp_obj < self._stall_ref[0] - prog) or (self.lb > self._stall_ref[1] + prog):
+                self._stall = 0
+            else:
+                self._stall += 1
+            self._stall_ref = (lp_obj, self.lb)
             if status is None and self.smoothing and not added:
                 if self.center is None:
                     self.center = dict(duals)
                 alpha = self._alpha(lp_obj)
+                if self.stall_reset and self._stall >= self.stall_reset:
+                    # Smoothing stalled: at n=60, 20 scenarios it sat ~650 passes at
+                    # alpha = 0.1 (smooth, misprice, smooth, ...) with RMP and LB both
+                    # frozen, until one alpha = 1 pass moved LB and ended it. Price one
+                    # pass at the RMP duals alone (Kelley) and restart the center there.
+                    alpha, self._stall = 1.0, 0
+                    self.center = dict(duals)
+                    self.n_stall_resets = getattr(self, 'n_stall_resets', 0) + 1
                 if alpha < 1.0:
                     st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
                           for k in set(duals) | set(self.center)}
@@ -2809,7 +2964,18 @@ class DirectMaster:
             status = self._taper_doi(rounds, t0)
         if status != 'done' and self.doi_active:
             self._purge_before_fallback()
-            self._disable_doi()
+            self._repair_doi()
+        # Switch-off. With the certificate on, only the grid columns the members'
+        # plans in use cannot take over are switched off, and column generation goes
+        # on with the rest (whose trade the certificate absorbs into an exact UB);
+        # repeated while some grid column is still left uncovered. Without it, or on
+        # the last pass, every grid column goes.
+        for sw in range(self.doi_switch_passes):
+            if status == 'done' or not self.doi_active:
+                break
+            keys = (self._grid_uncovered() if self.doi_certify
+                    and sw + 1 < self.doi_switch_passes else None)
+            self._disable_doi(keys or None)
             # Without the grid columns the collected plans may no longer combine, and
             # the master is back at a degenerate vertex where unstabilized column
             # generation was seen to stall for 5000+ passes (KL master, n = 6).
@@ -2866,6 +3032,12 @@ class DirectMaster:
                            'pricing_tightened': self.pricing_tightened,
                            'purged': self.purged, 'pool_hits': self.pool_hits,
                            'fallback_purged': getattr(self, 'fallback_purged', 0),
+                           'doi_repaired': getattr(self, 'doi_repaired', None),
+                           'stall_resets': getattr(self, 'n_stall_resets', 0),
+                           'grid_certify': {'calls': getattr(self, 'n_certify', 0),
+                                            'certified': getattr(self, 'n_certified', 0),
+                                            'time': getattr(self, 't_certify', 0.0),
+                                            'switched_off': len(getattr(self, 'y_off', ()))},
                            'mp12_patterns': self.mp12_patterns,
                            'omega_tol': self.omega_tol, 'pricing_abs_final': self._abs_set,
                            'pool_rounds': self.pool_rounds,
@@ -3126,6 +3298,9 @@ class KLMaster(DirectMaster):
         return ub
 
     ub_with_y = True
+
+    def _grid_value(self, lp_obj):
+        return self._psi_main           # set by _separate_dist at this solution
 
     def _ub_no_grid(self):
         """psi at the unpenalized RMP optimum over the current columns with y = 0 (the
@@ -3795,6 +3970,7 @@ def run(args):
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n, day=args.day)
+    base['grid_caps'] = args.grid_caps
     if args.day is not None:
         name = f'{name}_day{args.day}'
     scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
@@ -3818,7 +3994,7 @@ def run(args):
         + ('_accdoi' if args.accept_doi_master else '') \
         + ('_ndw' if args.split_scenarios and args.mp12 else
            '_split' if args.split_scenarios else '_mp12' if args.mp12 else '') \
-        + ('_lpmix' if args.lp_mixed else '') \
+        + ('_lpmix' if args.lp_mixed else '')         + ('_repair' if args.doi_repair else '')         + ('_legacycaps' if args.grid_caps == 'legacy' else '') \
         + ('_seed' if kl and args.kl_seed_ef else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
@@ -3830,6 +4006,11 @@ def run(args):
         DirectMaster.accept_doi_master = True
     if args.lp_mixed:
         DirectMaster.lp_mixed = True
+    DirectMaster.doi_certify = args.doi_certify
+    if args.stall_reset is not None:
+        DirectMaster.stall_reset = args.stall_reset
+    if args.doi_repair:
+        DirectMaster.doi_repair = tuple(float(f) for f in args.doi_repair.split(','))
     DirectMaster.split_scenarios = args.split_scenarios
     DirectMaster.mp12 = args.mp12
     # the split units carry 1/|Omega| of a plan each: purge them harder
@@ -3847,14 +4028,32 @@ def run(args):
         print(f'deterministic model on scenario 0: {det.model.getObjVal():.6f}')
 
     print('\n[1] extensive form (DP_N^Omega)')
-    ef = solve_extensive_form(players, T, scen, **mip_kw)
+    if args.ef_cache and os.path.exists(args.ef_cache):
+        # the same instance's EF from an earlier run (another CG configuration):
+        # everything but the SCIP stack, which nothing downstream needs
+        import pickle
+        with open(args.ef_cache, 'rb') as f:
+            ef = pickle.load(f)
+        ef['cached'] = True
+        print(f'  (read from {args.ef_cache})')
+    else:
+        ef = solve_extensive_form(players, T, scen, **mip_kw)
+        ef['n_vars'] = ef['stack'].model.getNVars()
+        ef['first_stage_names'] = sorted(ef['stack'].first_stage)
+        if args.ef_cache:
+            import pickle
+            os.makedirs(os.path.dirname(os.path.abspath(args.ef_cache)), exist_ok=True)
+            with open(args.ef_cache, 'wb') as f:
+                pickle.dump({k: v for k, v in ef.items() if k != 'stack'}, f)
     print(f'  obj {ef["obj"]:.6f}  status {ef["status"]}  gap {ef["gap"]:.2e}  '
-          f'{ef["time_solve"]:.1f}s  vars {ef["stack"].model.getNVars()}')
+          f'{ef["time_solve"]:.1f}s  vars {ef["n_vars"]}')
     if kl:
         k = ef['kl']
         print(f'  KL r={k["radius"]:g}: worst case {ef["obj"]:.6f} vs expected '
               f'{k["expected_cost"]:.6f}; {k["solves"]} MILP solve(s); rho* '
               + ' '.join(f'{r:.3f}' for r in k['rho']) + f' (KL {k["kl"]:.4f})')
+    if args.ef_only:
+        return None
 
     print('\n[2] column generation (DWR_N^Omega)')
     if args.engine == 'direct':
@@ -3968,7 +4167,7 @@ def run(args):
         print(f'  eps measured {core["eps"]:.6f} at {core["argmax"]}  '
               f'(bound eps_LR {al["eps_LR"]:.6f})')
 
-    first = ef['stack'].first_stage_values(ef['vals'])
+    first = {n: ef['vals'][n] for n in ef['first_stage_names']}
     out = {
         'instance': name, 'n': len(players), 'T': len(T), 'scenarios': len(scen),
         'probs': master.probs,
@@ -3976,8 +4175,9 @@ def run(args):
                                                    'price_sigma', 'rho', 'price_carriers',
                                                    'mip_gap', 'mip_time_limit')},
         'm_linking_rows': len(master.row_keys),
-        'ef': {k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
-                                  'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
+        'ef': {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
+                                     'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
+               'cached': ef.get('cached', False)},
         'ef_first_stage': {k: v for k, v in first.items() if abs(v) > 1e-9},
         'dw': {k: dw.get(k) for k in ('status', 'obj', 'lb', 'ub', 'gap', 'sigma', 'x0',
                                       'iterations', 'columns', 'time', 'doi', 'timing')},
@@ -4171,6 +4371,18 @@ def main():
     ap.add_argument('--doi-skip', default='',
                     help="grid columns to leave out, as carrier:side pairs, e.g. 'G:exp' "
                          "or 'G:exp,E:imp'")
+    ap.add_argument('--stall-reset', type=int, default=None,
+                    help='passes without progress before one unsmoothed pass (default 10; 0 off)')
+    ap.add_argument('--no-doi-certify', dest='doi_certify', action='store_false',
+                    help='UB only from RMP solutions without grid trade (no absorption '
+                         'certificate; the whole switch-off at once)')
+    ap.add_argument('--grid-caps', choices=('bnd_size', 'legacy'), default='bnd_size',
+                    help="members' trade bounds: the manuscript's eq:bnd_size (default) or "
+                         "the earlier shared import caps (sensitivity; tag _legacycaps)")
+    ap.add_argument('--doi-repair', default='',
+                    help='before the DOI switch-off, price every member once per '
+                         'fraction at duals moved that fraction of the import price past '
+                         "the price box on the rows with grid trade, e.g. '0.01,0.1'")
     ap.add_argument('--doi-taper-steps', type=int, default=None,
                     help='when the master settles with grid trade, shrink a budget on '
                          'it this many times before switching the DOIs off (default 0: off; did not help)')
@@ -4193,6 +4405,11 @@ def main():
     ap.add_argument('--deterministic-check', action='store_true',
                     help='also solve the plain model on scenario 0')
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--ef-only', action='store_true',
+                    help='solve (or read) the extensive form, write --ef-cache, and stop')
+    ap.add_argument('--ef-cache', default=None,
+                    help='pickle of the extensive-form result: read it if it exists, else '
+                         'solve and write it (same instance only; the caller names it)')
     run(ap.parse_args())
 
 

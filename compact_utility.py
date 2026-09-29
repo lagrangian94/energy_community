@@ -500,7 +500,58 @@ def process_cons_arr(arr, process_func):
     
     return new_arr
 
+def trade_bounds(params, players, time_periods):
+    """R_j^{k,+} (largest net consumption) and R_j^{k,-} (largest net production) of
+    carrier k for each member j, from its assets alone: {(u, k, '+'/'-'): R}.
+
+    + : non-flexible demand peak, plus electrolyser and heat-pump electric draw (E),
+        plus the storage charging rating of that carrier.
+    - : renewable peak (E), heat-pump heat output (H), electrolyser hydrogen output
+        (G), plus the storage discharging rating of that carrier.
+    """
+    def peak(key):
+        return max((params.get(f'{key}_{t}', 0.0) for t in time_periods), default=0.0)
+
+    def has(group, u):
+        return u in params.get(group, [])
+
+    R = {}
+    for u in players:
+        els_cap = params.get(f'els_cap_{u}', params.get('els_cap', 0.0))
+        hp_cap = params.get(f'hp_cap_{u}', params.get('hp_cap', 0.0))
+        sto_E = params.get(f'storage_power_E_{u}', 0.0) if has('players_with_elec_storage', u) else 0.0
+        sto_G = params.get('storage_power_G', 0.0) if has('players_with_hydro_storage', u) else 0.0
+        sto_H = params.get('storage_power_H', 0.0) if has('players_with_heat_storage', u) else 0.0
+        els = has('players_with_electrolyzers', u)
+        hp = has('players_with_heatpumps', u)
+        R[u, 'E', '+'] = (peak(f'd_E_nfl_{u}') + (els_cap if els else 0.0)
+                          + (hp_cap / params.get(f'nu_cop_{u}', 1.0) if hp else 0.0) + sto_E)
+        R[u, 'H', '+'] = peak(f'd_H_nfl_{u}') + sto_H
+        R[u, 'G', '+'] = peak(f'd_G_nfl_{u}') + sto_G
+        R[u, 'E', '-'] = (peak(f'renewable_cap_{u}') if has('players_with_renewables', u) else 0.0) + sto_E
+        R[u, 'H', '-'] = (hp_cap if hp else 0.0) + sto_H
+        h2 = 0.0
+        if els:
+            El = params.get('El') or {}
+            if 'a' in El and 'b' in El:
+                # each segment a_s d + b_s bounds the output from above on its range
+                h2 = max(a * els_cap + b for a, b in zip(El['a'], El['b']))
+            else:
+                h2 = params.get('e_G_cap', 0.0)
+        R[u, 'G', '-'] = h2 + sto_G
+    return R
+
+
 class LocalEnergyMarket:
+    def _trade_ub(self, side, where, k, u, legacy):
+        """Upper bound of member u's trade variable: side 'i' (import) or 'e' (export),
+        where 'mkt' (external market) or 'com' (community), carrier k. Under
+        grid_caps='legacy' it is the old bound (None: unbounded)."""
+        if self.trade_R is None:
+            return legacy
+        r = self.trade_R[u, k, '+' if side == 'i' else '-']
+        return 2.0 * r if where == 'mkt' else r
+
     def __init__(self,
                  players: List[str],
                  time_periods: List[int],
@@ -717,21 +768,39 @@ class LocalEnergyMarket:
         self.r_plus_hp = {}
         self.r_minus_hp = {}
 
+        # Trade bounds. params['grid_caps'] = 'bnd_size' (default) sets them per member
+        # as the manuscript's eq:bnd_size: community bounds R_j and market bounds 2 R_j,
+        # R_j^{k,+} the largest net consumption of carrier k the member's assets can have
+        # (imports) and R_j^{k,-} the largest net production (exports); see
+        # trade_bounds(). 'legacy' keeps the earlier caps: one import cap per carrier
+        # for every member (the peak of one household-scale demand profile), export
+        # caps from the owner's asset peak, community trade unbounded. At n=60 the
+        # legacy electricity import cap binds in ~21% of the member-hours that import
+        # (10-scenario EF), so it is kept only as a sensitivity case.
+        self.grid_caps = self.params.get('grid_caps', 'bnd_size')
+        if self.grid_caps not in ('bnd_size', 'legacy'):
+            raise ValueError(f"grid_caps must be 'bnd_size' or 'legacy', got {self.grid_caps!r}")
+        self.trade_R = (trade_bounds(self.params, self.players, self.time_periods)
+                        if self.grid_caps == 'bnd_size' else None)
+
         # Create variables for each player and time period
         for u in self.players:
             for t in self.time_periods:
                 if u in self.U_E:
-                    self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0, 
-                                                        ub=self.params.get(f'e_E_cap_{u}', -np.inf), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
-                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0)
+                    self.e_E_gri[u,t] = self.model.addVar(vtype="C", name=f"e_E_gri_{u}_{t}", lb=0,
+                                                        ub=self._trade_ub('e', 'mkt', 'E', u, self.params.get(f'e_E_cap_{u}', -np.inf)), obj=-1*self.params.get(f'pi_E_gri_export_{t}', 0))
+                    self.e_E_com[u,t] = self.model.addVar(vtype="C", name=f"e_E_com_{u}_{t}", lb=0,
+                                                        ub=self._trade_ub('e', 'com', 'E', u, None))
                 if u in self.U_H:
                     self.e_H_gri[u,t] = self.model.addVar(vtype="C", name=f"e_H_gri_{u}_{t}", lb=0,
-                                                        ub=self.params.get(f'e_H_cap', -np.inf), obj=-1*self.params.get(f'pi_H_gri_export_{t}', 0))
-                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0)
+                                                        ub=self._trade_ub('e', 'mkt', 'H', u, self.params.get(f'e_H_cap', -np.inf)), obj=-1*self.params.get(f'pi_H_gri_export_{t}', 0))
+                    self.e_H_com[u,t] = self.model.addVar(vtype="C", name=f"e_H_com_{u}_{t}", lb=0,
+                                                        ub=self._trade_ub('e', 'com', 'H', u, None))
                 if u in self.U_G:
                     self.e_G_gri[u,t] = self.model.addVar(vtype="C", name=f"e_G_gri_{u}_{t}", lb=0,
-                                                        ub=self.params.get(f'e_G_cap', -np.inf), obj=-1*self.params.get(f'pi_G_gri_export_{t}', 0))
-                    self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0)
+                                                        ub=self._trade_ub('e', 'mkt', 'G', u, self.params.get(f'e_G_cap', -np.inf)), obj=-1*self.params.get(f'pi_G_gri_export_{t}', 0))
+                    self.e_G_com[u,t] = self.model.addVar(vtype="C", name=f"e_G_com_{u}_{t}", lb=0,
+                                                        ub=self._trade_ub('e', 'com', 'G', u, None))
                 
                 # Production variables (for renewables, heat pumps, electrolyzers) with capacity limits
                 if u in self.players_with_renewables:  # Renewable generators
@@ -788,46 +857,52 @@ class LocalEnergyMarket:
                     cons = self.model.addCons(self.nfl_d[u,'elec',t] == nfl_elec_demand_t, name=f"fix_nfl_d_elec_{u}_{t}")
                     self.elec_nfl_demand_cons[f"elec_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap', -np.inf), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
+                                                     ub=self._trade_ub('i', 'mkt', 'E', u, self.params.get(f'i_E_cap', -np.inf)), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'E', u, None)) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 if u in self.players_with_nfl_hydro_demand:
                     nfl_hydro_demand_t = self.params.get(f'd_G_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_nfl_{u}_{t}", obj=-1*self.params.get(f'u_G_{u}_{t}', -np.inf))
                     cons = self.model.addCons(self.nfl_d[u,'hydro',t] == nfl_hydro_demand_t, name=f"fix_nfl_d_hydro_{u}_{t}")
                     self.hydro_nfl_demand_cons[f"hydro_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap', -np.inf), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
+                                                     ub=self._trade_ub('i', 'mkt', 'G', u, self.params.get(f'i_G_cap', -np.inf)), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'G', u, None)) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 if u in self.players_with_nfl_heat_demand:
                     nfl_heat_demand_t = self.params.get(f'd_H_nfl_{u}_{t}', 0)
                     self.nfl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_nfl_{u}_{t}", obj=-1*self.params.get(f'u_H_{u}_{t}', -np.inf))
                     cons = self.model.addCons(self.nfl_d[u,'heat',t] == nfl_heat_demand_t, name=f"fix_nfl_d_heat_{u}_{t}")
                     self.heat_nfl_demand_cons[f"heat_nfl_demand_cons_{u}_{t}"] = cons
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap', -np.inf), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
+                                                     ub=self._trade_ub('i', 'mkt', 'H', u, self.params.get(f'i_H_cap', -np.inf)), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'H', u, None)) #어차피 non-flexible demand 있으니 implicit하게 bound됨.
                 
                 # Flexible demand variables
                 if u in self.players_with_fl_elec_demand:
                     self.fl_d[u,'elec',t] = self.model.addVar(vtype="C", name=f"d_elec_{u}_{t}", 
                                                        lb=0.0)
                     self.i_E_gri[u,t] = self.model.addVar(vtype="C", name=f"i_E_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_E_cap', -np.inf), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
-                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0) #어차피 수전해, 열펌프 장비의 산출 output이 존재하니 implicit하게 bound됨.
+                                                     ub=self._trade_ub('i', 'mkt', 'E', u, self.params.get(f'i_E_cap', -np.inf)), obj=self.params.get(f'pi_E_gri_import_{t}', 0))
+                    self.i_E_com[u,t] = self.model.addVar(vtype="C", name=f"i_E_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'E', u, None)) #어차피 수전해, 열펌프 장비의 산출 output이 존재하니 implicit하게 bound됨.
                 if u in self.players_with_fl_hydro_demand:
                     fl_hydro_demand_cap = 10**6
                     self.fl_d[u,'hydro',t] = self.model.addVar(vtype="C", name=f"d_hydro_{u}_{t}", 
                                                        lb=0.0, ub=fl_hydro_demand_cap)
                     self.i_G_gri[u,t] = self.model.addVar(vtype="C", name=f"i_G_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_G_cap', -np.inf), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
-                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0) #어차피 fuel cell 장비의 산출 output이 존재하니 implicit하게 bound됨.
+                                                     ub=self._trade_ub('i', 'mkt', 'G', u, self.params.get(f'i_G_cap', -np.inf)), obj=self.params.get(f'pi_G_gri_import_{t}', 0))
+                    self.i_G_com[u,t] = self.model.addVar(vtype="C", name=f"i_G_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'G', u, None)) #어차피 fuel cell 장비의 산출 output이 존재하니 implicit하게 bound됨.
                 if u in self.players_with_fl_heat_demand:
                     fl_heat_demand_cap = 10**6
                     self.fl_d[u,'heat',t] = self.model.addVar(vtype="C", name=f"d_heat_{u}_{t}", 
                                                        lb=0.0, ub=fl_heat_demand_cap)
                     self.i_H_gri[u,t] = self.model.addVar(vtype="C", name=f"i_H_gri_{u}_{t}", lb=0,
-                                                     ub=self.params.get(f'i_H_cap', -np.inf), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
-                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0)
+                                                     ub=self._trade_ub('i', 'mkt', 'H', u, self.params.get(f'i_H_cap', -np.inf)), obj=self.params.get(f'pi_H_gri_import_{t}', 0))
+                    self.i_H_com[u,t] = self.model.addVar(vtype="C", name=f"i_H_com_{u}_{t}", lb=0,
+                                                     ub=self._trade_ub('i', 'com', 'H', u, None))
                 # Storage variables by type with capacity constraints
                 # Electricity storage
                 if u in self.players_with_elec_storage:

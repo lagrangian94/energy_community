@@ -132,7 +132,9 @@ RUNS = [
     dict(name='community_size_1000_6p',group='param6p', players=P6, config=C6, base=BASE6,
          ov={'num_households': 1000}, ovfn=None, budget=300),
     dict(name='export_cap_020_6p',     group='param6p', players=P6, config=C6, base=BASE6,
-         ov={'e_E_cap_ratio': 0.2, 'e_G_cap_ratio': 0.2, 'e_H_cap_ratio': 0.2}, ovfn=None, budget=300),
+         # the export-cap ratios scale the legacy caps only; eq:bnd_size ignores them
+         ov={'e_E_cap_ratio': 0.2, 'e_G_cap_ratio': 0.2, 'e_H_cap_ratio': 0.2,
+             'grid_caps': 'legacy'}, ovfn=None, budget=300),
     dict(name='baseline_15p', group='core', players=LC.PLAYERS_15, config=LC.CONFIGURATION_15,
          base=scalarize(LC.BASELINE_CANDIDATES_15), ov={}, ovfn=LC.apply_15player_overrides, budget=900),
     dict(name='baseline_30p', group='core', players=LC.PLAYERS_30, config=LC.CONFIGURATION_30,
@@ -198,6 +200,17 @@ RUNS = [
          ov={'base_h2_price_eur': 2.0, 'import_factor': 3.0,
              'reserve_price': 11.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
 ]
+
+# Trade bounds. The runs above use the manuscript's eq:bnd_size (per-member community
+# bounds R_j and market bounds 2 R_j, compact_utility.trade_bounds), under which the
+# bounds never bind. Every run is also registered under the earlier caps -- one shared
+# import cap per carrier, the peak of a household-scale profile, which binds at n=60 --
+# as <name>_legacycaps, group 'legacycaps': the sensitivity case showing the bound stays
+# small even when the caps are tighter than the theory assumes. The results computed
+# before the switch (Sep 28, 2026) are those directories.
+RUNS += [dict(r, name=r['name'] + '_legacycaps', group='legacycaps',
+              ov={**r['ov'], 'grid_caps': 'legacy'})
+         for r in list(RUNS) if r['ov'].get('grid_caps') != 'legacy']
 
 # sec.3.3 metric 1/6 groupings: (label, run at that cell). Consumed by summarize.py.
 CHANNEL_CELLS = {
