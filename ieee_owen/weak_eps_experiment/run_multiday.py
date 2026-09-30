@@ -50,7 +50,7 @@ from data_generator import setup_lem_parameters
 from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
                              flatten_for_csv, failed_checks)
 from stability_check import check_allocations, flatten_for_csv as stab_for_csv
-from core import CoreComputation
+from stochastic_core import deterministic_core
 from stochastic_extension import solve_deterministic
 import large_community as LC
 
@@ -521,7 +521,7 @@ def stab_only_day(run, day):
 def rowgen_day(run, day, budget):
     players = run['players']
     params = build_params(run, day)
-    cc = CoreComputation(players, 'mip', T, params, mipsolver=SEP_SOLVER)
+    cc = deterministic_core(players, T, params)
     t0 = time.time()
     _, success = cc.compute_core(max_iterations=int(1e8), tolerance=1e-6, time_limit=budget)
     t_rg = time.time() - t0

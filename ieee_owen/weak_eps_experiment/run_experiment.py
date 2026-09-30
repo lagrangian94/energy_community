@@ -46,7 +46,7 @@ from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
 from stability_check import check_allocations
 from compact_utility import LocalEnergyMarket
 from chp import ColumnGenerationSolver
-from core import CoreComputation
+from stochastic_core import deterministic_core
 import large_community as LC
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)))
@@ -225,8 +225,9 @@ def run_owen(n, players, T, params, scenario):
 
 # ----------------------------------------------------------------------------- RowGen stage
 def run_rowgen(n, players, T, params, scenario, time_limit, sep_solver=None):
-    print(f"\n{'='*72}\n[RowGen / CoS] n={n}  (time_limit={time_limit}s, sep_solver={sep_solver or 'highs'})\n{'='*72}")
-    core_comp = CoreComputation(players, 'mip', T, params, mipsolver=sep_solver)
+    # sep_solver is unused: the stochastic core (one scenario) separates on Gurobi
+    print(f"\n{'='*72}\n[RowGen / CoS] n={n}  (time_limit={time_limit}s, separation on Gurobi)\n{'='*72}")
+    core_comp = deterministic_core(players, T, params)
     t0 = time.time()
     alloc, success = core_comp.compute_core(max_iterations=int(1e8),
                                             tolerance=1e-6, time_limit=time_limit)

@@ -70,12 +70,14 @@ def check_allocations(players, time_periods, params, sigma, owen, gap,
     Returns a dict with, for each allocation, the worst coalition and its per-capita
     excess, and the verdict against the corresponding proposition.
     """
-    from core import CoreComputation
+    # One scenario through the stochastic core (Gurobi), the same code path as the
+    # stochastic game; mipsolver is kept in the signature for old callers and unused.
+    from stochastic_core import deterministic_core
 
     n = len(players)
     eps_lr = abs(gap) / n
 
-    cc = CoreComputation(players, model_type, time_periods, params, mipsolver=mipsolver)
+    cc = deterministic_core(players, time_periods, params, model_type=model_type)
 
     # check_imputation indexes coalition_costs[(j,)] directly, so the singletons have
     # to exist before either measurement runs.

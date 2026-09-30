@@ -48,7 +48,7 @@ import pandas as pd
 from data_generator import setup_lem_parameters
 from compact_utility import LocalEnergyMarket
 from chp import ColumnGenerationSolver
-from core import CoreComputation
+from stochastic_core import deterministic_core
 
 
 # ============================================================
@@ -452,7 +452,7 @@ def run_single_day_pricing(sensitivity_analysis, players, configuration,
     
 
     # IP core violation (separation only — brute force infeasible for 15 players)
-    core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
+    core_comp = deterministic_core(players, time_periods, parameters)
     cost_ip = {u: -1 * profit_ip[u] for u in players}
     coalition_ip, violation_ip, isimp_ip = core_comp.measure_stability_violation(cost_ip)
     row['violation_ip'] = violation_ip
@@ -586,7 +586,7 @@ def run_single_day_rowgen(sensitivity_analysis, players, configuration,
         **{k: v for k, v in sensitivity_analysis.items()},
     }
 
-    core_comp = CoreComputation(players, 'mip', time_periods, parameters, mipsolver=mipsolver)
+    core_comp = deterministic_core(players, time_periods, parameters)
 
     t0 = time.time()
     core_rowgen, success_rowgen = core_comp.compute_core(

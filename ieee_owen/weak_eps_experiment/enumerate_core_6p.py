@@ -10,10 +10,10 @@ sys.path.insert(0, os.path.join(_H,'ieee_owen','weak_eps_experiment'))
 sys.path.insert(0, os.path.join(_H,'ieee_owen')); sys.path.insert(0,_H); os.chdir(_H)
 
 from run_experiment import build_instance
-from core import CoreComputation
+from stochastic_core import deterministic_core
 
 players, config, T, params, _ = build_instance(6)
-cc = CoreComputation(players, 'mip', T, params)
+cc = deterministic_core(players, T, params)
 cc.find_all_coalitions(verbose=False)
 costs = {tuple(sorted(k)): v for k, v in cc.coalition_costs.items()}
 print(f"### coalitions computed: {len(costs)}")

@@ -40,7 +40,7 @@ sys.path.insert(0, _PAPER)
 sys.path.insert(0, _ROOT)
 os.chdir(_ROOT)
 import run_multiday as RM
-from core import CoreComputation
+from stochastic_core import deterministic_core
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 COLS = ['run', 'day', 'n_players', 'mode', 'converged', 'c_N', 'v_N', 'time_s', 'n_coalitions',
@@ -69,14 +69,14 @@ def fairness_day(run, day, mode, budget):
     cg = json.load(open(cg_path))
     owen = cg['owen_alloc_cost']
 
-    cc = CoreComputation(players, 'mip', RM.T, params, mipsolver=RM.SEP_SOLVER)
+    cc = deterministic_core(players, RM.T, params)
     t0 = time.time()
     alloc, ok = cc.compute_core(max_iterations=int(1e8), tolerance=1e-6,
                                 time_limit=budget, egalitarian=mode)
     t = time.time() - t0
     converged = bool(getattr(cc, 'egalitarian_converged', False))
     c_N = cc.coalition_costs[tuple(sorted(players))]
-    # Free: CoreComputation solves every singleton in its constructor.
+    # Free: the core solves every singleton in its constructor.
     kappa = {i: cc.coalition_costs[(i,)] for i in players}
     v_N = sum(kappa.values()) - c_N          # profit convention, >= 0 by superadditivity
 

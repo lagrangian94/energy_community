@@ -32,7 +32,7 @@ sys.path.insert(0, _PAPER)
 sys.path.insert(0, _ROOT)
 os.chdir(_ROOT)
 import run_multiday as RM
-from compact_utility import LocalEnergyMarket
+from stochastic_extension import solve_extensive_form, EF_GAP
 
 OUT = _HERE
 DEFAULT_RUNS = ['baseline_6p', 'baseline_15p', 'baseline_30p', 'baseline_60p']
@@ -45,13 +45,12 @@ def kappa_day(run, day):
     params = RM.build_params(run, day)
     kappa, t0 = {}, time.time()
     for u in players:
-        lem = LocalEnergyMarket(players=[u], time_periods=RM.T, parameters=params,
-                                model_type='mip', dwr=False, mipsolver='gurobi')
-        lem.model.hideOutput()
-        status = lem.solve()
-        if status != 'optimal':
-            raise RuntimeError(f"{run['name']} day {day} member {u}: status={status}")
-        kappa[u] = float(lem.model.getObjVal())
+        # the one-scenario extensive form, as the stochastic core values a coalition,
+        # so kappa_j and the v(S) of the row generation come from one code path
+        ef = solve_extensive_form([u], RM.T, [(1.0, params)], gap=EF_GAP, solver='gurobi')
+        if ef['status'] != 'optimal':
+            raise RuntimeError(f"{run['name']} day {day} member {u}: status={ef['status']}")
+        kappa[u] = float(ef['obj'])
     return {'run': run['name'], 'day': day, 'n_players': len(players),
             'kappa_cost': kappa, 'sum_kappa': float(sum(kappa.values())),
             'time_s': round(time.time() - t0, 2)}

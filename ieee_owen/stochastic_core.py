@@ -335,3 +335,21 @@ class StochasticCoreComputation(CoreComputation):
               f"({sep.stats['time_solve']:.1f}s, {sep.stats.get('bin_vars')} binaries"
               f"{', TRUNCATED' if sep.truncated else ''})")
         return coalition, violation, sep.truncated
+
+
+def deterministic_core(players: List[str], T: List[int], params: Dict,
+                       model_type: str = 'mip', **kw) -> StochasticCoreComputation:
+    """The deterministic game's row generation, separation and coalition values, through
+    this module with one scenario: the instance as given, probability 1.
+
+    Every IEEE harness uses this in place of core.CoreComputation, as the column
+    generation uses stochastic_extension.solve_deterministic in place of chp.py: one code
+    path for the deterministic and the stochastic game. At |Omega| = 1 it reproduced
+    core.CoreComputation (omega*, the coalitions added at n = 6, the weak eps of the
+    Owen point at n = 6 and 15; rowgen_check/part_a). core.py stays as the base class
+    and for applied_energy/.
+    """
+    if model_type != 'mip':
+        raise ValueError(f"model_type {model_type!r}: the stochastic core solves the "
+                         f"mixed-integer game only")
+    return StochasticCoreComputation(players, T, [(1.0, params)], model_type=model_type, **kw)

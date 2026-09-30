@@ -47,7 +47,7 @@ os.chdir(_ROOT)
 
 from run_experiment import build_instance
 from run_maximin import set_day
-from core import CoreComputation
+from stochastic_core import deterministic_core
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(OUT, 'maximin_slack1e-7')
@@ -94,7 +94,7 @@ def main():
         chi = {u: sigma[u] - gap / a.n for u in players}
 
         params = set_day(d, a.n, players, config, T)
-        cc = CoreComputation(players, 'mip', T, params)
+        cc = deterministic_core(players, T, params)
         buf, t0 = io.StringIO(), time.time()
         with contextlib.redirect_stdout(buf):
             for u in players:            # check_imputation indexes the singletons

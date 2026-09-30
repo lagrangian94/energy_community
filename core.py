@@ -6,6 +6,12 @@ with an application to cooperative procurement"
 Implements:
 1. SeparationProblem: Finds most violated coalition given current payoffs
 2. CoreComputation: Main row generation algorithm to find core allocation
+
+The IEEE harnesses (ieee_owen/) do not call CoreComputation directly: they use
+ieee_owen/stochastic_core.deterministic_core, the scenario-expanded core with one
+scenario, so the deterministic and the stochastic game share one code path. That module
+builds on the classes here -- SeparationProblem is its per-scenario block and
+CoreComputation its base class -- and applied_energy/ still calls them as they are.
 """
 
 from pyscipopt import Model, quicksum
