@@ -575,7 +575,7 @@ def trade_bounds(params, players, time_periods):
             El = params.get('El') or {}
             if 'a' in El and 'b' in El:
                 # each segment a_s d + b_s bounds the output from above on its range
-                h2 = max(a * els_cap + b for a, b in zip(El['a'], El['b']))
+                h2 = max((a + b) * els_cap for a, b in zip(El['a'], El['b']))
             else:
                 h2 = params.get('e_G_cap', 0.0)
         R[u, 'G', '-'] = h2 + sto_G
@@ -1626,21 +1626,24 @@ class LocalEnergyMarket:
             cons_pwl_ub = np.zeros(El['N_s'], dtype=object)
             for t in self.time_periods:
                 if El['eff_type'] == 1:
+                    # El holds the curve of a 1 MW unit (breakpoints p_val in MW,
+                    # intercepts b); a unit of els_cap MW runs f_cap(P) = cap f_1(P/cap):
+                    # breakpoints and intercepts scale with els_cap, slopes do not.
                     for s in range(El['N_s']):
                         cons = self.model.addCons(
-                            self.p[(u,'els',t)] - quicksum(El['a'][s] * self.els_d[(u,t)][s] + El['b'][s] * self.z_els_d_G[u,t][s] for s in range(El['N_s'])) == 0.0,
+                            self.p[(u,'els',t)] - quicksum(El['a'][s] * self.els_d[(u,t)][s] + El['b'][s] * els_cap * self.z_els_d_G[u,t][s] for s in range(El['N_s'])) == 0.0,
                             name=f"electrolyzer_production_curve_{u}_{t}_{s}"
                         )
                         cons_production_curve[s] = cons
 
                         cons = self.model.addCons(
-                            self.els_d[(u,t)][s] >=El['p_val'][s] * self.z_els_d_G[u,t][s],
+                            self.els_d[(u,t)][s] >=El['p_val'][s] * els_cap * self.z_els_d_G[u,t][s],
                             name=f"electrolyzer_pwl_lb_{u}_{t}_{s}"
                         )
                         cons_pwl_lb[s] = cons
 
                         cons = self.model.addCons(
-                            self.els_d[(u,t)][s] <=El['p_val'][s+1] * self.z_els_d_G[u,t][s],
+                            self.els_d[(u,t)][s] <=El['p_val'][s+1] * els_cap * self.z_els_d_G[u,t][s],
                             name=f"electrolyzer_pwl_ub_{u}_{t}_{s}"
                         )
                         cons_pwl_ub[s] = cons
@@ -1660,7 +1663,7 @@ class LocalEnergyMarket:
                 elif El['eff_type'] == 2:
                     for s in range(El['N_s']):    
                         cons = self.model.addCons(
-                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d.get((u,t),0) + El['b'][s] * self.z_on_G[u,t],
+                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d.get((u,t),0) + El['b'][s] * els_cap * self.z_on_G[u,t],
                             name=f"electrolyzer_production_curve_{u}_{t}"
                         )
                         cons_production_curve[s] = cons
@@ -1866,7 +1869,7 @@ class LocalEnergyMarket:
                 try:
                     for s in range(El['N_s']):
                         cons = self.model.addCons(
-                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d[(u,t)] + El['b'][s],
+                            self.p.get((u,'els',t),0) <= El['a'][s] * self.els_d[(u,t)] + El['b'][s] * els_cap,
                             name=f"electrolyzer_production_curve_{u}_{t}"
                         )
                 except:
