@@ -13,17 +13,23 @@ Parts (results as JSON/CSV under stochastic/rowgen_check/):
          StochasticCoreComputation on the same instance, cost-of-stability row
          generation (omega*, allocation, coalitions added), and the weak eps of the
          deterministic Owen point (solve_deterministic) measured by both separations.
+  cross  after a: each run's final allocation through both separations (with omega* = 0
+         the master's optimal face is large, so the two runs may stop at different
+         core points; this checks each against the other's separation).
   b      |Omega| = 3 (default sigmas, seed 0), n = 6: separation vs enumeration of all 62
          proper coalitions' extensive forms, for four allocations (raw Owen sigma,
          gap-corrected Owen E[x*], equal bill c(N)/n, equal surplus kappa + v(N)/n);
-         row-generation omega* vs the OPAP LP over every coalition.
+         row-generation omega* vs the OPAP LP over every coalition, and the least-core
+         value (v free, nonzero here) by row generation vs over all 62 rows.
   c      size and time of the separation MILP at |Omega| in {1, 3, 5} (one solve at the
-         stochastic Owen point E[x*] of that |Omega|), plus the Dinkelbach weak eps.
+         stochastic Owen point E[x*] of that |Omega|, over every S and over the proper
+         S only), plus the Dinkelbach weak eps.
 
 Usage (from anywhere):
   python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part deact
   python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part a --n 6
   python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part a --n 15 --time-limit 7200
+  python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part cross --n 15
   python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part b
   python ieee_owen/weak_eps_experiment/stochastic_rowgen_check.py --part c --n 15
 """
@@ -328,6 +334,34 @@ def part_a(args):
     print('\nSUMMARY a', json.dumps(_jsonable(out['compare']), indent=1))
 
 
+def part_cross(args):
+    """After part a: each row generation's final raw allocation p (sum p = c(N)) through
+    BOTH separations. With omega* = 0 the master's optimal face is large and the two
+    runs may stop at different core points; this shows each is in the other's core.
+    Adds 'cross' to part_a_n<n>.json."""
+    n = args.n
+    path = os.path.join(OUT, f'part_a_n{n}.json')
+    with open(path) as f:
+        out = json.load(f)
+    players, _, T, base, name = build_instance(n, day=DAY)
+    scen = scenarios(base, players, T, 1)
+    det = CoreComputation(players, 'mip', T, base, mipsolver='gurobi')
+    sto = SC.StochasticCoreComputation(players, T, scen)
+    cross = {}
+    for src in ('det', 'sto'):
+        p = out[f'{src}_rowgen']['raw_p']
+        for lab, cc in (('det', det), ('sto', sto)):
+            S, v = cc.find_violated_coalition(p)
+            sep = cc.last_actual_violation
+            cross[f'{lab}_separation_at_{src}_p'] = {
+                'coalition': sorted(S), 'violation': float(v),
+                'recomputed': None if sep is None else float(sep),
+                'tol_eff': 1e-6 * (1 + abs(sum(p.values())))}
+    out['cross'] = cross
+    _dump(out, os.path.basename(path))
+    print('\nSUMMARY cross', json.dumps(_jsonable(cross), indent=1))
+
+
 # =============================================================================
 def part_b(args):
     n, k = 6, 3
@@ -444,6 +478,13 @@ def part_c(args):
             'violation': v, 'violation_bound': st['violation_bound'],
             'coalition': '+'.join(S), 'truncated': sep.truncated,
             'eps_LR': owen['eps_LR'], 'owen_time': owen['time']}
+        # the max over PROPER coalitions (empty set and N excluded): a harder solve when
+        # the allocation is in the core, since the empty set cannot certify it
+        S2, v2 = sep.solve(time_limit=args.sep_time_limit, min_size=1, max_size=n - 1)
+        row.update({'proper_violation': v2, 'proper_coalition': '+'.join(S2),
+                    'proper_violation_bound': sep.stats['violation_bound'],
+                    'proper_time_solve': sep.stats['time_solve'],
+                    'proper_nodes': sep.stats['nodes'], 'proper_truncated': sep.truncated})
         if args.weak_eps:
             cc = SC.StochasticCoreComputation(players, T, scen)
             we = weak_eps(cc, owen['x'], args.eps_time_limit)
@@ -461,7 +502,7 @@ def part_c(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--part', required=True, choices=['deact', 'a', 'b', 'c'])
+    ap.add_argument('--part', required=True, choices=['deact', 'a', 'cross', 'b', 'c'])
     ap.add_argument('--n', type=int, default=6)
     ap.add_argument('--time-limit', type=float, default=3600.0,
                     help='row generation budget (s)')
@@ -475,7 +516,7 @@ def main():
     ap.add_argument('--weak-eps', action='store_true',
                     help='part c: also run the Dinkelbach weak-eps measurement')
     args = ap.parse_args()
-    {'deact': part_deact, 'a': part_a, 'b': part_b, 'c': part_c}[args.part](args)
+    {'deact': part_deact, 'a': part_a, 'cross': part_cross, 'b': part_b, 'c': part_c}[args.part](args)
 
 
 if __name__ == '__main__':
