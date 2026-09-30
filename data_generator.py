@@ -37,15 +37,22 @@ RESERVE_CALIBRATION_RANGES = {
 # (dataset FcrNdDK2). The experiments' calendar is January (month = 1), so day d of a
 # run takes the 24 prices of 2025-01-d; the data do not reach back to 2019, the year
 # of the wind series.
-RESERVE_PRICE_DATA = {'fcrn_dk2': ('./data/fcr_n_dk2_2025_01.csv', 1)}
+# fcrn_dk2_56 (the experiments' default since 2026-09-30): the same hourly shape,
+# rescaled so each day's mean is 56 EUR/MW.h, the 2022-01..2023-03 FCR-N average. At
+# the 2025 level itself (daily means ~17-21) the n=60 extensive form does not close to
+# 1e-4 in 30 min, hard or penalty alike (many fractional electrolyzer segment
+# binaries); at mean 56 it solves in a few minutes and column generation is unchanged.
+RESERVE_PRICE_DATA = {'fcrn_dk2': ('./data/fcr_n_dk2_2025_01.csv', 1, None),
+                      'fcrn_dk2_56': ('./data/fcr_n_dk2_2025_01.csv', 1, 56.0)}
 
 
 def reserve_price_series(spec, month, day, time_periods):
-    """{t: EUR/MW.h} for one day of a named hourly reserve price series."""
+    """{t: EUR/MW.h} for one day of a named hourly reserve price series (rescaled to
+    the series' daily mean when it names one)."""
     if spec not in RESERVE_PRICE_DATA:
         raise ValueError(f"unknown reserve price series {spec!r}; "
                          f"known: {sorted(RESERVE_PRICE_DATA)}")
-    path, data_month = RESERVE_PRICE_DATA[spec]
+    path, data_month, daily_mean = RESERVE_PRICE_DATA[spec]
     if month != data_month:
         raise ValueError(f"{spec} covers month {data_month} only, got month={month}")
     df = pd.read_csv(path, parse_dates=['HourDK'])
@@ -53,7 +60,8 @@ def reserve_price_series(spec, month, day, time_periods):
     T = list(time_periods)
     if len(prices) != len(T):
         raise ValueError(f"{spec} has {len(prices)} hours on day {day}, need {len(T)}")
-    return {t: float(p) for t, p in zip(T, prices)}
+    scale = 1.0 if daily_mean is None else daily_mean / float(prices.mean())
+    return {t: scale * float(p) for t, p in zip(T, prices)}
 
 
 def log_reserve_calibration(parameters):
@@ -330,7 +338,8 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     # carrier index (reserve.txt sec.2.1). ABSOLUTE, not a fraction of the import
     # price: the product is Nordic FCR-N (symmetric two-sided, matching r_sym),
     # priced from Energinet DK2 data. A number is a flat price (11 low regime, 56 the
-    # 2022-01..2023-03 average); 'fcrn_dk2' is the hourly January 2025 series.
+    # 2022-01..2023-03 average); 'fcrn_dk2' is the hourly January 2025 series and
+    # 'fcrn_dk2_56' (the default) its hourly shape at a daily mean of 56.
     # reserve_price may name an hourly price series instead of a flat number
     # (RESERVE_PRICE_DATA); pi_res then holds that day's mean, used for the on/off
     # flag and for reporting, while pi_res_t carries the prices the model is paid.

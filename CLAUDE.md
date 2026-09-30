@@ -97,7 +97,12 @@ Two community-level channels beyond the carrier balances (`reserve.txt`):
   sum of its hours' prices (`pi_res_t`) or `|T_i| * pi_res` at a flat price — the
   block-length factor is easy to drop by mistake. Baseline (since 2026-09-29) is the
   Nordic FCR-N design: 1-hour blocks, hourly DK2 FCR-N prices of January 2025
-  (`reserve_price='fcrn_dk2'`, `data/fcr_n_dk2_2025_01.csv`, mean 21.1 EUR/MW.h).
+  (`data/fcr_n_dk2_2025_01.csv`). Since 2026-09-30 the default is `'fcrn_dk2_56'`: that
+  day's hourly shape rescaled to a daily mean of 56 EUR/MW.h (the 2022-01..2023-03
+  FCR-N average). The unscaled 2025 prices (`'fcrn_dk2'`, mean 21.1) make the n=60
+  extensive form hard: it does not close to 1e-4 in 30 min, hard or penalty alike
+  (the price LEVEL, not the hourly variation or the penalty, leaves many electrolyzer
+  segment binaries fractional); column generation is fine at either level.
 - **Reserve shortfall** (`reserve_mode`, `compact_utility.reserve_mode`): `'penalty'`
   (default since 2026-09-29) adds an EC-level shortfall `s_res_up/dn` per row (and
   scenario) charged `k * pi_res_t` per MW.h, k = `reserve_penalty_factor` = 5; `'hard'`
@@ -109,8 +114,8 @@ Two community-level channels beyond the carrier balances (`reserve.txt`):
 - **Peak**: `sum_j (i_E_gri - e_E_gri) <= p`, cost `delta_peak * p`.
 
 Prices are **absolute**, not fractions of the import price:
-`reserve_price` [EUR/MW.h] ∈ {0, 11, 'fcrn_dk2', 56} (a flat number or a named hourly
-series), `peak_penalty` [EUR/MW] ∈ {0, 150, 200}.
+`reserve_price` [EUR/MW.h] ∈ {0, 11, 'fcrn_dk2', 'fcrn_dk2_56', 56} (a flat number or a
+named hourly series), `peak_penalty` [EUR/MW] ∈ {0, 150, 200}.
 Both default to 0, which leaves the model byte-identical to the pre-reserve version.
 
 Per-asset headroom is private (it enters every subproblem); the coupling rows and

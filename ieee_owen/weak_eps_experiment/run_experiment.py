@@ -57,11 +57,12 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 #   RESERVE_PRICE [EUR/MW.h]  a flat number (0 = channel off, 11 = low regime,
 #                             56 = 2022-01..2023-03 FCR-N average) or the name of an
 #                             hourly series: 'fcrn_dk2' = Nordic FCR-N, DK2, January
-#                             2025 (data_generator.RESERVE_PRICE_DATA), the baseline
+#                             2025 (data_generator.RESERVE_PRICE_DATA); 'fcrn_dk2_56' =
+#                             its hourly shape at a daily mean of 56, the baseline
 #   PEAK_PENALTY  [EUR/MW]    0 = channel off, 150-200 = Cornelusse et al. 2019
 # Sweeping these is the sec.3.1 scenario axis; the channel-decomposition runs
 # (balance only / +reserve / +peak / both) just zero out one or the other.
-RESERVE_PRICE = 'fcrn_dk2'
+RESERVE_PRICE = 'fcrn_dk2_56'
 PEAK_PENALTY = 150.0
 # Reserve market design: hourly products, as the Nordic FCR-N market is cleared
 # (D-2 and D-1 auctions, one product per hour). The earlier 4-hour blocks were the

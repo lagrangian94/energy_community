@@ -92,8 +92,13 @@ OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
 #            what holds the Lagrangian bound back)
 #   EF_GAP   extensive form and stand-alone MILPs: v^MIP enters omega directly
 #   CG_GAP   column generation: stop once UB - LB <= CG_GAP (1 + |UB|)
+# EF_GAP is 1e-4 since 2026-09-29 (it was 1e-6). At n=60, 20 scenarios and hourly
+# FCR-N reserve the KL EF found its incumbent in ~10 min and then spent the next hour
+# moving the bound from 0.04% to 0.02%, and the manuscript does not use omega to
+# more than a few percent. The cost is noise in omega: an absolute ~2 on either side
+# (see above). Pass --mip-gap 1e-6 where omega itself is the object of a comparison.
 MIP_GAP = 1e-4
-EF_GAP = 1e-6
+EF_GAP = 1e-4
 CG_GAP = 1e-6
 # OMEGA_TOL: column generation also stops once omega^LR is known to this relative
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
@@ -370,12 +375,14 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
 # Extensive form
 # =============================================================================
 def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
-                         solver='highs', kl_radius=None):
+                         solver='highs', kl_radius=None, log_file=None):
     """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
 
     solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
     gurobipy copy of it. kl_radius > 0 solves the KL-robust version instead,
     min_x max_{KL(rho || rho_hat) <= r} E_rho[cost(x)] (Gurobi only).
+    log_file: with Gurobi, write its progress log (bound, incumbent, gap) there,
+    appended across the KL refinement rounds; the console stays quiet.
     """
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
@@ -388,10 +395,12 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
         if solver != 'gurobi':
             raise ValueError('the KL-robust extensive form needs --mip-solver gurobi '
                              '(lazy constraints)')
-        return _solve_extensive_kl(st, build, time_limit, gap, quiet, kl_radius)
-    if solver in ('highs', 'gurobi'):
-        fn = _solve_extensive_highs if solver == 'highs' else _solve_extensive_gurobi
-        return fn(st, build, time_limit, gap, quiet)
+        return _solve_extensive_kl(st, build, time_limit, gap, quiet, kl_radius,
+                                   log_file=log_file)
+    if solver == 'gurobi':
+        return _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=log_file)
+    if solver == 'highs':
+        return _solve_extensive_highs(st, build, time_limit, gap, quiet)
     if solver != 'scip':
         raise ValueError(f"MIP solver must be 'scip', 'highs' or 'gurobi', got {solver!r}")
     _set_mip_params(m, time_limit, gap, quiet=quiet)
@@ -582,13 +591,24 @@ def _solve_extensive_highs(st, build, time_limit, gap, quiet):
     }
 
 
-def _solve_extensive_gurobi(st, build, time_limit, gap, quiet):
+def _gurobi_log(g, quiet, log_file):
+    """Console output per `quiet`; with a log file, the full log goes there only."""
+    if log_file:
+        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+        g.Params.OutputFlag = 1
+        g.Params.LogToConsole = 0 if quiet else 1
+        g.Params.LogFile = log_file
+    else:
+        g.Params.OutputFlag = 0 if quiet else 1
+
+
+def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None):
     """solve_extensive_form on a gurobipy copy of the stacked SCIP model."""
     m = st.model
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
     g, gv = _to_gurobi(m, 'DP_Omega', time_limit, gap)
-    g.Params.OutputFlag = 0 if quiet else 1
+    _gurobi_log(g, quiet, log_file)
     names = list(gv)
     by_name = {v.name: v for v in m.getVars()}
     gvars = [gv[n] for n in names]
@@ -622,7 +642,8 @@ def _kl_tangent(s):
     return a, a - 1.0 - s * a
 
 
-def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30):
+def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30,
+                        log_file=None, round_gap=1e-3):
     """The KL-robust extensive form through the dual of the inner max
     (Love & Bayraksan, phi-divergence constrained two-stage programs, eq. 9):
 
@@ -643,6 +664,13 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     incumbent's ratios s_w = ln(p_w / q_w) are added and the MILP re-solved from the
     incumbent (with its exact lam, mu, t as the start).
 
+    Each round is a full MILP solve, and the 0.25 grid alone leaves the incumbent
+    ~0.03% short of psi at n=60, |Omega|=20, so a round solved to the final gap is
+    usually followed by another (day 1: 80 min to 1e-4, then a restart from 0 nodes).
+    Rounds therefore run at round_gap (>= gap) while the tangents at the incumbent are
+    still off by more than gap; once they are exact to gap, the MIPGap drops to gap
+    for the closing round(s).
+
     Replaces a first version that added distribution cuts theta >= p.h as lazy
     constraints at incumbents only: at n=60 it took 304 s for |Omega|=5 (stochastic
     EF: ~10 s) and had not finished |Omega|=10 after 100 minutes.
@@ -653,7 +681,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
     g, gv = _to_gurobi(m, 'DP_Omega_KL', time_limit, gap)
-    g.Params.OutputFlag = 0 if quiet else 1
+    _gurobi_log(g, quiet, log_file)
     gap = g.Params.MIPGap
     q = np.array(st.probs)
     S = len(q)
@@ -693,7 +721,9 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         g.addLConstr(t[w] + lam, GRB.GREATER_EQUAL, 0.0)      # the asymptote s -> -inf
 
     rounds, t0 = [], time.time()
+    loose = max(gap, round_gap)
     for k in range(max_rounds):
+        g.Params.MIPGap = loose
         g.optimize()
         if g.SolCount == 0:
             raise RuntimeError(f'KL extensive form ({len(st.players)} players): no '
@@ -704,9 +734,15 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         psi += m.getObjoffset()
         bound = g.ObjBound
         rounds.append({'obj_model': g.ObjVal, 'bound': bound, 'psi': psi,
-                       'time': g.Runtime, 'nodes': g.NodeCount})
-        if psi - bound <= gap * max(1.0, abs(psi)):
+                       'time': g.Runtime, 'nodes': g.NodeCount, 'mip_gap': loose})
+        tol = gap * max(1.0, abs(psi))
+        if psi - bound <= tol:
             break
+        if g.Status == GRB.TIME_LIMIT:
+            break
+        # tangents exact at the incumbent: what is left is the MIP gap, so close it
+        if psi - g.ObjVal <= tol:
+            loose = gap
         # exact tangents at the incumbent's own ratios, then restart from it
         pos = rho > 0
         for w in np.nonzero(pos)[0]:
@@ -1856,7 +1892,11 @@ class DirectMaster:
         self.round_tol = round_tol
         self._pool = None
         self.ub, self._pen_state = np.inf, None
-        self.ub_every, self.pricing_gap_floor, self.pricing_tightened = ub_every, 1e-9, 0
+        # floor 1e-6, not 1e-9: at n=60, 20 scenarios, 4h reserve blocks (KL, day 1) the
+        # tightening walked the pricing MIPGap 1e-4 -> 1e-8 in four passes without LB
+        # moving and the run died in a segfault inside the pricing solver
+        self.ub_every, self.pricing_gap_floor, self.pricing_tightened = ub_every, 1e-6, 0
+        self._tighten_lb = None
         # column management: every purge_every iterations, drop the prosumer columns
         # that have been out of the RMP solution for purge_age iterations and price
         # out at the current duals (0: keep every column)
@@ -2780,8 +2820,23 @@ class DirectMaster:
                             status = 'done'
                         elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                             status = 'round'
+                        if self.verbose and status is None:
+                            slack = sorted(((r[0] - r[1], u) for u, r in res.items()),
+                                           reverse=True)
+                            print(f'    [no column] RMP-LB {lp_obj - self.lb:.4e}  '
+                                  f'sum pricing slack {sum(s for s, _ in slack):.4e}  '
+                                  f'top {[(u, round(s, 6)) for s, u in slack[:3]]}  '
+                                  f'gaps {sorted(set(self.subs[u].gap for u in res))}')
+                        if status is not None:
+                            pass
+                        elif (self._tighten_lb is not None
+                              and self.lb <= self._tighten_lb + prog):
+                            # the last tightening left LB where it was: the pricing
+                            # gaps are not what holds it down, so stop tightening
+                            status = 'stalled'
                         elif self._tighten_pricing(res):
                             mode = 'tighten'
+                            self._tighten_lb = self.lb
                         else:
                             status = 'stalled'
                     elif (sum(r[0] - r[1] for r in res.values())
@@ -2795,6 +2850,10 @@ class DirectMaster:
                         # a pass that prices nothing.
                         if self._tighten_pricing(res):
                             mode = 'tighten'
+                    if added:
+                        # the stop-tightening test is for consecutive passes that
+                        # price nothing; columns in between reset it
+                        self._tighten_lb = None
             if self.sar and status in ('round', 'stalled') and self._penalized():
                 self._update_ub()
                 viol = self._shadow_viol
@@ -4000,6 +4059,18 @@ def run(args):
     base['grid_caps'] = args.grid_caps
     if args.reserve_mode is not None:
         base['reserve_mode'] = args.reserve_mode
+    from run_experiment import RESERVE_BLOCK_HOURS as _BLK_DEFAULT
+    if args.reserve_block_hours is not None:
+        base['reserve_block_hours'] = args.reserve_block_hours
+    if args.reserve_price_scale is not None and 'pi_res_t' in base:
+        # the hourly series scaled to another level, shape kept (sensitivity; tag _rsc<f>)
+        base['pi_res_t'] = {t: args.reserve_price_scale * v for t, v in base['pi_res_t'].items()}
+        base['pi_res'] = base['pi_up'] = base['pi_dn'] = float(np.mean(list(base['pi_res_t'].values())))
+    if args.reserve_price_flat is not None:
+        # a flat price instead of the hourly series (sensitivity; tag _res<p>)
+        base.pop('pi_res_t', None)
+        base.pop('reserve_price_source', None)
+        base['pi_res'] = base['pi_up'] = base['pi_dn'] = float(args.reserve_price_flat)
     if args.day is not None:
         name = f'{name}_day{args.day}'
     scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
@@ -4026,6 +4097,11 @@ def run(args):
         + ('_lpmix' if args.lp_mixed else '')         + ('_repair' if args.doi_repair else '')         + ('_legacycaps' if args.grid_caps == 'legacy' else '') \
         + ('_seed' if kl and args.kl_seed_ef else '') \
         + ('_hard' if base.get('reserve_mode') == 'hard' else '') \
+        + (f'_res{args.reserve_price_flat:g}' if args.reserve_price_flat is not None else '') \
+        + (f'_rsc{args.reserve_price_scale:g}' if args.reserve_price_scale is not None else '') \
+\
+        + (f"_blk{base['reserve_block_hours']}"
+           if base.get('reserve_block_hours', _BLK_DEFAULT) != _BLK_DEFAULT else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
     if args.fallback_purge_age is not None:
@@ -4067,7 +4143,7 @@ def run(args):
         ef['cached'] = True
         print(f'  (read from {args.ef_cache})')
     else:
-        ef = solve_extensive_form(players, T, scen, **mip_kw)
+        ef = solve_extensive_form(players, T, scen, log_file=args.ef_log, **mip_kw)
         ef['n_vars'] = ef['stack'].model.getNVars()
         ef['first_stage_names'] = sorted(ef['stack'].first_stage)
         if args.ef_cache:
@@ -4082,6 +4158,11 @@ def run(args):
         print(f'  KL r={k["radius"]:g}: worst case {ef["obj"]:.6f} vs expected '
               f'{k["expected_cost"]:.6f}; {k["solves"]} MILP solve(s); rho* '
               + ' '.join(f'{r:.3f}' for r in k['rho']) + f' (KL {k["kl"]:.4f})')
+        for i, rd in enumerate(k['refinements']):
+            print(f'    round {i + 1}: MIPGap {rd.get("mip_gap", float("nan")):.0e}  '
+                  f'{rd["time"]:.1f}s  {rd["nodes"]:.0f} nodes  psi-bound '
+                  f'{(rd["psi"] - rd["bound"]) / max(abs(rd["psi"]), 1.0):.2e}  '
+                  f'psi-incumbent {(rd["psi"] - rd["obj_model"]) / max(abs(rd["psi"]), 1.0):.2e}')
     if args.ef_only:
         return None
 
@@ -4295,6 +4376,18 @@ def main():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--ef-log', default=None,
+                    help='write the Gurobi log of the extensive form (bound, incumbent, '
+                         'gap per node line) to this file')
+    ap.add_argument('--reserve-block-hours', type=int, default=None,
+                    help="reserve delivery block length in hours (a divisor of |T|); "
+                         "default is run_experiment's RESERVE_BLOCK_HOURS (1, Nordic "
+                         "FCR-N). Another value adds _blk<h> to the file name")
+    ap.add_argument('--reserve-price-scale', type=float, default=None,
+                    help='multiply the hourly reserve prices by this factor (sensitivity)')
+    ap.add_argument('--reserve-price-flat', type=float, default=None,
+                    help='flat reserve price [EUR/MW.h] instead of the hourly FCR-N series '
+                         '(sensitivity; adds _res<p> to the file name)')
     ap.add_argument('--reserve-mode', choices=['hard', 'penalty'], default=None,
                     help="reserve shortfall treatment; default is run_experiment's "
                          "RESERVE_MODE ('penalty'). 'hard' adds _hard to the file name")

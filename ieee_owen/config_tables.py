@@ -94,8 +94,8 @@ def prose_setup():
 The community of Section~\ref{sec:model} is instantiated at $|N|\in\{6,15,30,60\}$ over
 $|T|=24$ hourly periods, with Korean (Jeju) load and price data and DK2 wind. Both
 community-level channels are active: a symmetric reserve product sold hour by hour as
-in the Nordic FCR-N market, paid the hourly DK2 FCR-N prices of January 2025 (mean
-$21.1$~\euro/MW$\cdot$h), and a coincident-peak charge of
+in the Nordic FCR-N market, paid hourly prices with the profile of the DK2 FCR-N
+prices of January 2025 scaled to a daily mean of $56$~\euro/MW$\cdot$h, and a coincident-peak charge of
 $150$~\euro/MW, so $m=(|K|+3)|T|=144$ at every size. Each size is run over $31$ daily
 instances; aggregates are geometric means, which is the appropriate summary for a
 quantity whose scaling in $n$ is the object of interest. The dispatch MILP, the
@@ -207,7 +207,7 @@ def tab_parameters():
         (r'\midrule', '', '', ''),
         (r'\multicolumn{4}{@{}l}{\emph{Reserve and peak coupling}}', '', '', ''),
         (r'\quad Reserve price $\pi^{\mathrm{res}}_t$', 'hourly', r'\euro/MW$\cdot$h',
-         r'FCR-N DK2, Jan.\ 2025, mean 21.1'),
+         r'FCR-N DK2 Jan.\ 2025 profile, daily mean 56'),
         (r'\quad Reserve product', r'\multicolumn{3}{l}{symmetric, hourly (Nordic FCR-N)}', '', ''),
         (r'\quad Peak penalty $\delta^{\mathrm{peak}}$', '150', r'\euro/MW', ''),
     ]

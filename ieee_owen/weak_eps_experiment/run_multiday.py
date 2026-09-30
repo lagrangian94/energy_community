@@ -60,13 +60,16 @@ T = list(range(24))
 DAYS = list(range(1, 32))                      # 31 days, matching results_53
 # Reserve/peak scenario in ABSOLUTE units (reserve.txt sec.2.1 / sec.3.1).
 #   RESERVE_PRICE [EUR/MW.h]  a flat number (0 = channel off, 11 = low regime,
-#                             56 = 2022-01..2023-03 FCR-N average) or 'fcrn_dk2', the
-#                             hourly Nordic FCR-N DK2 prices of January 2025 (baseline)
+#                             56 = 2022-01..2023-03 FCR-N average) or a named hourly
+#                             series: 'fcrn_dk2' = Nordic FCR-N DK2, January 2025;
+#                             'fcrn_dk2_56' = its hourly shape at a daily mean of 56
+#                             (baseline since 2026-09-30, data_generator.RESERVE_PRICE_DATA)
 #   PEAK_PENALTY  [EUR/MW]    0 = channel off, 150-200 = Cornelusse range
-RESERVE_PRICE, PEAK_PENALTY = 'fcrn_dk2', 150.0
-# Monthly mean of the fcrn_dk2 series, the label the baseline carries on the
-# reserve-price sweep axis below.
-FCRN_MEAN = 21.1
+RESERVE_PRICE, PEAK_PENALTY = 'fcrn_dk2_56', 150.0
+# Daily mean of the baseline series, the label it carries on the reserve-price sweep
+# axis below; FCRN_2025_MEAN is the monthly mean of the unscaled January 2025 prices.
+FCRN_MEAN = 56.0
+FCRN_2025_MEAN = 21.1
 # Reserve market design: hourly products, as the Nordic FCR-N market is cleared.
 # The earlier 4-hour blocks were the Continental Europe FCR design.
 RESERVE_BLOCK_HOURS = 1
@@ -188,20 +191,20 @@ RUNS = [
     dict(name='channel_balance_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 0.0, 'peak_penalty': 0.0}, ovfn=None, budget=300),
     dict(name='channel_reserve_6p', group='scenario', players=P6, config=C6, base=BASE6,
-         ov={'reserve_price': 'fcrn_dk2', 'peak_penalty': 0.0}, ovfn=None, budget=300),
+         ov={'reserve_price': RESERVE_PRICE, 'peak_penalty': 0.0}, ovfn=None, budget=300),
     dict(name='channel_peak_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 0.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
-    # reserve_price sweep 0 / 11 / FCR-N (hourly, mean 21.1) / 56 at peak=150. The 0
-    # end and the FCR-N baseline are channel_peak_6p and baseline_6p; 56 is the
-    # 2022-01..2023-03 FCR-N average, a high-price regime.
+    # reserve_price sweep 0 / 11 / FCR-N 2025 (hourly, mean 21.1) / baseline (FCR-N
+    # shape at mean 56) at peak=150. The 0 end and the baseline are channel_peak_6p
+    # and baseline_6p; reserve_fcrn2025_6p is the unscaled January 2025 prices.
     dict(name='reserve_low_6p', group='scenario', players=P6, config=C6, base=BASE6,
          ov={'reserve_price': 11.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
-    dict(name='reserve_high_6p', group='scenario', players=P6, config=C6, base=BASE6,
-         ov={'reserve_price': 56.0, 'peak_penalty': 150.0}, ovfn=None, budget=300),
+    dict(name='reserve_fcrn2025_6p', group='scenario', players=P6, config=C6, base=BASE6,
+         ov={'reserve_price': 'fcrn_dk2', 'peak_penalty': 150.0}, ovfn=None, budget=300),
     # peak_penalty sweep 0 / 150 / 200 at the FCR-N reserve price. The 0 and 150 ends
     # are channel_reserve_6p and baseline_6p, so only the top of the Cornelusse range.
     dict(name='peak_200_6p', group='scenario', players=P6, config=C6, base=BASE6,
-         ov={'reserve_price': 'fcrn_dk2', 'peak_penalty': 200.0}, ovfn=None, budget=300),
+         ov={'reserve_price': RESERVE_PRICE, 'peak_penalty': 200.0}, ovfn=None, budget=300),
     # sec.3.3 metric 6: reserve_price x low_h2_margin interaction -- does reserve
     # revenue substitute for the hydrogen margin and change the commitment pattern?
     # low_h2_margin_6p already covers this cell at the FCR-N baseline price.
@@ -238,7 +241,7 @@ CHANNEL_CELLS = {
 }
 # price axes keyed by EUR/MW.h; the FCR-N baseline sits at its monthly mean
 RESERVE_SWEEP = {0.0: 'channel_peak_6p', 11.0: 'reserve_low_6p',
-                 FCRN_MEAN: 'baseline_6p', 56.0: 'reserve_high_6p'}
+                 FCRN_2025_MEAN: 'reserve_fcrn2025_6p', FCRN_MEAN: 'baseline_6p'}
 PEAK_SWEEP = {0.0: 'channel_reserve_6p', 150.0: 'baseline_6p', 200.0: 'peak_200_6p'}
 LOW_H2_SWEEP = {0.0: 'low_h2_reserve0_6p', 11.0: 'low_h2_reserve11_6p',
                 FCRN_MEAN: 'low_h2_margin_6p'}
@@ -540,6 +543,7 @@ def rowgen_day(run, day, budget):
 
 # --------------------------------------------------------------------------- driver
 def main():
+    global RESERVE_BLOCK_HOURS
     ap = argparse.ArgumentParser()
     ap.add_argument('--phase', choices=['owen', 'rowgen', 'stab', 'both'],
                     default='both', help="'stab' back-fills the separation "
@@ -559,7 +563,18 @@ def main():
     # the same at every size it is quoted for.
     ap.add_argument('--budget', type=int, default=0,
                     help='per-day row-generation budget in seconds (default: per-run)')
+    ap.add_argument('--reserve-block-hours', type=int, default=None,
+                    help=f'reserve delivery block length in hours (default '
+                         f'{RESERVE_BLOCK_HOURS}); another value writes to <run>_blk<h>')
     args = ap.parse_args()
+    blk = args.reserve_block_hours
+    if blk is not None and blk != RESERVE_BLOCK_HOURS:
+        # results of another block length go to their own directories
+        RESERVE_BLOCK_HOURS = blk
+        for r in RUNS:
+            r['name'] = f"{r['name']}_blk{blk}"
+        if args.runs:
+            args.runs = ','.join(f'{x}_blk{blk}' for x in args.runs.split(','))
 
     run_filter = set(args.runs.split(',')) if args.runs else None
     groups = set(args.groups.split(',')) if args.groups else set()
