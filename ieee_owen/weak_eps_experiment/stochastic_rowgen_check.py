@@ -112,14 +112,17 @@ class StoCore(_Trace, SC.StochasticCoreComputation):
 
 def owen_point(players, T, scen, base):
     """Owen allocation of the (stochastic) game, cost convention: raw sigma and the
-    gap-corrected E[x*], from the direct engine with exact CG (omega_tol off)."""
+    gap-corrected E[x*]. |Omega| = 1: solve_deterministic (exact CG, omega_tol off);
+    otherwise the direct engine with the command line's defaults."""
     t0 = time.time()
     if len(scen) == 1:
         d = SE.solve_deterministic(players, T, base)
         return {'sigma': d['sigma'], 'x': d['owen'], 'v_mip': d['v_mip'], 'v_lr': d['v_lr'],
                 'eps_LR': d['eps'], 'omega_LR': abs(d['gap']), 'time': time.time() - t0}
+    # The command line's defaults, omega_tol = 2% included. With omega_tol off the
+    # direct engine tails off at n=6, |Omega|=3, day 1: RMP -2565.1301 against LB
+    # -2565.1360 after 7400 CG iterations (the 1e-6 CG gap is 2.6e-3), UB never finite.
     args = SE.build_parser().parse_args([])
-    args.omega_tol = None
     SE._configure_direct(args)
     ef = SE.solve_extensive_form(players, T, scen, gap=args.mip_gap, solver=args.mip_solver)
     dw, master = SE.solve_dwr_direct(players, T, scen, base, **SE._direct_kwargs(args, ef))
@@ -128,12 +131,15 @@ def owen_point(players, T, scen, base):
             'x': {u: -float(al['Ex'][u]) for u in players},
             'v_mip': float(ef['obj']), 'v_lr': float(dw['obj']),
             'eps_LR': float(al['eps_LR']), 'omega_LR': float(al['omega_LR']),
-            'budget_residual': float(al['budget_residual']), 'time': time.time() - t0}
+            'budget_residual': float(al['budget_residual']),
+            'duality_residual': float(al['duality_residual']), 'omega_tol': args.omega_tol,
+            'cg_status': dw['status'], 'time': time.time() - t0}
 
 
-def rowgen(cc, time_limit):
+def rowgen(cc, time_limit, max_iter=100):
     t0 = time.time()
-    q, ok = cc.compute_core(cost_of_stability=True, time_limit=time_limit)
+    q, ok = cc.compute_core(cost_of_stability=True, time_limit=time_limit,
+                            max_iterations=max_iter)
     n = len(cc.players)
     return {
         'omega_star': float(cc.cost_of_stability_value), 'weak_eps': float(cc.weak_eps),
@@ -145,6 +151,57 @@ def rowgen(cc, time_limit):
         'c_N': cc.coalition_costs[tuple(sorted(cc.players))],
         'time': time.time() - t0,
     }
+
+
+def least_core(cc, coalitions=None, tol=1e-6, max_iter=500):
+    """Least-core value min v s.t. sum p = c(N), sum_S p <= c(S) + v for every proper
+    S, with v FREE (negative when the core has interior), on SCIP's LP.
+
+    coalitions=None: row generation, separating with StochasticSeparation restricted
+    to proper coalitions (min_size=1, max_size=n-1): the most violated row is the one
+    with the largest excess, violated iff that excess exceeds v. Otherwise the LP over
+    the given list (the all-coalition reference). A discriminating test of separation
+    inside row generation when the cost of stability is 0, as it is at n=6.
+    """
+    from pyscipopt import Model, quicksum
+    players, n = cc.players, len(cc.players)
+    m = Model('least_core')
+    m.hideOutput()
+    p = {u: m.addVar(name=f'p_{u}', lb=None) for u in players}
+    v = m.addVar(name='v', lb=None, obj=1.0)
+    m.addCons(quicksum(p.values()) == cc.compute_coalition_cost(players))
+    rows = set()
+
+    def add(S):
+        key = tuple(sorted(S))
+        m.freeTransform()
+        m.addCons(quicksum(p[u] for u in key) <= cc.compute_coalition_cost(list(key)) + v)
+        rows.add(key)
+
+    for S in (coalitions if coalitions is not None else [[u] for u in players]):
+        add(S)
+    tol_eff = tol * (1 + abs(cc.compute_coalition_cost(players)))
+    it, t0, stop = 0, time.time(), 'all rows'
+    while True:
+        m.optimize()
+        pv, vv = {u: m.getVal(p[u]) for u in players}, m.getVal(v)
+        if coalitions is not None:
+            break
+        it += 1
+        sep = SC.StochasticSeparation(players, cc.time_periods, cc.scenarios, pv)
+        S, exc = sep.solve(min_size=1, max_size=n - 1)
+        if exc - vv <= tol_eff:
+            stop = 'converged'
+            break
+        if tuple(sorted(S)) in rows:
+            stop = f'repeated row (separation excess {exc:.6f}, v {vv:.6f})'
+            break
+        if it >= max_iter:
+            stop = 'max_iter'
+            break
+        add(S)
+    return {'value': vv, 'p': pv, 'rows': len(rows), 'iterations': it, 'stop': stop,
+            'time': time.time() - t0}
 
 
 def weak_eps(cc, alloc, time_limit):
@@ -236,15 +293,15 @@ def part_a(args):
     scen = scenarios(base, players, T, 1)
     same = all(base.get(k) == scen[0][1].get(k) for k in set(base) | set(scen[0][1]))
     out = {'instance': name, 'n': n, 'day': DAY, 'scenario_equals_base': same,
-           'time_limit': args.time_limit}
+           'time_limit': args.time_limit, 'max_iter': args.max_iter}
 
     owen = owen_point(players, T, scen, base)
     out['owen'] = owen
 
     det = DetCore(players, 'mip', T, base, mipsolver='gurobi')
-    out['det_rowgen'] = rowgen(det, args.time_limit)
+    out['det_rowgen'] = rowgen(det, args.time_limit, args.max_iter)
     sto = StoCore(players, T, scen)
-    out['sto_rowgen'] = rowgen(sto, args.time_limit)
+    out['sto_rowgen'] = rowgen(sto, args.time_limit, args.max_iter)
     out['sto_sep_log'] = sto.sep_log
 
     for label in ('x', 'sigma'):
@@ -283,7 +340,7 @@ def part_b(args):
 
     cc = StoCore(players, T, scen)
     cc.output_dir = OUT
-    out['rowgen'] = rowgen(cc, args.time_limit)
+    out['rowgen'] = rowgen(cc, args.time_limit, args.max_iter)
     out['sep_log'] = cc.sep_log
 
     # enumeration: every proper coalition's extensive form (cached from here on)
@@ -346,6 +403,17 @@ def part_b(args):
         'max_alloc_diff_q': max(abs(rg['q'][u] - bf['q'][u]) for u in players),
         'rowgen_q': rg['q'], 'all_q': bf['q'],
     }
+    lc_rg = least_core(cc)
+    lc_all = least_core(cc, coalitions=list(proper_coalitions(players)))
+    worst = max((sum(lc_rg['p'][u] for u in S.split('+')) - c) for S, c in table.items())
+    out['least_core'] = {
+        'rowgen_value': lc_rg['value'], 'all_coalitions_value': lc_all['value'],
+        'diff': lc_rg['value'] - lc_all['value'], 'rowgen_rows': lc_rg['rows'],
+        'rowgen_iterations': lc_rg['iterations'], 'rowgen_stop': lc_rg['stop'],
+        'rowgen_p_max_excess_over_all_62': worst,
+        'max_alloc_diff': max(abs(lc_rg['p'][u] - lc_all['p'][u]) for u in players),
+        'time': lc_rg['time'],
+    }
     _dump(out, 'part_b_n6_S3.json')
     print('\nSUMMARY b')
     for r in rows:
@@ -354,6 +422,7 @@ def part_b(args):
                                  'sep_all_excess', 'enum_weak_eps', 'dinkelbach_weak_eps')})
     print(json.dumps(_jsonable({k: v for k, v in out['opap'].items()
                                 if k not in ('rowgen_q', 'all_q')}), indent=1))
+    print(json.dumps(_jsonable(out['least_core']), indent=1))
 
 
 # =============================================================================
@@ -396,6 +465,8 @@ def main():
     ap.add_argument('--n', type=int, default=6)
     ap.add_argument('--time-limit', type=float, default=3600.0,
                     help='row generation budget (s)')
+    ap.add_argument('--max-iter', type=int, default=5000,
+                    help='row generation iteration cap (compute_core defaults to 100)')
     ap.add_argument('--eps-time-limit', type=float, default=3600.0,
                     help='budget of one Dinkelbach weak-eps measurement (s)')
     ap.add_argument('--sep-time-limit', type=float, default=1800.0,
