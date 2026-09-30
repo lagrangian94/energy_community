@@ -79,9 +79,12 @@ RESERVE_PRODUCT = 'symmetric'
 # also registered under 'hard' as <name>_hard (group 'hard'), below.
 RESERVE_MODE = 'penalty'
 RESERVE_PENALTY_FACTOR = 5.0
-# Stand-alone r_sym({j}) baseline for the sec.3.3 pooling gain: one extra small
-# MIP per prosumer per day. Turn off if the added solve time ever matters.
-STANDALONE_BASELINE = True
+# Stand-alone r_sym({j}) baseline for the reserve.txt sec.3.3 pooling gain: one extra
+# small MIP per prosumer per day. Off: the manuscript does not report the pooling
+# gain (only SUMMARY.csv's pool_* columns read it, and they stay empty), and the
+# singleton MIP it solves is the one run_kappa.py already solves for kappa_j. The
+# time/direction split (mech_*) needs no extra solve and is unaffected.
+STANDALONE_BASELINE = False
 SEP_SOLVER = 'gurobi'
 # Budget for EACH of the two stability measurements in the Owen phase (sigma and the
 # gap-corrected point), so a day costs at most twice this before it gives up and says so.

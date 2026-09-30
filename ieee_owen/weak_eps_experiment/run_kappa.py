@@ -46,7 +46,7 @@ def kappa_day(run, day):
     kappa, t0 = {}, time.time()
     for u in players:
         lem = LocalEnergyMarket(players=[u], time_periods=RM.T, parameters=params,
-                                model_type='mip', dwr=False)
+                                model_type='mip', dwr=False, mipsolver='gurobi')
         lem.model.hideOutput()
         status = lem.solve()
         if status != 'optimal':
