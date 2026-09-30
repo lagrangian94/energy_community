@@ -664,7 +664,7 @@ def _kl_tangent(s):
 
 
 def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30,
-                        log_file=None, round_gap=1e-3):
+                        log_file=None, round_gap=1e-3, prepare=None, budget=None):
     """The KL-robust extensive form through the dual of the inner max
     (Love & Bayraksan, phi-divergence constrained two-stage programs, eq. 9):
 
@@ -695,6 +695,11 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     Replaces a first version that added distribution cuts theta >= p.h as lazy
     constraints at incumbents only: at n=60 it took 304 s for |Omega|=5 (stochastic
     EF: ~10 s) and had not finished |Omega|=10 after 100 minutes.
+
+    prepare(g, gv): called on the gurobipy copy before the first round (extra rows or
+    bounds, e.g. stochastic_core's KL separation fixing or bounding its z). budget:
+    wall-clock seconds for ALL rounds together (time_limit caps each round); the
+    last round's ObjBound is still a valid bound when it runs out.
     """
     import gurobipy as gp
     from gurobipy import GRB
@@ -741,10 +746,15 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         add_tangents(w, np.arange(-8.0, np.log(1.0 / q[w]) + 0.25, 0.25))
         g.addLConstr(t[w] + lam, GRB.GREATER_EQUAL, 0.0)      # the asymptote s -> -inf
 
+    if prepare is not None:
+        prepare(g, gv)
     rounds, t0 = [], time.time()
     loose = max(gap, round_gap)
     for k in range(max_rounds):
         g.Params.MIPGap = loose
+        if budget is not None:
+            left = max(1.0, budget - (time.time() - t0))
+            g.Params.TimeLimit = min(left, time_limit) if time_limit else left
         g.optimize()
         if g.SolCount == 0:
             raise RuntimeError(f'KL extensive form ({len(st.players)} players): no '
@@ -769,7 +779,12 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         for w in np.nonzero(pos)[0]:
             add_tangents(w, [np.log(rho[w] / q[w])])
         start = dict(zip(gvars, x))
-        if eta > 0:
+        if not np.isfinite(eta):
+            # radius 0 (kl_worst returns eta = inf): the dual optimum has lam -> inf,
+            # which no start can carry; the s = 0 tangents are exact there already, so
+            # the round only has to close the MIP gap. Start from x alone.
+            pass
+        elif eta > 0:
             m_hat = c.max() + eta * np.log(q @ np.exp((c - c.max()) / eta))
             start.update({lam: eta, mu: m_hat})
             start.update({t[w]: eta * (np.exp((c[w] - m_hat) / eta) - 1.0) for w in range(S)})
