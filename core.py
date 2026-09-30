@@ -33,7 +33,8 @@ class SeparationProblem(LocalEnergyMarket):
                  model_type: str,
                  parameters: Dict,
                  current_payoffs: Dict[str, float],
-                 mipsolver: Optional[str] = None):
+                 mipsolver: Optional[str] = None,
+                 model=None):
         """
         Initialize separation problem
 
@@ -44,12 +45,17 @@ class SeparationProblem(LocalEnergyMarket):
             current_payoffs: Current payoff allocation {player_id: payoff}
             mipsolver: 'highs' (default, also for None) or 'gurobi'. SCIP is not
                 used as a MIP solver.
+            model: build into this model instead of a fresh one, passed through to
+                LocalEnergyMarket. The stochastic separation (ieee_owen/
+                stochastic_core.py) stacks one block per scenario into one model and
+                shares the z_i across them; None keeps the usual behaviour.
         """
         self.current_payoffs = current_payoffs
         self.mipsolver = 'highs' if mipsolver is None else mipsolver.lower()
 
         # Initialize parent class
-        super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False, mipsolver=mipsolver)
+        super().__init__(players, time_periods, parameters, model_type=model_type, dwr=False,
+                         mipsolver=mipsolver, model=model)
         
         # Add binary selection variables and constraints
         self._add_selection_variables()
@@ -690,7 +696,9 @@ class CoreComputation:
         print("="*70)
         
         self.master_model = Model("MasterProblem")
-        
+        # coalitions with a row in the master; N's is the efficiency row
+        self._master_rows = {tuple(sorted(self.players))}
+
         # Create payoff variables p[i] for each player
         for i in self.players:
             self.payoff_vars[i] = self.master_model.addVar(
@@ -815,6 +823,7 @@ class CoreComputation:
             print(f"Payoff variables: {self.payoff_vars}")
             raise e
         
+        self._master_rows.add(tuple(sorted(coalition)))
         print(f"  Added constraint for {coalition}: Σp[i] <= {coalition_cost:.4f} + v")
     
     def solve_master_problem(self) -> Tuple[Dict[str, float], float]:
@@ -852,6 +861,25 @@ class CoreComputation:
         
         return payoffs, slack
     
+    def _solve_separation(self, payoffs: Dict[str, float],
+                          time_limit: Optional[float] = None):
+        """One separation solve at `payoffs`: (coalition, violation, truncated).
+
+        The hook find_violated_coalition verifies against compute_coalition_cost. The
+        stochastic row generation (ieee_owen/stochastic_core.py) overrides this and
+        compute_coalition_cost; everything else in the class is shared.
+        """
+        sep_problem = SeparationProblem(
+            players=self.players,
+            time_periods=self.time_periods,
+            model_type=self.model_type,
+            parameters=self.params,
+            current_payoffs=payoffs,
+            mipsolver=self.mipsolver
+        )
+        coalition, violation = sep_problem.solve_separation(time_limit=time_limit)
+        return coalition, violation, getattr(sep_problem, 'truncated', False)
+
     def find_violated_coalition(self, payoffs: Dict[str, float],
                                 time_limit: Optional[float] = None) -> Tuple[List[str], float]:
         """
@@ -872,28 +900,9 @@ class CoreComputation:
         print("Finding violated coalition via Separation Problem")
         print(f"Current payoffs: {payoffs}")
         
-        # Create and solve separation problem
-        sep_problem = SeparationProblem(
-            players=self.players,
-            time_periods=self.time_periods,
-            model_type=self.model_type,
-            parameters=self.params,
-            current_payoffs=payoffs,
-            mipsolver=self.mipsolver
-        )
-        model = sep_problem.model
-        ## debug: z_3=z_6=1, 나머지 0으로 고정
-        # model.chgVarLb(sep_problem.z['u3'], 1.0)
-        # model.chgVarLb(sep_problem.z['u6'], 1.0)
-        # model.chgVarUb(sep_problem.z['u4'], 0.0)
-        # model.chgVarUb(sep_problem.z['u5'], 0.0)
-
-        # model.chgVarUb(sep_problem.z['u1'], 0.0)
-        # model.chgVarUb(sep_problem.z['u2'], 0.0)
-        ## 이렇게했더니 infeasible 뜸
-        # model.hideOutput()
-        coalition, violation = sep_problem.solve_separation(time_limit=time_limit)
-        self.last_separation_truncated = getattr(sep_problem, 'truncated', False)
+        coalition, violation, truncated = self._solve_separation(payoffs, time_limit)
+        self.last_separation_truncated = truncated
+        self.last_actual_violation = None
         # Compute actual violation for verification.
         #
         # `coalition` must be non-empty to be worth verifying: the violation of the empty
@@ -906,7 +915,8 @@ class CoreComputation:
             coalition_cost = self.compute_coalition_cost(coalition)
             payoff_sum = sum(payoffs[i] for i in coalition)
             actual_violation = payoff_sum - coalition_cost
-            
+            self.last_actual_violation = actual_violation
+
             print(f"\nVerification:")
             print(f"  Coalition payoff sum: {payoff_sum:.4f}")
             print(f"  Coalition cost c(S): {coalition_cost:.4f}")
@@ -1125,6 +1135,22 @@ class CoreComputation:
                           f"(weak-eps >= {self.weak_eps:.6f})")
                     return self.weak_eps_core_allocation(payoffs, slack), False
                 return payoffs, False
+
+            # A coalition whose row the master already has (N included: the efficiency
+            # row) cannot be cut off again: adding it leaves the LP unchanged, the same
+            # coalition comes back, and the loop never stops (measured: 6p day 1 re-added
+            # N 99 times, up to max_iterations). It happens when the separation finds a
+            # better dispatch for S than the cached c(S), a difference within the MIP gap
+            # that find_violated_coalition's verify_tol accepts (0.19 on |c(N)| = 2792).
+            # Against the master's own values the violation is the recomputed one, which
+            # is <= 0 for a row already present, so that is what decides convergence.
+            if (coalition and self.last_actual_violation is not None
+                    and tuple(sorted(coalition)) in getattr(self, '_master_rows', ())):
+                print(f"  Separation returned {sorted(coalition)}, already a master row; "
+                      f"its violation {violation:.6f} is MIP-gap noise, the master's "
+                      f"{self.last_actual_violation:.6f} decides")
+                self.repeated_row_stops = getattr(self, 'repeated_row_stops', 0) + 1
+                violation = self.last_actual_violation
 
             if len(coalition) == 0 or violation <= tol_eff:
                 if mode:

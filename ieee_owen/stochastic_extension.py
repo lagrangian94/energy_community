@@ -268,7 +268,7 @@ class _Block:
 
     def addVar(self, name='', vtype='C', lb=0.0, ub=None, obj=0.0, **kw):
         st = self._stack
-        if name.startswith(FIRST_STAGE_PREFIXES):
+        if name.startswith(FIRST_STAGE_PREFIXES) or name in st.extra_first_stage:
             if name not in st.vars:
                 v = self._m.addVar(name=name, vtype=vtype, lb=lb, ub=ub, obj=obj, **kw)
                 st._record(v, None, obj)
@@ -294,8 +294,15 @@ class ScenarioStack:
     dwr=False gives (DP_S^Omega) with every linking row imposed per scenario;
     dwr=True drops them and, with a single player, gives the pricing set
     X_j^MIP of eq:sup_Xmip.
+
+    block: build each scenario with block(params, model) instead of LocalEnergyMarket
+    (e.g. a core.SeparationProblem, see stochastic_core.py); it must build into
+    `model`. first_stage_names: exact variable names that are first stage on top of
+    FIRST_STAGE_PREFIXES (e.g. the separation's selection binaries z_j): created once,
+    cost unscaled, shared by every scenario.
     """
-    def __init__(self, name, players, T, scenarios, dwr, model_type='mip'):
+    def __init__(self, name, players, T, scenarios, dwr, model_type='mip', block=None,
+                 first_stage_names=()):
         self.players, self.T, self.scenarios = list(players), list(T), scenarios
         self.probs = [p for p, _ in scenarios]
         self.model = Model(name)
@@ -303,12 +310,16 @@ class ScenarioStack:
         self.cost = {}          # name -> unscaled cost
         self.scen_of = {}       # name -> scenario index, None if first stage
         self.first_stage = set()
+        self.extra_first_stage = frozenset(first_stage_names)
         self.first_stage_cons = {}
         self.blocks = []
         for w, (prob, params) in enumerate(scenarios):
-            self.blocks.append(LocalEnergyMarket(self.players, self.T, params,
-                                                 model_type=model_type, dwr=dwr,
-                                                 model=_Block(self, w, prob)))
+            if block is None:
+                self.blocks.append(LocalEnergyMarket(self.players, self.T, params,
+                                                     model_type=model_type, dwr=dwr,
+                                                     model=_Block(self, w, prob)))
+            else:
+                self.blocks.append(block(params, _Block(self, w, prob)))
 
     def _record(self, v, w, obj):
         self.vars[v.name] = v
