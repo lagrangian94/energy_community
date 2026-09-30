@@ -73,7 +73,7 @@ Usage (from anywhere):
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 5
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 3 --check-core
   python ieee_owen/stochastic_extension.py --n 6 --scenarios 1 --wind-sigma 0 \
-      --load-sigma 0 --price-sigma 0          # reproduces the deterministic model
+      --solar-sigma 0 --load-sigma 0 --price-sigma 0          # reproduces the deterministic model
 """
 import os, sys, json, time, argparse, itertools, functools
 # layout: <repo root>/ieee_owen/. Shared model modules and data/ live at the root;
@@ -4215,7 +4215,7 @@ def run(args):
     if args.day is not None:
         name = f'{name}_day{args.day}'
     scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
-                          wind_sigma=args.wind_sigma, solar_sigma=args.wind_sigma,
+                          wind_sigma=args.wind_sigma, solar_sigma=args.solar_sigma,
                           load_sigma=args.load_sigma, price_sigma=args.price_sigma,
                           rho=args.rho,
                           price_carriers=tuple(args.price_carriers.split(',')),
@@ -4382,7 +4382,7 @@ def run(args):
     out = {
         'instance': name, 'n': len(players), 'T': len(T), 'scenarios': len(scen),
         'probs': master.probs,
-        'config': {k: getattr(args, k) for k in ('seed', 'wind_sigma', 'load_sigma',
+        'config': {k: getattr(args, k) for k in ('seed', 'wind_sigma', 'solar_sigma', 'load_sigma',
                                                    'price_sigma', 'rho', 'price_carriers',
                                                    'mip_gap', 'mip_time_limit')},
         'm_linking_rows': len(master.row_keys),
@@ -4441,7 +4441,13 @@ def build_parser():
                          "instance's default day")
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--wind-sigma', type=float, default=0.25,
-                    help='renewable forecast error (std of the multiplicative factor)')
+                    help='wind forecast error (std of the multiplicative factor)')
+    # Until 2026-09-30 solar was drawn with --wind-sigma (0.25), not make_scenarios'
+    # 0.20: every CLI run on an instance with solar members (n = 15, 30, 60) used that
+    # scenario set. Result JSONs record solar_sigma from then on; one without it is
+    # from before the fix.
+    ap.add_argument('--solar-sigma', type=float, default=0.20,
+                    help='solar forecast error (std of the multiplicative factor)')
     ap.add_argument('--load-sigma', type=float, default=0.10)
     ap.add_argument('--price-sigma', type=float, default=0.15)
     ap.add_argument('--rho', type=float, default=0.7, help='hour-to-hour error correlation')
