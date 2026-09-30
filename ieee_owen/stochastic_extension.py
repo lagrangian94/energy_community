@@ -50,7 +50,14 @@ scenario, tied by sum lambda = mu (MP1-2 of Maher & Muter, --mp12). conv X_j and
 v^LR are unchanged, non-anticipativity is kept; columns are 1/|Omega| as dense and
 purged harder (cap 5, age 20). KL, n=60, 20 scenarios: CG 6,859 s -> 717 s.
 Every combination returns the same numbers -- checked at |Omega| = 1, where all four
-give v^CHP = -3039.944297 and the same Owen allocation to four decimals.
+gave the same v^CHP and Owen allocation to four decimals (old 6p instance).
+
+ONE SCENARIO = THE DETERMINISTIC MODEL. solve_deterministic runs the paper's
+deterministic instance through this engine, and run_multiday uses it in place of
+chp.ColumnGenerationSolver. Checked 2026-09-30 at 6/15/30/60p, days 1-2: the same
+v^LR to CG_GAP and the same Owen point up to the degeneracy of the master duals, at
+5-10x less CG time -- with omega_tol off; the 2% early stop moved omega^LR and the
+Owen point by up to 2%.
 
 KL DRO (--kl-radius r, ieee_owen/robust_core.md sec. 2.3). Worst expected cost over
 KL(rho || rho_hat) <= r, on the same engine and defaults. The master (KLMaster) moves
@@ -500,7 +507,10 @@ def _to_gurobi(scip_model, name, time_limit=None, gap=None, env=None):
                               vtype=vt[v.vtype()], name=v.name)
     for c in scip_model.getConss():
         if c.getConshdlrName() != 'linear':
-            raise ValueError(f'constraint {c.name} is {c.getConshdlrName()}, not linear')
+            hint = ("; this engine copies rows one by one and takes linear rows only, "
+                    "so use complementarity='bigm' (it measured the same as 'sos')"
+                    if c.getConshdlrName() in ('SOS1', 'SOS2') else '')
+            raise ValueError(f'constraint {c.name} is {c.getConshdlrName()}, not linear{hint}')
         expr = gp.LinExpr([(a, gv[n]) for n, a in scip_model.getValsLinear(c).items()])
         lhs, rhs = scip_model.getLhs(c), scip_model.getRhs(c)
         if lhs > -inf and rhs < inf and lhs == rhs:
@@ -4050,6 +4060,111 @@ def _jsonable(x):
     return x
 
 
+def _configure_direct(args):
+    """DirectMaster's class-level options, and the purge defaults that depend on the
+    scenario split, from the parsed command line (mutates both)."""
+    if args.fallback_purge_age is not None:
+        DirectMaster.fallback_purge_age = args.fallback_purge_age
+    if args.doi_taper_steps is not None:
+        DirectMaster.doi_taper_steps = args.doi_taper_steps
+    if args.accept_doi_master:
+        DirectMaster.accept_doi_master = True
+    if args.lp_mixed:
+        DirectMaster.lp_mixed = True
+    DirectMaster.doi_certify = args.doi_certify
+    if args.stall_reset is not None:
+        DirectMaster.stall_reset = args.stall_reset
+    if args.doi_repair:
+        DirectMaster.doi_repair = tuple(float(f) for f in args.doi_repair.split(','))
+    DirectMaster.split_scenarios = args.split_scenarios
+    DirectMaster.mp12 = args.mp12
+    # the split units carry 1/|Omega| of a plan each: purge them harder
+    if args.purge_age is None:
+        args.purge_age = 20 if args.split_scenarios else 50
+    if args.purge_cap is None:
+        args.purge_cap = 5 if args.split_scenarios else 40
+    if args.doi_skip:
+        DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
+
+
+def _direct_kwargs(args, ef):
+    """The column-generation options run() hands the direct engine."""
+    return dict(
+        init_vals=None if args.cold_start else ef['vals'],
+        lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
+        pricing_time_limit=args.mip_time_limit,
+        pricing_gap=args.pricing_gap,
+        smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
+        pen_eps=0.0 if args.no_penalty else args.pen_eps,
+        pen_delta=0.0 if args.no_penalty else args.pen_delta,
+        pen_shrink=args.pen_shrink, max_rounds=args.max_rounds,
+        pricing_workers=args.pricing_workers, round_tol=args.round_tol,
+        ub_every=args.ub_every, lp_method=args.lp_method,
+        purge_every=args.purge_every, purge_age=args.purge_age,
+        purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
+        sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
+        sar_exact=tuple(k for k in args.sar_exact.split(',') if k),
+        lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k),
+        doi=args.doi and not args.bundle,
+        column_pool=args.column_pool, mip_start=args.mip_start,
+        omega_tol=args.omega_tol, pricing_abs=args.pricing_abs,
+        balance_pricing=args.balance_pricing)
+
+
+# the stochastic rows' kinds under the names chp.ColumnGenerationSolver reports them by
+_PRICE_NAMES = {'E': 'electricity', 'H': 'heat', 'G': 'hydrogen',
+                'up': 'reserve_up', 'dn': 'reserve_dn', 'peak': 'peak'}
+
+
+def solve_deterministic(players, T, params, ef_gap=None, omega_tol=None, time_limit=None):
+    """The deterministic model through this engine: one scenario, the instance as given.
+
+    Replaces LocalEnergyMarket + chp.ColumnGenerationSolver in the multi-day sweep.
+    Every option is the command line's default except two. omega_tol is off (None):
+    the 2% early stop is meant for |Omega| > 1, and with it omega^LR and the Owen
+    point moved by up to 2% at |Omega| = 1, while CG_GAP alone reproduces chp.py's
+    v^LR and its Owen point (to the degeneracy of the master duals). ef_gap
+    defaults to the command line's EF gap.
+
+    Returns the extensive form's dispatch as solve_and_extract_results lays it out,
+    v^MIP and v^LR (cost), the Owen point sigma and its gap-corrected allocation
+    (cost, as chp.compute_owen_allocation), the coupling prices (as chp's
+    convex_hull_prices) and the timings.
+    """
+    from compact_utility import extract_results_by_name
+    args = build_parser().parse_args([])
+    args.omega_tol = omega_tol
+    args.mip_time_limit = time_limit
+    args.ef_gap = args.mip_gap if ef_gap is None else ef_gap
+    _configure_direct(args)
+    scen = [(1.0, dict(params))]
+
+    t0 = time.time()
+    ef = solve_extensive_form(players, T, scen, time_limit=time_limit, gap=args.ef_gap,
+                              solver=args.mip_solver)
+    t_mip = time.time() - t0
+    t0 = time.time()
+    dw, master = solve_dwr_direct(players, T, scen, params, **_direct_kwargs(args, ef))
+    t_cg = time.time() - t0
+    al = scenario_allocation(ef, dw, master)
+
+    v_mip, v_lr = float(ef['obj']), float(dw['obj'])
+    sigma = {u: float(dw['sigma'][u]) for u in players}
+    prices = {}
+    for (kind, t, w), d in dw['duals'].items():
+        if kind in _PRICE_NAMES:
+            prices.setdefault(_PRICE_NAMES[kind], {})[t] = abs(d / master.probs[w])
+    return {
+        'results': extract_results_by_name(ef['stack'].blocks[0].model, ef['vals']),
+        'v_mip': v_mip, 'v_lr': v_lr, 'lb': float(dw['lb']),
+        'ef_status': ef['status'], 'ef_gap': ef['gap'], 'cg_status': dw['status'],
+        'cg_iterations': dw['iterations'],
+        'sigma': sigma, 'owen': {u: -float(al['Ex'][u]) for u in players},
+        'gap': v_lr - v_mip, 'eps': abs(v_lr - v_mip) / len(players),
+        'convex_hull_prices': prices, 'time_mip': t_mip, 'time_cg': t_cg,
+    }
+
+
 def run(args):
     if args.engine != 'direct':
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
@@ -4104,28 +4219,7 @@ def run(args):
            if base.get('reserve_block_hours', _BLK_DEFAULT) != _BLK_DEFAULT else '') \
         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
-    if args.fallback_purge_age is not None:
-        DirectMaster.fallback_purge_age = args.fallback_purge_age
-    if args.doi_taper_steps is not None:
-        DirectMaster.doi_taper_steps = args.doi_taper_steps
-    if args.accept_doi_master:
-        DirectMaster.accept_doi_master = True
-    if args.lp_mixed:
-        DirectMaster.lp_mixed = True
-    DirectMaster.doi_certify = args.doi_certify
-    if args.stall_reset is not None:
-        DirectMaster.stall_reset = args.stall_reset
-    if args.doi_repair:
-        DirectMaster.doi_repair = tuple(float(f) for f in args.doi_repair.split(','))
-    DirectMaster.split_scenarios = args.split_scenarios
-    DirectMaster.mp12 = args.mp12
-    # the split units carry 1/|Omega| of a plan each: purge them harder
-    if args.purge_age is None:
-        args.purge_age = 20 if args.split_scenarios else 50
-    if args.purge_cap is None:
-        args.purge_cap = 5 if args.split_scenarios else 40
-    if args.doi_skip:
-        DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
+    _configure_direct(args)
 
     if args.deterministic_check:
         det = LocalEnergyMarket(players, T, scen[0][1], model_type='mip')
@@ -4183,28 +4277,8 @@ def run(args):
         extra_b = ({'bundle_t': args.bundle_t, 'bundle_age': args.bundle_age,
                     'bundle_t_min': args.bundle_t_min, 'bundle_cap': args.bundle_cap,
                     'bundle_qp': args.bundle_qp} if args.bundle else {})
-        dw, master = solver_fn(
-            players, T, scen, base,
-            init_vals=None if args.cold_start else ef['vals'],
-            lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
-            pricing_time_limit=args.mip_time_limit,
-            pricing_gap=args.pricing_gap,
-            smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
-            pen_eps=0.0 if args.no_penalty else args.pen_eps,
-            pen_delta=0.0 if args.no_penalty else args.pen_delta,
-            pen_shrink=args.pen_shrink, max_rounds=args.max_rounds,
-            pricing_workers=args.pricing_workers, round_tol=args.round_tol,
-            ub_every=args.ub_every, lp_method=args.lp_method,
-            purge_every=args.purge_every, purge_age=args.purge_age,
-            purge_cap=args.purge_cap, lp_presolve=args.lp_presolve,
-            sar=args.sar, sar_block=args.sar_block, sar_cap=args.sar_cap,
-            sar_exact=tuple(k for k in args.sar_exact.split(',') if k),
-            lazy_kinds=tuple(k for k in args.lazy_rows.split(',') if k),
-            doi=args.doi and not args.bundle,
-            column_pool=args.column_pool, mip_start=args.mip_start,
-            omega_tol=args.omega_tol, pricing_abs=args.pricing_abs,
-            balance_pricing=args.balance_pricing,
-            **extra_b, **extra_d)
+        dw, master = solver_fn(players, T, scen, base, **_direct_kwargs(args, ef),
+                               **extra_b, **extra_d)
         tm = dw['timing']
         if dw.get('bundle'):
             print(f'  bundle: {tm["serious"]} serious / {tm["null"]} null steps, '
@@ -4329,7 +4403,9 @@ def run(args):
     return out
 
 
-def main():
+def build_parser():
+    """The command line. solve_deterministic reads its defaults from here too, so the
+    one-scenario run and the CLI cannot drift apart."""
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--n', type=int, default=6, help='community size (6, 15, 30, 60)')
@@ -4536,7 +4612,11 @@ def main():
     ap.add_argument('--ef-cache', default=None,
                     help='pickle of the extensive-form result: read it if it exists, else '
                          'solve and write it (same instance only; the caller names it)')
-    run(ap.parse_args())
+    return ap
+
+
+def main():
+    run(build_parser().parse_args())
 
 
 if __name__ == '__main__':

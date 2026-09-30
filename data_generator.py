@@ -250,6 +250,10 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
         # trade bounds: 'bnd_size' (manuscript eq:bnd_size, per member; default) or
         # 'legacy' (the earlier shared import caps); see compact_utility.trade_bounds
         'grid_caps': (sensitivity_analysis or {}).get('grid_caps', 'bnd_size'),
+        # storage mode and trade direction as big-M binaries (compact_utility
+        # _add_complementarity_cons); None leaves both as the LP relaxation, 'sos' is
+        # Gurobi-only and measured the same as 'bigm' at 6-60 prosumers
+        'complementarity': (sensitivity_analysis or {}).get('complementarity', 'bigm'),
         'c_res': 0.05,
         'c_hp': 2.69,
         'c_els': 0.05,

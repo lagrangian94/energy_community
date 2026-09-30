@@ -10,8 +10,23 @@ import numpy as np
 import tempfile
 import os
 # from compact import LocalEnergyMarket, solve_and_extract_results
-from compact_utility import LocalEnergyMarket, solve_and_extract_results, solve_and_extract_results_highs
+from compact_utility import (LocalEnergyMarket, solve_and_extract_results,
+                             solve_and_extract_results_highs, extract_results_by_name,
+                             has_sos, MIP_GAP)
 from typing import Dict, List, Tuple
+
+_GUROBI_ENV = None
+
+
+def _gurobi_env():
+    """One silent Gurobi environment shared by every pricing subproblem."""
+    global _GUROBI_ENV
+    if _GUROBI_ENV is None:
+        import gurobipy as gp
+        _GUROBI_ENV = gp.Env(empty=True)
+        _GUROBI_ENV.setParam('OutputFlag', 0)
+        _GUROBI_ENV.start()
+    return _GUROBI_ENV
 
 
 class PlayerSubproblem:
@@ -51,11 +66,16 @@ class PlayerSubproblem:
 
         self.mipsolver = 'highs' if mipsolver is None else mipsolver
         if self.mipsolver == 'highs':
+            if has_sos(self.model):
+                raise ValueError("complementarity='sos' pricing needs mipsolver='gurobi' "
+                                 "(HiGHS does not read SOS constraints)")
             self._init_highs_model()
+        elif self.mipsolver == 'gurobi':
+            self._init_gurobi_model()
         elif model_type == 'mip':
-            # the SCIP pricing path below would branch; only HiGHS pricing exists here
-            raise ValueError(f"pricing solver for a MIP subproblem must be 'highs', got "
-                             f"{mipsolver!r} (SCIP is not used as a MIP solver)")
+            # the SCIP pricing path below would branch
+            raise ValueError(f"pricing solver for a MIP subproblem must be 'highs' or "
+                             f"'gurobi', got {mipsolver!r} (SCIP is not used as a MIP solver)")
 
     def _init_highs_model(self):
         """
@@ -76,15 +96,50 @@ class PlayerSubproblem:
         # Clean up temp file
         os.remove(mps_path)
 
-        # Build SCIP variable name → HiGHS column index map
-        num_cols = h.getNumCol()
-        self._highs_col_map = {}
-        for j in range(num_cols):
+        names = []
+        for j in range(h.getNumCol()):
             name = h.getColName(j)
-            if isinstance(name, tuple):
-                name = name[1]
-            self._highs_col_map[name] = j
+            names.append(name[1] if isinstance(name, tuple) else name)
+        self._build_col_maps(names)
 
+        # Build base cost vector from SCIP model's objective coefficients
+        # We need to solve the pricing once with zero duals using SCIP to get the objective set
+        # Instead, compute base costs directly from parameters (matching solve_pricing logic)
+        self._compute_highs_base_costs(h)
+
+        self._highs = h
+        self._last_was_farkas = False
+
+    def _init_gurobi_model(self):
+        """The Gurobi counterpart of _init_highs_model: read the MPS once and reprice
+        by rewriting the objective vector. Needed for complementarity='sos', which
+        HiGHS cannot read; the column maps and base costs are the HiGHS path's."""
+        import gurobipy as gp
+        fd, mps_path = tempfile.mkstemp(suffix='.mps')
+        os.close(fd)
+        try:
+            self.model.writeProblem(mps_path, verbose=False)
+            g = gp.read(mps_path, env=_gurobi_env())
+        finally:
+            os.remove(mps_path)
+        g.Params.MIPGap = MIP_GAP
+        self._grb_vars = g.getVars()
+        self._build_col_maps([v.VarName for v in self._grb_vars])
+        self._compute_highs_base_costs(None)
+        # As in the HiGHS path outside farkas mode: every column keeps the objective the
+        # model was written with, except the community and coupling columns, which are
+        # repriced from the parameter base costs.
+        base = np.array(g.getAttr('Obj', self._grb_vars), dtype=float)
+        for idx in list(self._com_col_indices.values()) + [
+                i for d in self._coupling_col_indices.values() for i in d.values()]:
+            base[idx] = self._highs_base_costs[idx]
+        self._grb_base_costs = base
+        self._gurobi = g
+
+    def _build_col_maps(self, names):
+        """Column index maps shared by the HiGHS and Gurobi pricing paths."""
+        num_cols = len(names)
+        self._highs_col_map = {name: j for j, name in enumerate(names)}
         self._highs_num_cols = num_cols
 
         # Build community variable column indices for fast access
@@ -114,14 +169,6 @@ class PlayerSubproblem:
                     scip_name = lem_dict[(u, t)].name
                     if scip_name in self._highs_col_map:
                         self._coupling_col_indices[var_type][t] = self._highs_col_map[scip_name]
-
-        # Build base cost vector from SCIP model's objective coefficients
-        # We need to solve the pricing once with zero duals using SCIP to get the objective set
-        # Instead, compute base costs directly from parameters (matching solve_pricing logic)
-        self._compute_highs_base_costs(h)
-
-        self._highs = h
-        self._last_was_farkas = False
 
     def _compute_highs_base_costs(self, h):
         """
@@ -325,6 +372,45 @@ class PlayerSubproblem:
         else:
             return float('inf'), None, None
 
+    def _solve_pricing_gurobi(self, dual_elec, dual_heat, dual_hydro, dual_convexity, farkas=False,
+                              dual_resup=None, dual_resdn=None, dual_peak=None):
+        """_solve_pricing_highs with Gurobi: the same objective (base costs, or zero in
+        farkas mode, plus the dual terms with the same signs), written as one vector."""
+        import gurobipy as gp
+        c = (np.zeros(self._highs_num_cols) if farkas
+             else self._grb_base_costs.copy())
+        duals = {'E': dual_elec, 'H': dual_heat, 'G': dual_hydro}
+        for t in self.time_periods:
+            for k, dual in duals.items():
+                idx = self._com_col_indices.get((f'i_{k}_com', t))
+                if idx is not None:
+                    c[idx] -= dual[t]
+                idx = self._com_col_indices.get((f'e_{k}_com', t))
+                if idx is not None:
+                    c[idx] += dual[t]
+        if dual_resup is not None:
+            for t, idx in self._coupling_col_indices['r_plus'].items():
+                c[idx] += dual_resup[t]
+        if dual_resdn is not None:
+            for t, idx in self._coupling_col_indices['r_minus'].items():
+                c[idx] += dual_resdn[t]
+        if dual_peak is not None:
+            for t, idx in self._coupling_col_indices['i_E_gri'].items():
+                c[idx] -= dual_peak[t]
+            for t, idx in self._coupling_col_indices['e_E_gri'].items():
+                c[idx] += dual_peak[t]
+
+        g = self._gurobi
+        g.setAttr('Obj', self._grb_vars, c.tolist())
+        g.optimize()
+        if g.Status != gp.GRB.OPTIMAL:
+            return float('inf'), None, None
+        obj_val = g.ObjVal
+        x = g.getAttr('X', self._grb_vars)
+        results = extract_results_by_name(self.model,
+                                          {v.VarName: xv for v, xv in zip(self._grb_vars, x)})
+        return obj_val - dual_convexity, results, obj_val
+
     def solve_pricing(self, dual_elec: Dict[int, float],
                       dual_heat: Dict[int, float],
                       dual_hydro: Dict[int, float],
@@ -354,6 +440,9 @@ class PlayerSubproblem:
         if self.mipsolver == 'highs':
             return self._solve_pricing_highs(dual_elec, dual_heat, dual_hydro, dual_convexity,
                                              farkas, dual_resup, dual_resdn, dual_peak)
+        if self.mipsolver == 'gurobi':
+            return self._solve_pricing_gurobi(dual_elec, dual_heat, dual_hydro, dual_convexity,
+                                              farkas, dual_resup, dual_resdn, dual_peak)
 
         # Free transform to allow objective modification
         self.model.freeTransform()

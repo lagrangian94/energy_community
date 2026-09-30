@@ -28,6 +28,10 @@ class ScipModel(Model):
         return super().optimize()
 
 
+def has_sos(model):
+    return any(c.getConshdlrName() in ('SOS1', 'SOS2') for c in model.getConss())
+
+
 def solve_mip(model, solver='highs', time_limit=None, gap=MIP_GAP, verbose=False):
     """Solve a SCIP-built MILP with HiGHS or Gurobi through an MPS copy.
 
@@ -39,6 +43,9 @@ def solve_mip(model, solver='highs', time_limit=None, gap=MIP_GAP, verbose=False
     if solver not in MIP_SOLVERS:
         raise ValueError(f"MIP solver must be one of {MIP_SOLVERS}, got {solver!r} "
                          f"(SCIP is not used as a MIP solver)")
+    if solver == 'highs' and has_sos(model):
+        raise ValueError("the model has SOS1 constraints (complementarity='sos'), which "
+                         "HiGHS does not read; solve it with 'gurobi'")
     fd, mps_path = tempfile.mkstemp(suffix='.mps')
     os.close(fd)
     try:
@@ -486,7 +493,11 @@ def solve_and_extract_results_highs(model, highs_solver):
             name = name[1]
         highs_val_map[name] = col_values[i]
 
-    # model.data 구조에 맞춰 결과 추출
+    return "optimal", extract_results_by_name(model, highs_val_map)
+
+
+def extract_results_by_name(model, highs_val_map):
+    """model.data 구조에 맞춰 {변수 이름: 값}에서 결과를 추출합니다 (HiGHS/Gurobi 공용)."""
     results = {}
     if model.data is not None:
         for var_name, var_dict in model.data["vars"].items():
@@ -513,7 +524,7 @@ def solve_and_extract_results_highs(model, highs_solver):
     else:
         raise Exception("Model data is None. Cannot extract results.")
 
-    return "optimal", results
+    return results
 
 
 def process_cons_arr(arr, process_func):
@@ -822,6 +833,16 @@ class LocalEnergyMarket:
             raise ValueError(f"grid_caps must be 'bnd_size' or 'legacy', got {self.grid_caps!r}")
         self.trade_R = (trade_bounds(self.params, self.players, self.time_periods)
                         if self.grid_caps == 'bnd_size' else None)
+        # Storage charge/discharge and trade-direction complementarity. None leaves both
+        # as the LP relaxation (exact while lambda >= 0 and import >= export prices);
+        # 'bigm' adds one binary per storage and per trade direction with the tightest
+        # valid M; 'sos' states the same with SOS1 constraints, which only Gurobi reads.
+        # Only in model_type 'mip' (see _add_complementarity_cons).
+        self.complementarity = self.params.get('complementarity', None)
+        if self.complementarity not in (None, 'bigm', 'sos'):
+            raise ValueError(f"complementarity must be None, 'bigm' or 'sos', "
+                             f"got {self.complementarity!r}")
+        self._sos_pairs = []
 
         # Create variables for each player and time period
         for u in self.players:
@@ -1053,6 +1074,101 @@ class LocalEnergyMarket:
                 self._add_peak_penalty_constraints()
             if self.enable_reserve:
                 self._add_reserve_constraints()
+
+        # Private to each member, so added with and without dwr, like the headroom rows.
+        if self.complementarity is not None and self.model_type == 'mip':
+            self._add_complementarity_cons()
+
+    def _add_complementarity_cons(self):
+        """b_ch * b_dis = 0 for every storage, and (i_com + i_mkt) * (e_com + e_mkt) = 0
+        for every member and carrier that has trades on both sides.
+
+        The direction constraint takes the community trades in as well: on the market
+        trades alone, j could buy at the market and sell into the community while k
+        does the reverse, which is the same round trip. With both sides tied, a member
+        imports at most its own net consumption and exports at most its own net
+        production, so the tightest valid M is R_j^{k,+/-} (trade_bounds), used unless
+        the member has flexible demand R does not count. The storage M is the power
+        rating, or the capacity over (times) the SOC-equation efficiency if smaller.
+        A side whose M is zero is fixed at zero and needs no binary.
+        """
+        m = self.model
+        sos = self.complementarity == 'sos'
+        R = trade_bounds(self.params, self.players, self.time_periods)
+        self.complementarity_cons = {}
+        self.y_sto, self.y_dir = {}, {}
+
+        def fix_zero(vars_, name):
+            self.complementarity_cons[name] = m.addCons(quicksum(vars_) <= 0.0, name=name)
+
+        def pair(a_vars, b_vars, Ma, Mb, key, tag):
+            """a_vars * b_vars = 0 with sum(a) <= Ma, sum(b) <= Mb."""
+            name = f"{tag}_{'_'.join(map(str, key))}"
+            if Ma <= 0.0:
+                fix_zero(a_vars, f"{name}_a0")
+            if Mb <= 0.0:
+                fix_zero(b_vars, f"{name}_b0")
+            if Ma <= 0.0 or Mb <= 0.0:
+                return
+            if sos:
+                if len(a_vars) == 1 and len(b_vars) == 1:
+                    a, b = a_vars[0], b_vars[0]
+                else:
+                    a = m.addVar(vtype="C", name=f"{name}_A", lb=0.0, ub=Ma)
+                    b = m.addVar(vtype="C", name=f"{name}_B", lb=0.0, ub=Mb)
+                    self.complementarity_cons[f"{name}_A"] = m.addCons(a == quicksum(a_vars), name=f"{name}_A")
+                    self.complementarity_cons[f"{name}_B"] = m.addCons(b == quicksum(b_vars), name=f"{name}_B")
+                self.complementarity_cons[name] = m.addConsSOS1([a, b], [1, 2], name=name)
+                self._sos_pairs.append((a, b))
+                return None
+            y = m.addVar(vtype="B", name=f"y_{name}")
+            self.complementarity_cons[f"{name}_a"] = m.addCons(quicksum(a_vars) <= Ma * y, name=f"{name}_a")
+            self.complementarity_cons[f"{name}_b"] = m.addCons(quicksum(b_vars) <= Mb * (1 - y), name=f"{name}_b")
+            return y
+
+        # Storage: the efficiencies the SOC equations read (electricity and hydrogen
+        # read 'nu_ch'/'nu_dis', heat 'nu_ch_H'/'nu_dis_H').
+        storages = [('E', self.players_with_elec_storage, self.b_ch_E, self.b_dis_E, self.s_E,
+                     self.params.get('nu_ch', 0.9), self.params.get('nu_dis', 0.9)),
+                    ('G', self.players_with_hydro_storage, self.b_ch_G, self.b_dis_G, self.s_G,
+                     self.params.get('nu_ch', 0.9), self.params.get('nu_dis', 0.9)),
+                    ('H', self.players_with_heat_storage, self.b_ch_H, self.b_dis_H, self.s_H,
+                     self.params.get('nu_ch_H', 0.9), self.params.get('nu_dis_H', 0.9))]
+        for k, owners, b_ch, b_dis, s, nu_ch, nu_dis in storages:
+            for u in owners:
+                for t in self.time_periods:
+                    if (u, t) not in b_ch:
+                        continue
+                    cap = s[u, t].getUbOriginal()
+                    M_ch = min(b_ch[u, t].getUbOriginal(), cap / nu_ch)
+                    M_dis = min(b_dis[u, t].getUbOriginal(), cap * nu_dis)
+                    y = pair([b_ch[u, t]], [b_dis[u, t]], M_ch, M_dis, (k, u, t), 'cc_sto')
+                    if y is not None:
+                        self.y_sto[k, u, t] = y
+
+        # Trade direction.
+        flex = {'E': set(self.players_with_fl_elec_demand) - set(self.players_with_electrolyzers)
+                     - set(self.players_with_heatpumps),
+                'H': set(self.players_with_fl_heat_demand),
+                'G': set(self.players_with_fl_hydro_demand)}
+        trades = {'E': (self.i_E_com, self.i_E_gri, self.e_E_com, self.e_E_gri),
+                  'H': (self.i_H_com, self.i_H_gri, self.e_H_com, self.e_H_gri),
+                  'G': (self.i_G_com, self.i_G_gri, self.e_G_com, self.e_G_gri)}
+        for k, (i_com, i_mkt, e_com, e_mkt) in trades.items():
+            for u in self.players:
+                for t in self.time_periods:
+                    buy = [d[u, t] for d in (i_com, i_mkt) if (u, t) in d]
+                    sell = [d[u, t] for d in (e_com, e_mkt) if (u, t) in d]
+                    if not buy or not sell:
+                        continue
+                    M_buy = sum(v.getUbOriginal() for v in buy)
+                    M_sell = sum(v.getUbOriginal() for v in sell)
+                    if u not in flex[k]:
+                        M_buy = min(M_buy, R[u, k, '+'])
+                    M_sell = min(M_sell, R[u, k, '-'])
+                    y = pair(buy, sell, M_buy, M_sell, (k, u, t), 'cc_dir')
+                    if y is not None:
+                        self.y_dir[k, u, t] = y
 
     def _add_peak_penalty_constraints(self):
         # Community peak penalty on net grid import (adding_cons.txt sec.3):
@@ -1897,7 +2013,7 @@ class LocalEnergyMarket:
         and SCIP never branches. The commitment stays fixed in self.model afterwards.
         """
         ints = [v for v in self.model.getVars() if v.vtype() in ('BINARY', 'INTEGER')]
-        if not ints:
+        if not ints and not self._sos_pairs:
             self.model.optimize()
             return self.model.getStatus()
         tl = self.model.getParam('limits/time')
@@ -1910,6 +2026,10 @@ class LocalEnergyMarket:
             self.model.chgVarType(v, 'CONTINUOUS')
             self.model.chgVarLb(v, x)
             self.model.chgVarUb(v, x)
+        # An SOS1 pair is fixed the same way: the side the MIP left at zero stays there,
+        # so the SOS constraints are satisfied and SCIP has nothing to branch on.
+        for a, b in self._sos_pairs:
+            self.model.chgVarUb(a if vals[a.name] <= vals[b.name] else b, 0.0)
         self.model.optimize()
         lp_status = self.model.getStatus()
         return status if lp_status == 'optimal' else lp_status

@@ -40,8 +40,7 @@ sys.path.insert(0, _ROOT)
 os.chdir(_ROOT)
 
 import numpy as np
-from data_generator import (setup_lem_parameters, log_reserve_calibration,
-                            reserve_price_series)
+from data_generator import setup_lem_parameters
 from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
                              print_report as _report_reserve_peak)
 from stability_check import check_allocations
@@ -97,43 +96,19 @@ def build_instance(n, day=None):
     """Return (players, configuration, time_periods, parameters, scenario_name).
 
     day: the calendar day of the data (as run_multiday's sens['day']); None keeps
-    the default day. Only for n = 15, 30, 60.
+    the default day (9, data_generator's).
+
+    n = 6 is run_multiday's baseline_6p instance (P6, C6, BASE6), built by its
+    build_params, so the stochastic extension and the multi-day sweep solve the same
+    6-prosumer problem. This branch used to carry its own configuration, with hydrogen
+    and heat storage that C6 dropped and the reserve prices of day 9 whatever the day.
     """
     T = list(range(24))
     if n == 6:
-        players = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
-        config = {
-            "players_with_renewables": ['u1'], "players_with_solar": [], "players_with_wind": ['u1'],
-            "players_with_electrolyzers": ['u2'], "players_with_heatpumps": ['u3'],
-            "players_with_elec_storage": ['u1'], "players_with_hydro_storage": ['u2'],
-            "players_with_heat_storage": ['u3'],
-            "players_with_nfl_elec_demand": ['u4'], "players_with_nfl_hydro_demand": ['u5'],
-            "players_with_nfl_heat_demand": ['u6'],
-            "players_with_fl_elec_demand": ['u2', 'u3'],
-            "players_with_fl_hydro_demand": [], "players_with_fl_heat_demand": [],
-        }
-        # base defaults, then switch reserve/peak on at the scenario prices
-        params = setup_lem_parameters(players, config, T)
-        params.pop('pi_res_t', None)
-        if isinstance(RESERVE_PRICE, str):
-            # the default instance is day 9 of the calendar (data_generator)
-            params['pi_res_t'] = reserve_price_series(RESERVE_PRICE, 1, 9, T)
-            params['reserve_price_source'] = RESERVE_PRICE
-            params['pi_res'] = float(np.mean(list(params['pi_res_t'].values())))
-        else:
-            params['pi_res'] = RESERVE_PRICE
-        params['pi_up'] = params['pi_dn'] = params['pi_res']
-        params['pi_E_peak'] = PEAK_PENALTY
-        params['reserve_block_hours'] = RESERVE_BLOCK_HOURS
-        params['reserve_product'] = RESERVE_PRODUCT
-        params['reserve_mode'] = RESERVE_MODE
-        params['reserve_penalty_factor'] = RESERVE_PENALTY_FACTOR
-        params['enable_reserve'] = params['pi_res'] > 0.0
-        params['enable_peak'] = PEAK_PENALTY > 0.0
-        # This branch overrides the prices after setup_lem_parameters, so the
-        # sec.2.2 headroom-calibration check has to be re-run by hand.
-        log_reserve_calibration(params)
-        return players, config, T, params, "6p_reserve_peak"
+        import run_multiday as RM
+        run = next(r for r in RM.RUNS if r['name'] == 'baseline_6p')
+        params = RM.build_params(run, 9 if day is None else day)
+        return list(run['players']), run['config'], T, params, "6p_reserve_peak"
 
     if n == 15:
         players, config = LC.PLAYERS_15, LC.CONFIGURATION_15

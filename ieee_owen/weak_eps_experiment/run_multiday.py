@@ -50,9 +50,8 @@ from data_generator import setup_lem_parameters
 from reserve_metrics import (reserve_peak_metrics, solve_standalone_r_sym,
                              flatten_for_csv, failed_checks)
 from stability_check import check_allocations, flatten_for_csv as stab_for_csv
-from compact_utility import LocalEnergyMarket
-from chp import ColumnGenerationSolver
 from core import CoreComputation
+from stochastic_extension import solve_deterministic
 import large_community as LC
 
 OUT = os.path.dirname(os.path.abspath(__file__))
@@ -384,22 +383,17 @@ ROWGEN_COLS = ['run', 'day', 'n_players', 'converged', 'vstar_is_lower_bound',
 def owen_day(run, day, do_stab=True):
     players = run['players']
     params = build_params(run, day)
-    t0 = time.time()
-    lem = LocalEnergyMarket(players, T, params, model_type='mip')
-    lem.model.hideOutput()
-    ret = lem.solve_complete_model(analyze_revenue=False)
-    results_ip = ret[1]
-    v_mip = float(lem.model.getObjVal())
-    t_mip = time.time() - t0
-
-    init_priv = {k: v for k, v in results_ip.items() if isinstance(v, dict)}
-    t0 = time.time()
-    cg = ColumnGenerationSolver(players, T, params, model_type='mip',
-                                init_sol=init_priv, smoothing=True)
-    _, solution, v_chp, _ = cg.solve()
-    t_cg = time.time() - t0
-
-    owen_res = cg.compute_owen_allocation(v_mip)
+    # The MILP and the column generation go through the stochastic extension's
+    # engine with one scenario (Gurobi, DOIs, nested DW), which reproduces
+    # chp.ColumnGenerationSolver's v^LR and Owen point and is 5-10x faster; before
+    # this the MILP and the pricing ran on the HiGHS default here, and the tables
+    # of the first draft on SCIP.
+    det = solve_deterministic(players, T, params)
+    results_ip = det['results']
+    v_mip, v_chp = det['v_mip'], det['v_lr']
+    t_mip, t_cg = det['time_mip'], det['time_cg']
+    solution = {'convex_hull_prices': det['convex_hull_prices']}
+    owen_res = det
     gap, eps_bound = owen_res['gap'], owen_res['eps']
 
     # prop:opap(i) / prop:eps measured at fixed chi (one separation MIP each)
