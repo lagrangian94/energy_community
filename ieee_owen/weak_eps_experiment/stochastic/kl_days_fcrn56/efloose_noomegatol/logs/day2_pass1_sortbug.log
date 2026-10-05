@@ -1,0 +1,66 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 60p_reserve_peak_day2_S20_seed0_grb_direct-gurobi_kl0.5_ndw_efloose: n=60, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+  obj -24297.031737  status optimal  gap 9.98e-04  41.9s  vars 343244
+  KL r=0.5: worst case -24297.031737 vs expected -24976.455193; 1 MILP solve(s); rho* 0.056 0.148 0.077 0.007 0.126 0.008 0.033 0.023 0.034 0.010 0.022 0.029 0.031 0.251 0.011 0.034 0.029 0.009 0.017 0.046 (KL 0.5000)
+    round 1: MIPGap 1e-03  41.2s  1 nodes  psi-bound 9.98e-04  psi-incumbent 1.23e-04
+
+[2] column generation (DWR_N^Omega)
+  seed columns: largest carrier-row residual 5.33e-14 (repaired)
+  CG   25 | RMP   -25210.7243 | LB   -26034.5596 | UB           inf | a 0.10 smooth   | min rc -1.1435e+02 | +206 | lp 2.74s solver 2.70s 2599 it 20765 cols 892011 nz
+  CG   35 | RMP   -25211.7694 | LB   -25201.6546 | UB   -24297.0317 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 2.76s solver 2.71s 3458 it 22017 cols 1061292 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP -25211.7694 LB -25201.6546 UB -24297.0317 gap 3.72e-02 [round] 141s
+  CG   50 | RMP   -24316.6717 | LB   -24541.0908 | UB   -24297.0317 | a 0.10 smooth   | min rc -1.4139e+01 | +199 +1cut | lp 3.03s solver 2.98s 5974 it 24017 cols 1482021 nz
+  CG   75 | RMP   -24326.8156 | LB   -24355.0053 | UB   -24297.0317 | a 0.10 smooth   | min rc -7.0893e+00 | +145 +1cut | lp 11.22s solver 11.16s 8710 it 24413 cols 2000873 nz
+  CG  100 | RMP   -24331.6909 | LB   -24330.9850 | UB   -24297.0317 | a 1.00 std      | min rc -2.7471e+00 | +240 +1cut | lp 21.36s solver 21.28s 2824 it 27671 cols 2962379 nz
+  CG  122 | RMP   -24332.0578 | LB   -24330.9850 | UB   -24297.0317 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 9.21s solver 9.07s 4008 it 29867 cols 3767300 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP -24332.0578 LB -24330.9850 UB -24297.0317 gap 1.40e-03 [round] 1106s
+  CG  125 | RMP   -24315.5038 | LB   -24330.5649 | UB   -24297.0317 | a 0.10 smooth   | min rc -4.6612e+00 | +68 +1cut | lp 62.97s solver 62.88s 6386 it 30520 cols 3928205 nz
+  CG  150 | RMP   -24318.4265 | LB   -24321.9251 | UB   -24297.0317 | a 0.10 smooth   | min rc -5.7409e-01 | +26 +1cut | lp 27.54s solver 27.42s 9650 it 31100 cols 4666408 nz
+  CG  175 | RMP   -24319.1843 | LB   -24319.4868 | UB   -24297.0317 | a 0.10 smooth   | min rc -2.9100e-01 | +26 | lp 33.06s solver 32.95s 9763 it 31007 cols 5068391 nz
+  CG  184 | RMP   -24319.2549 | LB   -24319.2193 | UB   -24297.0317 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 7.13s solver 7.03s 2651 it 31473 cols 5351443 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP -24319.2549 LB -24319.2193 UB -24297.0317 gap 9.13e-04 [round] 3109s
+  CG  200 | RMP   -24318.1454 | LB   -24318.2617 | UB   -24297.0317 | a 0.10 smooth   | min rc -3.9344e-03 | +12 | lp 23.05s solver 22.93s 2760 it 33226 cols 5978001 nz
+  CG  204 | RMP   -24318.1486 | LB   -24318.1624 | UB   -24297.0317 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 9.68s solver 9.57s 3880 it 32991 cols 5919274 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP -24318.1486 LB -24318.1624 UB -24297.0317 gap 8.70e-04 [round] 3688s
+  CG  224 | RMP   -24317.8323 | LB   -24317.8484 | UB   -24297.0317 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 18.64s solver 18.50s 6814 it 35282 cols 6537554 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP -24317.8323 LB -24317.8484 UB -24297.0317 gap 8.57e-04 [round] 4101s
+  CG  225 | RMP   -24317.7813 | LB   -24317.8410 | UB   -24297.0317 | a 0.10 smooth   | min rc -8.7155e-04 | +11 +1cut | lp 28.05s solver 27.93s 11664 it 35282 cols 6537554 nz
+Traceback (most recent call last):
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 4675, in <module>
+    main()
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 4671, in main
+    run(build_parser().parse_args())
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 4313, in run
+    dw, master = solver_fn(players, T, scen, base, **_direct_kwargs(args, ef),
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 3863, in solve_dwr_kl
+    return master.solve(init_vals=init_vals), master
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 3468, in solve
+    res = super().solve(init_vals, init_cols, init_duals)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 3057, in solve
+    status, obj = self._cg(rnd, last)
+                  ^^^^^^^^^^^^^^^^^^^
+  File "F:\github_projects\energy_community\ieee_owen\stochastic_extension.py", line 2866, in _cg
+    slack = sorted(((r[0] - r[1], u) for u, r in res.items()),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '<' not supported between instances of 'str' and 'tuple'
+Warning: environment still referenced so free is deferred (Continue to use WLS)

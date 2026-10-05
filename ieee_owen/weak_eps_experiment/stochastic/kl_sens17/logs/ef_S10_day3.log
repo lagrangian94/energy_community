@@ -1,0 +1,25 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 60p_reserve_peak_day3_S10_seed0_grb_direct-gurobi_kl0.5_ndw_rsc0.303571: n=60, |T|=24, |Omega|=10 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+  obj -17312.627915  status optimal  gap 6.95e-05  2833.7s  vars 172354
+  KL r=0.5: worst case -17312.627915 vs expected -18215.385262; 4 MILP solve(s); rho* 0.049 0.313 0.074 0.018 0.326 0.074 0.060 0.041 0.025 0.019 (KL 0.5000)
+    round 1: MIPGap 1e-03  226.0s  246 nodes  psi-bound 1.00e-03  psi-incumbent 2.65e-04
+    round 2: MIPGap 1e-03  82.4s  1 nodes  psi-bound 7.97e-04  psi-incumbent 6.49e-08
+    round 3: MIPGap 1e-04  1345.1s  4211 nodes  psi-bound 1.11e-04  psi-incumbent 1.50e-05
+    round 4: MIPGap 1e-04  1179.4s  5594 nodes  psi-bound 6.95e-05  psi-incumbent 2.27e-07

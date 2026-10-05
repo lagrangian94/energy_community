@@ -1,0 +1,120 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 60p_reserve_peak_day1_S20_seed0_grb_direct-gurobi_kl0.5_accdoi_ndw: n=60, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+  obj -24688.237646  status optimal  gap 9.61e-05  257.1s  vars 343244
+  KL r=0.5: worst case -24688.237646 vs expected -25436.642267; 3 MILP solve(s); rho* 0.042 0.106 0.055 0.007 0.198 0.031 0.021 0.021 0.039 0.011 0.030 0.029 0.020 0.241 0.009 0.032 0.025 0.019 0.018 0.047 (KL 0.5000)
+    round 1: MIPGap 1e-03  32.8s  1 nodes  psi-bound 8.97e-04  psi-incumbent 1.02e-04
+    round 2: MIPGap 1e-03  41.7s  1 nodes  psi-bound 8.04e-04  psi-incumbent 4.16e-07
+    round 3: MIPGap 1e-04  181.3s  1646 nodes  psi-bound 9.61e-05  psi-incumbent 3.07e-06
+
+[2] column generation (DWR_N^Omega)
+  seed columns: largest carrier-row residual 5.33e-14 (repaired)
+  CG   25 | RMP   -25607.3546 | LB   -26384.5650 | UB           inf | a 0.10 smooth   | min rc -1.1475e+02 | +207 | lp 1.05s solver 1.02s 1773 it 20478 cols 717019 nz
+  CG   34 | RMP   -25607.4774 | LB   -25596.0275 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 1.76s solver 1.72s 1991 it 21318 cols 794558 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP -25607.4774 LB -25596.0275 UB -24688.2376 gap 3.68e-02 [round] 105s
+  CG   50 | RMP   -24700.4649 | LB   -24902.7303 | UB   -24688.2376 | a 0.10 smooth   | min rc -1.3462e+01 | +177 | lp 1.88s solver 1.84s 3804 it 22760 cols 934522 nz
+  CG   75 | RMP   -24706.6487 | LB   -24723.2247 | UB   -24688.2376 | a 0.10 smooth   | min rc -2.1276e+00 | +43 | lp 3.75s solver 3.70s 4970 it 22786 cols 1068655 nz
+  CG   88 | RMP   -24707.8714 | LB   -24706.9791 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 4.23s solver 4.17s 6137 it 24441 cols 1294914 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP -24707.8714 LB -24706.9791 UB -24688.2376 gap 7.59e-04 [round] 390s
+  CG  100 | RMP   -24691.0791 | LB   -24698.3925 | UB   -24688.2376 | a 0.10 smooth   | min rc -2.6956e-01 | +68 | lp 5.50s solver 5.44s 4289 it 25135 cols 1475062 nz
+  CG  125 | RMP   -24691.3182 | LB   -24692.1283 | UB   -24688.2376 | a 0.10 smooth   | min rc -3.2125e-02 | +35 | lp 6.62s solver 6.55s 4845 it 25950 cols 1648715 nz
+  CG  138 | RMP   -24691.3452 | LB   -24691.3916 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 4.75s solver 4.67s 4677 it 28209 cols 1898851 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP -24691.3452 LB -24691.3916 UB -24688.2376 gap 1.28e-04 [round] 814s
+  CG  150 | RMP   -24690.8481 | LB   -24691.1399 | UB   -24688.2376 | a 0.10 smooth   | min rc -1.2524e-02 | +12 | lp 10.90s solver 10.83s 6384 it 30002 cols 2266324 nz
+  CG  162 | RMP   -24690.8607 | LB   -24690.8026 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 1.28s solver 1.19s 1015 it 30748 cols 2347403 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP -24690.8607 LB -24690.8026 UB -24688.2376 gap 1.04e-04 [round] 1190s
+  CG  165 | RMP   -24690.7898 | LB   -24690.8026 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 4.70s solver 4.60s 2966 it 31266 cols 2450099 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP -24690.7898 LB -24690.8026 UB -24688.2376 gap 1.04e-04 [round] 1239s
+  CG  167 | RMP   -24690.7817 | LB   -24690.8026 | UB   -24688.2376 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 4.36s solver 4.27s 3326 it 31531 cols 2503025 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP -24690.7817 LB -24690.8026 UB -24688.2376 gap 1.04e-04 [round] 1271s
+  CG  168 | RMP   -24690.7771 | LB   -24690.8026 | UB   -24690.7767 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 3.15s solver 3.07s 2290 it 31531 cols 2503025 nz
+  -- penalty round 7: eps 0 delta 0 RMP -24690.7771 LB -24690.8026 UB -24690.7767 gap 1.05e-06 [done] 1275s
+  obj -24690.776742  LB -24690.802566  gap 1.05e-06  iters 168  1274.8s  rounds 7  status optimal
+  KL r=0.5: 34 distribution cuts (rho_hat included); rho* 0.040 0.109 0.055 0.007 0.201 0.032 0.021 0.020 0.039 0.011 0.031 0.029 0.020 0.236 0.009 0.031 0.025 0.019 0.018 0.045 (KL 0.5000)
+  time: master LP 834.1s  pricing 409.5s (157464 MILPs, 16 worker(s))
+
+[3] robust Owen allocation
+  omega_LR,rob 2.564920  eps_LR 0.042749  certified [0.167629, 2.564920]
+  EF slack 2.3715 = 92% of the reported omega  (> 10%: use --table for a table run)
+  checks: budget 0.00e+00  duality -2.55e-11  pricing 0.00e+00
+
+[4] stand-alone values val(DP_{j}^Omega)
+   player         Owen        E[x*]        alone       chi^LR
+       u1    1591.1022    1591.0594    1110.8013     480.2581
+       u2     231.2751     231.2324     150.0117      81.2207
+       u3     728.1006     728.0578     267.6795     460.3783
+       u4     104.8967     104.8539      81.4729      23.3810
+       u5     271.7787     271.7359     104.5488     167.1872
+       u6      89.0880      89.0453      34.6442      54.4011
+       u7     603.2802     603.2375     507.7376      95.4999
+       u8     231.2751     231.2324     150.0117      81.2207
+       u9     731.8610     731.8183     267.6795     464.1388
+      u10    1026.8262    1026.7834     981.6831      45.1003
+      u11     326.1488     326.1061     312.7144      13.3917
+      u12      28.9029      28.8602      12.2210      16.6392
+      u13     190.1475     190.1048      28.7177     161.3871
+      u14     486.3488     486.3061     394.1744      92.1317
+      u15     396.1116     396.0688     315.4182      80.6507
+      u16    1011.9627    1011.9199     629.6265     382.2935
+      u17     360.7071     360.6643     239.1499     121.5144
+      u18     287.5301     287.4874     190.0140      97.4734
+      u19     118.7651     118.7223      70.0070      48.7153
+      u20     731.8610     731.8183     267.6795     464.1388
+      u21     313.7536     313.7108     272.0596      41.6513
+      u22     489.2233     489.1805     469.0716      20.1090
+      u23    -305.6400    -305.6827    -351.0925      45.4098
+      u24    -108.1623    -108.2051    -151.3634      43.1584
+      u25    -404.5375    -404.5802    -452.6727      48.0925
+      u26     105.0768     105.0341     -28.3369     133.3710
+      u27     -21.7208     -21.7636    -104.8633      83.0997
+      u28     -90.0782     -90.1210    -189.4669      99.3460
+      u29     -79.6627     -79.7054    -167.3563      87.6508
+      u30    -209.6169    -209.6596    -240.1474      30.4878
+      u31    1778.8631    1778.8203    1203.4547     575.3656
+      u32     343.7852     343.7424     230.0163     113.7261
+      u33     509.6704     509.6277     187.3756     322.2520
+      u34     123.7663     123.7235      99.6464      24.0771
+      u35     195.1648     195.1220      33.3784     161.7436
+      u36     181.8536     181.8108     123.8507      57.9602
+      u37     616.8708     616.8281     549.1526      67.6754
+      u38     203.1476     203.1049     130.0105      73.0944
+      u39     950.2912     950.2485     347.9833     602.2651
+      u40    1536.2486    1536.2058    1475.9068      60.2990
+      u41     658.1063     658.0636     586.6627      71.4009
+      u42     151.9708     151.9280     133.0531      18.8749
+      u43     179.2260     179.1833      18.5722     160.6111
+      u44     934.4395     934.3968     619.8498     314.5469
+      u45      43.2785      43.2358     -30.4912      73.7270
+      u46    1770.9346    1770.8919    1101.8463     669.0456
+      u47     166.4802     166.4374     110.3769      56.0606
+      u48     146.8926     146.8498      90.0082      56.8417
+      u49     315.6576     315.6149     210.0152     105.5997
+      u50     659.0510     659.0082     240.9115     418.0967
+      u51     395.8512     395.8085     331.8306      63.9779
+      u52     715.4298     715.3871     677.4821      37.9050
+      u53     407.5401     407.4973     297.0000     110.4974
+      u54     444.0777     444.0349     365.5358      78.4991
+      u55     224.6825     224.6397     148.0182      76.6216
+      u56     496.4967     496.4539     260.5759     235.8781
+      u57     259.4466     259.4038      93.0929     166.3109
+      u58     366.5537     366.5109     182.3209     184.1900
+      u59     472.1579     472.1152     288.3770     183.7382
+      u60     206.2629     206.2201     147.3235      58.8967
+
+wrote ieee_owen\weak_eps_experiment\stochastic\kl_days_fcrn56\60p_reserve_peak_day1_S20_seed0_grb_direct-gurobi_kl0.5_accdoi_ndw.json

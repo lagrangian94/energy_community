@@ -1,0 +1,73 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 60p_reserve_peak_day6_S20_seed0_grb_direct-gurobi_kl0.5_ndw_efloose: n=60, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+  obj -26082.925198  status optimal  gap 5.39e-04  310.0s  vars 343244
+  KL r=0.5: worst case -26082.925198 vs expected -26895.938451; 2 MILP solve(s); rho* 0.031 0.156 0.064 0.008 0.199 0.031 0.027 0.018 0.024 0.010 0.025 0.045 0.024 0.202 0.008 0.033 0.026 0.018 0.024 0.027 (KL 0.5000)
+    round 1: MIPGap 1e-03  135.6s  1 nodes  psi-bound 1.12e-03  psi-incumbent 1.84e-04
+    round 2: MIPGap 1e-03  173.5s  1 nodes  psi-bound 5.39e-04  psi-incumbent 1.28e-05
+
+[2] column generation (DWR_N^Omega)
+  seed columns: largest carrier-row residual 3.22e-12 (repaired)
+  CG   25 | RMP   -26996.0647 | LB   -27691.9401 | UB           inf | a 0.10 smooth   | min rc -1.3855e+02 | +211 | lp 0.81s solver 0.77s 1463 it 20450 cols 913510 nz
+  CG   34 | RMP   -26996.0904 | LB   -26957.5470 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 3.43s solver 3.38s 2929 it 21166 cols 1006616 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP -26996.0904 LB -26957.5470 UB -26082.9252 gap 3.35e-02 [round] 116s
+  CG   50 | RMP   -26096.4106 | LB   -26304.6320 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.6256e+01 | +221 +1cut | lp 5.63s solver 5.57s 5446 it 23602 cols 1491933 nz
+  CG   75 | RMP   -26109.0335 | LB   -26134.2403 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.9337e+00 | +141 +1cut | lp 10.68s solver 10.62s 8599 it 24700 cols 2084785 nz
+  CG   98 | RMP   -26112.0867 | LB   -26111.5252 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 11.44s solver 11.35s 6781 it 28662 cols 3070289 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP -26112.0867 LB -26111.5252 UB -26082.9252 gap 1.10e-03 [round] 849s
+  CG  100 | RMP   -26093.0600 | LB   -26111.3103 | UB   -26082.9252 | a 0.10 smooth   | min rc -5.0190e+00 | +81 +1cut | lp 32.98s solver 32.89s 15374 it 29044 cols 3147046 nz
+  CG  125 | RMP   -26097.1164 | LB   -26101.6637 | UB   -26082.9252 | a 0.10 smooth   | min rc -5.8334e-01 | +96 +1cut | lp 19.88s solver 19.81s 8142 it 27892 cols 3505669 nz
+  CG  150 | RMP   -26097.6359 | LB   -26097.7218 | UB   -26082.9252 | a 0.10 smooth   | min rc -7.1878e-02 | +23 | lp 21.87s solver 21.77s 7687 it 30388 cols 4019989 nz
+  CG  154 | RMP   -26097.6522 | LB   -26097.6734 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 13.01s solver 12.93s 4267 it 29738 cols 3905686 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP -26097.6522 LB -26097.6734 UB -26082.9252 gap 5.65e-04 [round] 2274s
+  CG  175 | RMP   -26096.8159 | LB   -26096.9183 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.2826e-02 | +23 | lp 19.14s solver 19.04s 7190 it 32025 cols 4641943 nz
+  CG  180 | RMP   -26096.8234 | LB   -26096.8468 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 6.13s solver 5.95s 2370 it 33403 cols 4903869 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP -26096.8234 LB -26096.8468 UB -26082.9252 gap 5.34e-04 [round] 3182s
+  CG  198 | RMP   -26096.5835 | LB   -26096.6053 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 16.51s solver 16.40s 7208 it 34154 cols 5157402 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP -26096.5835 LB -26096.6053 UB -26082.9252 gap 5.24e-04 [round] 3745s
+  CG  200 | RMP   -26096.5257 | LB   -26096.5973 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.5850e-03 | +22 | lp 31.43s solver 31.30s 13513 it 34416 cols 5237323 nz
+  CG  225 | RMP   -26096.5292 | LB   -26096.5529 | UB   -26082.9252 | a 1.00 std      | min rc -4.2942e-03 | +19 | lp 4.51s solver 4.34s 1951 it 37312 cols 5750267 nz
+  CG  235 | RMP   -26096.5294 | LB   -26096.5529 | UB   -26082.9252 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 9.31s solver 9.16s 4075 it 38952 cols 6066987 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP -26096.5294 LB -26096.5529 UB -26082.9252 gap 5.22e-04 [round] 4809s
+  CG  250 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 misprice | min rc -4.1291e-01 | +206 | lp 3.66s solver 3.52s 1389 it 41312 cols 6505818 nz
+  CG  275 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0989e-01 | +208 | lp 1.81s solver 1.66s 227 it 48392 cols 7792688 nz
+  CG  300 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0765e-01 | +203 | lp 1.69s solver 1.46s 174 it 51139 cols 8310241 nz
+  CG  325 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0599e-01 | +203 | lp 1.02s solver 0.86s 103 it 49532 cols 8025701 nz
+  CG  350 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.8019e-01 | +203 | lp 1.68s solver 1.51s 247 it 51644 cols 8417054 nz
+  CG  375 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0627e-01 | +203 | lp 1.54s solver 1.37s 151 it 49678 cols 8059275 nz
+  CG  400 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.9994e-01 | +203 | lp 1.73s solver 1.56s 235 it 52177 cols 8531481 nz
+  CG  425 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0985e-01 | +208 | lp 1.14s solver 0.95s 86 it 50256 cols 8182320 nz
+  CG  450 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0544e-01 | +203 | lp 1.61s solver 1.44s 238 it 52435 cols 8583296 nz
+  CG  475 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.8168e-01 | +208 | lp 1.72s solver 1.56s 278 it 50594 cols 8241941 nz
+  CG  500 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0631e-01 | +208 | lp 1.67s solver 1.49s 173 it 52814 cols 8655144 nz
+  CG  525 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0772e-01 | +203 | lp 1.76s solver 1.57s 130 it 50531 cols 8237723 nz
+  CG  550 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0525e-01 | +203 | lp 1.71s solver 1.52s 206 it 52759 cols 8658674 nz
+  CG  575 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0561e-01 | +203 | lp 1.55s solver 1.38s 159 it 51253 cols 8380212 nz
+  CG  600 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0984e-01 | +194 | lp 1.65s solver 1.46s 167 it 53383 cols 8781506 nz
+  CG  625 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -4.0359e-01 | +203 | lp 1.47s solver 1.29s 131 it 51611 cols 8450725 nz
+  CG  650 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -3.9884e-01 | +206 | lp 1.54s solver 1.35s 198 it 54103 cols 8914999 nz
+  CG  675 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.8555e-01 | +205 | lp 1.17s solver 0.98s 95 it 52084 cols 8536229 nz
+  CG  700 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.8626e-01 | +200 | lp 1.85s solver 1.65s 169 it 54645 cols 9008956 nz
+  CG  725 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.9052e-01 | +213 | lp 1.32s solver 1.13s 178 it 52451 cols 8603877 nz
+  CG  750 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.7277e-01 | +210 | lp 1.85s solver 1.65s 291 it 54807 cols 9047428 nz
+  CG  775 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -1.7812e-01 | +191 | lp 1.70s solver 1.53s 255 it 51966 cols 8510772 nz
+  CG  800 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -2.4578e-01 | +181 | lp 1.71s solver 1.52s 207 it 53555 cols 8816757 nz
+  CG  825 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -2.4307e-01 | +196 | lp 1.54s solver 1.37s 121 it 51783 cols 8486907 nz
+  CG  850 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -2.1324e-01 | +189 | lp 1.58s solver 1.38s 187 it 54598 cols 9013485 nz
+  CG  875 | RMP   -26096.5193 | LB   -26096.5529 | UB   -26082.9252 | a 0.10 smooth   | min rc -2.4600e-01 | +186 | lp 1.58s solver 1.39s 145 it 52335 cols 8597486 nz

@@ -1,0 +1,42 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 60p_reserve_peak_day4_S20_seed0_grb_direct-gurobi_kl0.5_ndw_rsc0.303571_sbar_tune_shrink_sbar: n=60, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+  (read from ieee_owen/weak_eps_experiment/stochastic/kl_days_fcrn17/ef_cache/day4.pkl)
+  obj -19202.519590  status optimal  gap 9.83e-05  9451.3s  vars 343244
+  KL r=0.5: worst case -19202.519590 vs expected -20197.383785; 4 MILP solve(s); rho* 0.025 0.204 0.064 0.007 0.192 0.026 0.043 0.026 0.014 0.013 0.024 0.027 0.022 0.157 0.006 0.019 0.043 0.021 0.039 0.028 (KL 0.5000)
+    round 1: MIPGap 1e-03  276.0s  98 nodes  psi-bound 1.23e-03  psi-incumbent 2.42e-04
+    round 2: MIPGap 1e-03  38.7s  1 nodes  psi-bound 9.75e-04  psi-incumbent 6.18e-08
+    round 3: MIPGap 1e-04  4928.3s  12167 nodes  psi-bound 1.05e-04  psi-incumbent 5.31e-06
+    round 4: MIPGap 1e-04  4206.9s  7645 nodes  psi-bound 9.83e-05  psi-incumbent 4.74e-09
+
+[2] column generation (DWR_N^Omega)
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 926906
+Academic license 926906 - for non-commercial use only - registered to se___@postech.ac.kr
+  seed columns: largest carrier-row residual 5.33e-07 (repaired)
+  CG   25 | RMP   -19934.3275 | LB   -19917.8563 | UB           inf | a 0.10 smooth   | min rc -1.9258e+01 | +196 | lp 0.90s solver 0.87s 3034 it 19576 cols 609587 nz
+  CG   26 | RMP   -19934.7066 | LB   -19917.8563 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.85s solver 0.82s 2783 it 20002 cols 635915 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP -19934.7066 LB -19917.8563 UB -19202.5196 gap 3.73e-02 [round] 62s
+  CG   50 | RMP   -19208.2515 | LB   -19269.4213 | UB   -19202.5196 | a 0.10 smooth   | min rc -1.5434e+00 | +102 | lp 1.30s solver 1.26s 3863 it 21950 cols 789500 nz
+  CG   75 | RMP   -19209.1112 | LB   -19211.7615 | UB   -19202.5196 | a 0.10 smooth   | min rc -5.4455e-01 | +88 | lp 3.81s solver 3.77s 4844 it 23018 cols 929297 nz
+  CG   82 | RMP   -19209.2612 | LB   -19209.1356 | UB   -19202.5196 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 5.81s solver 5.77s 1811 it 24043 cols 1043188 nz
+  -- penalty round 2: eps 0.02 delta 0.02 RMP -19209.2612 LB -19209.1356 UB -19202.5196 gap 3.45e-04 [round] 595s
+  CG  100 | RMP   -19203.1700 | LB   -19205.8820 | UB   -19202.5196 | a 0.10 smooth   | min rc -9.2012e-01 | +55 | lp 7.41s solver 7.36s 6648 it 27215 cols 1337342 nz
+  CG  125 | RMP   -19203.6390 | LB   -19204.0240 | UB   -19202.5196 | a 0.10 smooth   | min rc -6.4360e-02 | +27 | lp 13.71s solver 13.65s 2780 it 29413 cols 1620848 nz
+  CG  150 | RMP   -19203.6740 | LB   -19203.7844 | UB   -19202.5196 | a 0.10 misprice | min rc -1.4925e-03 | +10 | lp 3.00s solver 2.93s 2103 it 32912 cols 1967759 nz
+  CG  168 | RMP   -19203.6741 | LB   -19203.6879 | UB   -19202.5196 | a 0.10 misprice | min rc -5.9312e-07 | +0  [round] | lp 0.37s solver 0.29s 9 it 34533 cols 2097556 nz
+  -- penalty round 3: eps 0.002 delta 0.002 RMP -19203.6741 LB -19203.6879 UB -19202.5196 gap 6.08e-05 [round] 2268s
+  CG  175 | RMP   -19203.5413 | LB   -19203.6472 | UB   -19202.5196 | a 0.10 smooth   | min rc -1.1447e-04 | +4 | lp 2.06s solver 1.98s 1452 it 34371 cols 2138317 nz
