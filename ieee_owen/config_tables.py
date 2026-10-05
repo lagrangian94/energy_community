@@ -119,11 +119,11 @@ $10$--$16\%$ reported for PEM units; the standby draw sits below the $2.5$--$5\%
 same literature reports, so the unit is modelled as somewhat cheaper to park than a
 typical installation, which if anything understates the value of commitment and with it
 $\omega^{\mathrm{LR}}$. The power-to-hydrogen curve is concave and is represented
-exactly by six segments with segment-selection binaries. The heat pump is a two-state
-unit committed between $20\%$ and $80\%$ of its rating at a constant coefficient of
-performance of $3.28$, with a $10$~\euro\ start-up charge; its reserve headroom is
-likewise available only while it is on, which is why its contribution is measured in
-electric MW while its operating window is on heat output.
+exactly by six segments with segment-selection binaries. The heat pump enters linearly,
+with no commitment state and no start-up charge: its heat output ranges continuously
+between zero and $80\%$ of its rating at a constant coefficient of performance of
+$3.28$, within ramp limits, and its reserve headroom is that window, measured in
+electric MW while the window is on heat output.
 
 Storage is sized relative to its owner rather than absolutely: rated power is a quarter
 of the owner's asset capacity and energy capacity three times that power, so a member's
@@ -185,25 +185,23 @@ def tab_parameters():
         (r'\quad Minimum down time', '2', 'h', ''),
         (r'\quad Efficiency curve', r'\multicolumn{3}{l}{piecewise linear, 6 segments}', '', ''),
         (r'\midrule', '', '', ''),
-        (r'\multicolumn{4}{@{}l}{\emph{Heat pump (start-up/shut-down commitment)}}', '', '', ''),
+        (r'\multicolumn{4}{@{}l}{\emph{Heat pump (linear, no commitment)}}', '', '', ''),
         (r'\quad Capacity $\overline{c}^{H}$', '0.8', r'MW$_{\mathrm{th}}$', ''),
         (r'\quad Coefficient of performance $\nu^{\mathrm{cop}}$', '3.28', '--',
          'converts electric to heat'),
-        (r'\quad Operating band $[c^{H}_{\min},c^{H}_{\max}]$', '[0.2, 0.8]', '--',
+        (r'\quad Operating band $[0,c^{H}_{\max}]$', '[0, 0.8]', '--',
          'fraction of capacity'),
-        (r'\quad Start-up cost $c^{H}_{\mathrm{su}}$', '10', r'\euro', ''),
-        (r'\quad Ramp limits', '0.9', '--', 'up/down, start-up/shut-down'),
+        (r'\quad Ramp limits', '0.9', '--', 'up/down, fraction of capacity per hour'),
         (r'\midrule', '', '', ''),
         (r'\multicolumn{4}{@{}l}{\emph{Storage (per carrier $k$)}}', '', '', ''),
         (r'\quad Power rating', '0.25', '--', r'$\times$ the owner\'s asset capacity'),
         (r'\quad Energy capacity', '3.0', '--', r'$\times$ power rating'),
         (r'\quad Initial state of charge', '0.2', '--', 'fraction of energy capacity'),
-        # 0.90, not the 0.95 that nu_ch_E / nu_ch_G carry. The state-of-charge
-        # balance reads params['nu_ch'] (compact_utility.py, electricity and hydrogen),
-        # a key setup_lem_parameters never sets, so it takes the 0.9 default; heat reads
-        # nu_ch_H, which is 0.9 anyway. The 0.95 entries reach only the throughput cost
-        # terms, and c_sto_E = c_sto_G = c_sto_H = 0, so they touch nothing at all.
-        (r'\quad Round-trip efficiency', '0.90', '--', 'each way, every carrier'),
+        # Charging and discharging efficiency, each way: nu_ch_k = nu_dis_k. Until
+        # 2026-10-01 the electricity and hydrogen SOC balance read an unset key and ran
+        # at 0.9 (this row said 0.90 for every carrier); it now reads nu_ch_E / nu_ch_G.
+        (r'\quad Charging/discharging efficiency', r'0.95 / 0.90', '--',
+         r'each way; electricity and H$_2$ / heat'),
         (r'\midrule', '', '', ''),
         (r'\multicolumn{4}{@{}l}{\emph{Reserve and peak coupling}}', '', '', ''),
         (r'\quad Reserve price $\pi^{\mathrm{res}}_t$', 'hourly', r'\euro/MW$\cdot$h',
@@ -303,14 +301,6 @@ def main():
         '% shares are counted, so this file cannot drift away from what was solved.',
         '% \\input this in place of \\subsection{Setup} in ieee_draft.txt.',
         '% Requires: booktabs, eurosym (\\euro).',
-        '%',
-        '% NOTE, unresolved: the paragraph at "Constraints~\\eqref{eq:els_state}--" in',
-        '% ieee_draft.txt states the heat pump "enters linearly ... with no commitment',
-        '% state and no start-up charge". The model solved here does the opposite --',
-        '% compact_utility.py declares z_on_H/z_su_H/z_sd_H as binaries, gates the',
-        '% [0.2, 0.8] x hp_cap band and the reserve headroom on z_on_H, and charges',
-        '% c_su_H = 10 EUR per start. The text below describes what was solved. One of',
-        '% the two has to change before submission.',
         '% =====================================================================',
         '',
         prose_setup(),

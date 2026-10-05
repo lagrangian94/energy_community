@@ -687,6 +687,10 @@ class LocalEnergyMarket:
         self.players_with_renewables = [u for u in self.params.get('players_with_renewables', []) if u in self.players]
         self.players_with_electrolyzers = [u for u in self.params.get('players_with_electrolyzers', []) if u in self.players]
         self.players_with_heatpumps = [u for u in self.params.get('players_with_heatpumps', []) if u in self.players]
+        # Heat pumps run continuously on [0, c_max_H hp_cap] (no commitment, minimum
+        # load or start-up cost) unless hp_commitment is set; since 2026-09-30 only the
+        # electrolyzer carries unit commitment.
+        self.hp_commitment = bool(self.params.get('hp_commitment', False))
         self.players_with_elec_storage = [u for u in self.params.get('players_with_elec_storage', []) if u in self.players]
         self.players_with_hydro_storage = [u for u in self.params.get('players_with_hydro_storage', []) if u in self.players]
         self.players_with_heat_storage = [u for u in self.params.get('players_with_heat_storage', []) if u in self.players]
@@ -876,7 +880,7 @@ class LocalEnergyMarket:
                                                        lb=0, ub=hp_cap, obj=c_hp)
                     # Heat pump commitment variables
                     c_su_H = self.params.get(f'c_su_H_{u}', np.inf)
-                    if self.model_type in ['mip', 'mip_fix_binaries']:
+                    if self.model_type in ['mip', 'mip_fix_binaries'] and self.hp_commitment:
                         vartype = "C" if (self.model_type == 'mip_fix_binaries') else "B"
                         self.z_su_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_su_H_{u}_{t}", obj=c_su_H)
                         self.z_sd_H[u,t] = self.model.addVar(vtype=vartype, name=f"z_sd_H_{u}_{t}")
@@ -1126,12 +1130,11 @@ class LocalEnergyMarket:
             self.complementarity_cons[f"{name}_b"] = m.addCons(quicksum(b_vars) <= Mb * (1 - y), name=f"{name}_b")
             return y
 
-        # Storage: the efficiencies the SOC equations read (electricity and hydrogen
-        # read 'nu_ch'/'nu_dis', heat 'nu_ch_H'/'nu_dis_H').
+        # Storage: the efficiencies the SOC equations read (nu_ch_k / nu_dis_k).
         storages = [('E', self.players_with_elec_storage, self.b_ch_E, self.b_dis_E, self.s_E,
-                     self.params.get('nu_ch', 0.9), self.params.get('nu_dis', 0.9)),
+                     self.params.get('nu_ch_E', 0.95), self.params.get('nu_dis_E', 0.95)),
                     ('G', self.players_with_hydro_storage, self.b_ch_G, self.b_dis_G, self.s_G,
-                     self.params.get('nu_ch', 0.9), self.params.get('nu_dis', 0.9)),
+                     self.params.get('nu_ch_G', 0.95), self.params.get('nu_dis_G', 0.95)),
                     ('H', self.players_with_heat_storage, self.b_ch_H, self.b_dis_H, self.s_H,
                      self.params.get('nu_ch_H', 0.9), self.params.get('nu_dis_H', 0.9))]
         for k, owners, b_ch, b_dis, s, nu_ch, nu_dis in storages:
@@ -1247,13 +1250,16 @@ class LocalEnergyMarket:
                 c_max = self.params.get(f'c_max_H', -np.inf)
                 nu_cop = self.params.get(f'nu_cop_{u}', np.inf)
                 for t in self.time_periods:
+                    # without commitment the window is [0, c_max hp_cap] every hour
+                    on = self.z_on_H[u,t] if self.hp_commitment else 1.0
+                    lo = c_min if self.hp_commitment else 0.0
                     self.reserve_headroom_cons[f"res_hp_up_{u}_{t}"] = self.model.addCons(
                         self.p.get((u,'hp',t),0) - nu_cop*self.r_plus_hp[u,t]
-                        - c_min*hp_cap*self.z_on_H[u,t] >= 0.0,
+                        - lo*hp_cap*on >= 0.0,
                         name=f"res_hp_up_{u}_{t}")
                     self.reserve_headroom_cons[f"res_hp_dn_{u}_{t}"] = self.model.addCons(
                         self.p.get((u,'hp',t),0) + nu_cop*self.r_minus_hp[u,t]
-                        - c_max*hp_cap*self.z_on_H[u,t] <= 0.0,
+                        - c_max*hp_cap*on <= 0.0,
                         name=f"res_hp_dn_{u}_{t}")
                     # Optional (reserve.txt sec.1.2 item 1, option b): eq:hp_ramp
                     # binds dispatch only, so by default the HP may sell more
@@ -1265,10 +1271,10 @@ class LocalEnergyMarket:
                         c_RD_H = self.params.get('c_RD_H', np.inf)
                         c_RU_H = self.params.get('c_RU_H', np.inf)
                         self.reserve_headroom_cons[f"res_hp_up_ramp_{u}_{t}"] = self.model.addCons(
-                            nu_cop*self.r_plus_hp[u,t] <= c_RD_H*hp_cap*self.z_on_H[u,t],
+                            nu_cop*self.r_plus_hp[u,t] <= c_RD_H*hp_cap*on,
                             name=f"res_hp_up_ramp_{u}_{t}")
                         self.reserve_headroom_cons[f"res_hp_dn_ramp_{u}_{t}"] = self.model.addCons(
-                            nu_cop*self.r_minus_hp[u,t] <= c_RU_H*hp_cap*self.z_on_H[u,t],
+                            nu_cop*self.r_minus_hp[u,t] <= c_RU_H*hp_cap*on,
                             name=f"res_hp_dn_ramp_{u}_{t}")
 
         # Aggregate each prosumer's asset offers into r_plus[u,t] / r_minus[u,t].
@@ -1565,8 +1571,11 @@ class LocalEnergyMarket:
                     self.elec_balance_cons[f"elec_balance_{u}_{t}"] = cons
         # Constraint (6): Electricity storage SOC transition with special 23→0 transition
         for u in self.players_with_elec_storage:
-            nu_ch = self.params.get('nu_ch', 0.9)
-            nu_dis = self.params.get('nu_dis', 0.9)
+            # nu_ch_E / nu_dis_E, the values setup_lem_parameters sets (0.95). This read
+            # 'nu_ch' / 'nu_dis' until 2026-10-01, keys nothing sets, so it ran at their
+            # 0.9 default while the reserve headroom used 0.95.
+            nu_ch = self.params.get('nu_ch_E', 0.95)
+            nu_dis = self.params.get('nu_dis_E', 0.95)
                     
             # Set initial SOC at 6시 (논리적 시작점)
             if (u,self._T_INIT) in self.s_E:
@@ -1694,8 +1703,9 @@ class LocalEnergyMarket:
                     self.hydro_balance_cons[f"hydro_balance_{u}_{t}"] = cons
         # hydro storage SOC transition with special 23→0 transition
             if u in self.players_with_hydro_storage:
-                nu_ch = self.params.get('nu_ch', 0.9)
-                nu_dis = self.params.get('nu_dis', 0.9)            
+                # nu_ch_G / nu_dis_G (0.95); 'nu_ch' / 'nu_dis' and their 0.9 default before
+                nu_ch = self.params.get('nu_ch_G', 0.95)
+                nu_dis = self.params.get('nu_dis_G', 0.95)
                 initial_soc = self.params.get(f'initial_soc_G', np.inf)
                 storage_capacity_G = self.params.get(f'storage_capacity_G', -np.inf)
                 if storage_capacity_G <=0:
@@ -1900,6 +1910,9 @@ class LocalEnergyMarket:
                     )
                     self.electrolyzer_cons[f"electrolyzer_minimum_down_time_{u}_{t}"] = cons
     def _add_heat_nonconvex_cons_mip(self):
+        if not self.hp_commitment:
+            self._add_heat_linear_cons()
+            return
         for u in self.players_with_heatpumps:
             hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
             c_min = self.params.get(f'c_min_H', -np.inf)
@@ -1974,6 +1987,24 @@ class LocalEnergyMarket:
                         self.p.get((u,'hp',self._T_LAST),0) - self.p.get((u,'hp',t),0) <= c_RD_H * hp_cap * self.z_on_H[u,t] + c_RSD_H * hp_cap * self.z_sd_H[u,t],
                         name=f"heatpump_ramping_down_rate_{u}_{t}"
                     )
+
+    def _add_heat_linear_cons(self):
+        """Heat pump without unit commitment: output in [0, c_max_H hp_cap] and the
+        ramp limits c_RU_H / c_RD_H (cyclic over the day, as in the MIP version)."""
+        for u in self.players_with_heatpumps:
+            hp_cap = self.params.get(f'hp_cap_{u}', self.params.get(f'hp_cap', -np.inf))
+            c_max = self.params.get(f'c_max_H', -np.inf)
+            c_RU_H = self.params.get(f'c_RU_H', -np.inf)
+            c_RD_H = self.params.get(f'c_RD_H', -np.inf)
+            for t in self.time_periods:
+                prev = self._T_LAST if t == self.time_periods[0] else self.time_periods[self.time_periods.index(t) - 1]
+                p_t, p_prev = self.p.get((u,'hp',t),0), self.p.get((u,'hp',prev),0)
+                self.heatpump_cons[f"heatpump_max_power_rate_{u}_{t}"] = self.model.addCons(
+                    p_t <= c_max * hp_cap, name=f"heatpump_max_power_rate_{u}_{t}")
+                self.heatpump_cons[f"heatpump_ramping_up_rate_{u}_{t}"] = self.model.addCons(
+                    p_t - p_prev <= c_RU_H * hp_cap, name=f"heatpump_ramping_up_rate_{u}_{t}")
+                self.heatpump_cons[f"heatpump_ramping_down_rate_{u}_{t}"] = self.model.addCons(
+                    p_prev - p_t <= c_RD_H * hp_cap, name=f"heatpump_ramping_down_rate_{u}_{t}")
 
     def _add_hydro_nonconvex_cons_lp_relax(self):
         # Electrolyzer coupling constraint (constraint 15)
@@ -4320,24 +4351,26 @@ class LocalEnergyMarket:
                 c_sto_E = self.params.get('c_sto_E', np.inf)
                 c_sto_G = self.params.get('c_sto_G', np.inf)
                 c_sto_H = self.params.get('c_sto_H', np.inf)
-                nu_ch = self.params.get('nu_ch', 0.9)
-                nu_dis = self.params.get('nu_dis', 0.9)
+                # per carrier, as the objective and the SOC equations read them
+                eta = {k: (self.params.get(f'nu_ch_{k}', 0.95 if k != 'H' else 0.9),
+                              self.params.get(f'nu_dis_{k}', 0.95 if k != 'H' else 0.9))
+                       for k in ('E', 'G', 'H')}
                 
                 if 'b_ch_E' in results and (u,t) in results['b_ch_E']:
-                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_sto_E * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_E'][u,t] * c_sto_E * eta['E'][0]
                 if 'b_dis_E' in results and (u,t) in results['b_dis_E']:
-                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_sto_E * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_E'][u,t] * c_sto_E / eta['E'][1]
                 # 수소 저장 비용 추가
                 if 'b_ch_G' in results and (u,t) in results['b_ch_G']:
-                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_sto_G * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_G'][u,t] * c_sto_G * eta['G'][0]
                 if 'b_dis_G' in results and (u,t) in results['b_dis_G']:
-                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_sto_G * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_G'][u,t] * c_sto_G / eta['G'][1]
                 
                 # 열 저장 비용 추가
                 if 'b_ch_H' in results and (u,t) in results['b_ch_H']:
-                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_sto_H * nu_ch
+                    profit_breakdown['storage_cost'] += results['b_ch_H'][u,t] * c_sto_H * eta['H'][0]
                 if 'b_dis_H' in results and (u,t) in results['b_dis_H']:
-                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_sto_H * (1/nu_dis)
+                    profit_breakdown['storage_cost'] += results['b_dis_H'][u,t] * c_sto_H / eta['H'][1]
                 # 5. 시작 비용
                 if 'z_su_G' in results and (u,t) in results['z_su_G']:
                     profit_breakdown['startup_cost'] += results['z_su_G'][u,t] * self.params.get(f'c_su_G_{u}', 50)

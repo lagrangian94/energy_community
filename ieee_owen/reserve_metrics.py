@@ -98,8 +98,11 @@ def max_headroom_at_dispatch(results, params, players, T):
                 cap = float(params.get(f'hp_cap_{u}', params.get('hp_cap', 0.0)))
                 nu_cop = float(params.get(f'nu_cop_{u}', 1.0))
                 ph = float(p_out.get((u, 'hp', t), 0.0))
-                on = float(z_on_H.get((u, t), 0.0))
-                up_max[u][t] += max(0.0, (ph - c_min_H * cap * on) / nu_cop)
+                if params.get('hp_commitment', False):
+                    on, lo = float(z_on_H.get((u, t), 0.0)), c_min_H
+                else:                   # no commitment: window [0, c_max_H cap]
+                    on, lo = 1.0, 0.0
+                up_max[u][t] += max(0.0, (ph - lo * cap * on) / nu_cop)
                 dn_max[u][t] += max(0.0, (c_max_H * cap * on - ph) / nu_cop)
     return up_max, dn_max
 
