@@ -107,6 +107,12 @@ OUT = os.path.join(_PAPER, 'weak_eps_experiment', 'stochastic')
 MIP_GAP = 1e-4
 EF_GAP = 1e-4
 CG_GAP = 1e-6
+# TABLE_EF_GAP (--table): the extensive form of a run whose omega goes into a table.
+# The reported omega is the right end of the certified interval (the ex-post plan's
+# own gap), and a relative EF gap adds about EF_GAP * |v(N)| / n to eps per member --
+# a floor that does not fall with n (n=60, day 1: 0.038, all of eps). Only the
+# tables need it tight; the allocation itself is computed with the loose default.
+TABLE_EF_GAP = 1e-5
 # OMEGA_TOL: column generation also stops once omega^LR is known to this relative
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
 # absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
@@ -2355,6 +2361,8 @@ class DirectMaster:
         return sum(bounds)
 
     def _record(self, duals, res):
+        if len(res) < len(self.units):
+            return                              # partial pricing: no bound
         L = self._lagrangian(duals, [r[1] for r in res.values()])
         if L > self.lb:
             self.lb = L
@@ -2415,19 +2423,47 @@ class DirectMaster:
     def _price_group(self, members, duals):
         return {u: self.subs[u].price(duals) for u in members}
 
-    def _price_all(self, duals):
-        t0 = time.time()
+    def _price_units(self, units, duals):
         if self._pool is None:
-            res = {u: s.price(duals) for u, s in self.subs.items()}
-        else:
-            groups = {}
-            for u in self.units:
-                groups.setdefault(self._group[u], []).append(u)
-            futs = [self._pool.submit(self._price_group, m, duals) for m in groups.values()]
-            res = {}
-            for f in futs:
-                res.update(f.result())
-            res = {u: res[u] for u in self.units}
+            return {u: self.subs[u].price(duals) for u in units}
+        groups = {}
+        for u in units:
+            groups.setdefault(self._group[u], []).append(u)
+        futs = [self._pool.submit(self._price_group, m, duals) for m in groups.values()]
+        res = {}
+        for f in futs:
+            res.update(f.result())
+        return res
+
+    def _price_all(self, duals, full=False):
+        """Price every unit; with --partial-pricing K, a pass may price only the units
+        that produced a column within their last K passes (every partial_full_every-th
+        pass, and any pass whose priced units yield no column, prices all). A partial
+        result carries no Lagrangian bound: _record skips it."""
+        t0 = time.time()
+        units = self.units
+        k = self.partial_k
+        if k and not full:
+            self._pp_calls = getattr(self, '_pp_calls', 0) + 1
+            idle = getattr(self, '_idle', {})
+            if self._pp_calls % self.partial_full_every:
+                act = [u for u in self.units if idle.get(u, 0) < k]
+                if act and len(act) < len(self.units):
+                    units = act
+        res = self._price_units(units, duals)
+        if k:
+            conv = getattr(self, '_last_conv', {})
+            tol = 1e-9 * (1.0 + abs(getattr(self, '_last_lp', 0.0)))
+            gives = lambda u: res[u][0] - conv.get(u, 0.0) < -tol
+            if units is not self.units and not any(gives(u) for u in res):
+                rest = [u for u in self.units if u not in res]
+                res.update(self._price_units(rest, duals))
+            idle = getattr(self, '_idle', {})
+            for u in res:
+                idle[u] = 0 if gives(u) else idle.get(u, 0) + 1
+            self._idle = idle
+            self.n_partial = getattr(self, 'n_partial', 0) + (len(res) < len(self.units))
+        res = {u: res[u] for u in self.units if u in res}
         dt = time.time() - t0
         self.t_price += dt
         self._it_price += dt
@@ -2643,6 +2679,24 @@ class DirectMaster:
     # stall_reset: after this many passes with neither the RMP value nor LB moving,
     # one pass drops the smoothing (alpha = 1) and re-centres at the RMP duals. 0: off.
     stall_reset = 10
+    # adm_units (--adm-units, off by default): admit a column once its reduced cost is
+    # below -0.1 * tol / (number of pricing units) instead of the fixed numerical zero
+    # 1e-9 |z|. With the scenario split there are ~|J| |Omega| units (n=60, 20
+    # scenarios: ~1,200), and reduced costs just above the fixed zero (~-1e-5 each)
+    # sum to the whole remaining gap (price 17, day 1: RMP - LB = 0.024 = 1,200 x
+    # 2e-5), so the last round never admits them and never closes.
+    adm_units = False
+    # stall_barrier (default on since 2026-10-05; --no-stall-barrier turns it off): on
+    # a stall reset, price once at the centred duals of a barrier solve of the RMP
+    # instead of its vertex duals. At reserve price 17, n=60, 20 scenarios, KL 0.5 the
+    # last round otherwise sat 5 h (day 1) and 8 h (day 4) with RMP - LB frozen at
+    # 0.02-0.06; with it they closed in 2,280 s and 2,617 s, and day 3, which never
+    # stalls, was unchanged (2,214 s vs 2,224 s). See ieee_owen/kl_experiment_plan.md.
+    stall_barrier = True
+    # partial_k (--partial-pricing K, 0 = off): price only units that gave a column
+    # within their last K passes; all units every partial_full_every-th pass.
+    partial_k = 0
+    partial_full_every = 5
 
     def _grid_uncovered(self):
         """Grid columns with y > 0 that the plans in use cannot take over."""
@@ -2755,6 +2809,7 @@ class DirectMaster:
             self.t_lp += t_lp
             self._it_price = 0.0
             duals, conv = self._duals()
+            self._last_conv, self._last_lp = conv, lp_obj
             if self.purge_every:
                 for u in self.units:
                     for h in self.col_idx[u]:
@@ -2786,6 +2841,8 @@ class DirectMaster:
             if self.pricing_abs:
                 self._set_pricing_abs(self._gap_tol(lp_obj))
             adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
+            if self.adm_units:
+                adm = min(adm, 0.1 * tol / max(1, len(self.units)))
             self.iteration += 1
             if self.iteration > self.max_iter:
                 raise RuntimeError('column generation: iteration limit')
@@ -2822,6 +2879,29 @@ class DirectMaster:
                     alpha, self._stall = 1.0, 0
                     self.center = dict(duals)
                     self.n_stall_resets = getattr(self, 'n_stall_resets', 0) + 1
+                    if self.stall_barrier:
+                        # --stall-barrier: the RMP is optimal but dual degenerate, and
+                        # its vertex duals keep L(pi) short of the RMP value (price 17,
+                        # day 1: 0.02-0.1 for hours). Price once at the well-centred
+                        # duals of a barrier solve without crossover instead (Gondzio,
+                        # Gonzalez-Brevis & Munari 2013); the bound holds at any dual.
+                        self.lp.solve(method='barrier')
+                        bd, bconv = self._duals()
+                        res = self._price_all(bd, full=True)
+                        L_before = self.lb
+                        self._record(bd, res)
+                        for u, (_, _, col) in res.items():
+                            rc = self._col_cost(col, bd) - sum(
+                                bd.get(k, 0.0) * a for k, a in col.coef.items()) - bconv[u]
+                            min_rc = min(min_rc, rc)
+                            if rc < -adm:
+                                self.add_column(col)
+                                added += 1
+                        self.n_stall_barrier = getattr(self, 'n_stall_barrier', 0) + 1
+                        if self.verbose:
+                            print(f'    [stall barrier] LB {L_before:.4f} -> {self.lb:.4f}  '
+                                  f'(RMP {lp_obj:.4f})  +{added}')
+                        mode = 'barrier'
                 if alpha < 1.0:
                     st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
                           for k in set(duals) | set(self.center)}
@@ -2857,8 +2937,10 @@ class DirectMaster:
                         elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                             status = 'round'
                         if self.verbose and status is None:
+                            # by value only: the units mix prosumer names and
+                            # (prosumer, scenario) tuples, which do not compare
                             slack = sorted(((r[0] - r[1], u) for u, r in res.items()),
-                                           reverse=True)
+                                           key=lambda t: t[0], reverse=True)
                             print(f'    [no column] RMP-LB {lp_obj - self.lb:.4e}  '
                                   f'sum pricing slack {sum(s for s, _ in slack):.4e}  '
                                   f'top {[(u, round(s, 6)) for s, u in slack[:3]]}  '
@@ -4100,6 +4182,10 @@ def _configure_direct(args):
     DirectMaster.doi_certify = args.doi_certify
     if args.stall_reset is not None:
         DirectMaster.stall_reset = args.stall_reset
+    DirectMaster.adm_units = args.adm_units
+    DirectMaster.stall_barrier = args.stall_barrier
+    DirectMaster.partial_k = args.partial_pricing
+    DirectMaster.partial_full_every = args.partial_full_every
     if args.doi_repair:
         DirectMaster.doi_repair = tuple(float(f) for f in args.doi_repair.split(','))
     DirectMaster.split_scenarios = args.split_scenarios
@@ -4221,7 +4307,8 @@ def run(args):
                           price_carriers=tuple(args.price_carriers.split(',')),
                           load_carriers=tuple(args.load_carriers.split(',')))
     kl = args.kl_radius is not None
-    mip_kw = dict(time_limit=args.mip_time_limit, gap=args.mip_gap,
+    args.ef_gap = TABLE_EF_GAP if args.table else args.mip_gap
+    mip_kw = dict(time_limit=args.mip_time_limit, gap=args.ef_gap,
                   solver=args.mip_solver)
     if kl:
         mip_kw['kl_radius'] = args.kl_radius
@@ -4243,7 +4330,8 @@ def run(args):
 \
         + (f"_blk{base['reserve_block_hours']}"
            if base.get('reserve_block_hours', _BLK_DEFAULT) != _BLK_DEFAULT else '') \
-        + (f'_{args.tag}' if args.tag else '')
+        + ('_admu' if args.adm_units else '') + ('' if args.stall_barrier else '_nosbar') \
+        + (f'_pp{args.partial_pricing}' if args.partial_pricing else '')         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
     _configure_direct(args)
 
@@ -4352,10 +4440,20 @@ def run(args):
         al = robust_allocation(ef, dw, master)
         print(f'  omega_LR,rob {al["omega_LR"]:.6f}  eps_LR {al["eps_LR"]:.6f}  '
               f'certified [{al["omega_interval"][0]:.6f}, {al["omega_interval"][1]:.6f}]')
+        # how much of the reported (right-end) omega is the extensive form's own gap
+        ef_slack = abs(ef['obj'] - ef['dual_bound'])
+        hi = al['omega_interval'][1]
+        share = ef_slack / hi if hi > 0 else float('inf')
+        print(f'  EF slack {ef_slack:.4f} = {share:.0%} of the reported omega'
+              + ('  (> 10%: use --table for a table run)' if share > 0.1 else ''))
     else:
         print('\n[3] Algorithm S1')
         al = scenario_allocation(ef, dw, master)
         print(f'  omega_LR {al["omega_LR"]:.6f}  eps_LR {al["eps_LR"]:.6f}')
+        ef_slack = abs(ef['obj'] - ef['dual_bound'])
+        share = ef_slack / al['omega_LR'] if al['omega_LR'] > 0 else float('inf')
+        print(f'  EF slack {ef_slack:.4f} = {share:.0%} of omega'
+              + ('  (> 10%: use --table for a table run)' if share > 0.1 else ''))
     print(f'  checks: budget {al["budget_residual"]:.2e}  duality '
           f'{al["duality_residual"]:.2e}  pricing '
           f'{max(abs(v) for v in al["pricing_residual"].values()):.2e}')
@@ -4384,7 +4482,7 @@ def run(args):
         'probs': master.probs,
         'config': {k: getattr(args, k) for k in ('seed', 'wind_sigma', 'solar_sigma', 'load_sigma',
                                                    'price_sigma', 'rho', 'price_carriers',
-                                                   'mip_gap', 'mip_time_limit')},
+                                                   'mip_gap', 'ef_gap', 'mip_time_limit')},
         'm_linking_rows': len(master.row_keys),
         'ef': {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
                                      'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
@@ -4455,6 +4553,9 @@ def build_parser():
                     help='carriers whose non-flexible load is uncertain')
     ap.add_argument('--price-carriers', default='E',
                     help='carriers whose prices are uncertain, e.g. E or E,H,G')
+    ap.add_argument('--table', action='store_true',
+                    help=f'a run whose omega goes into a table: extensive form at '
+                         f'{TABLE_EF_GAP} (pricing keeps --mip-gap)')
     ap.add_argument('--mip-gap', type=float, default=EF_GAP,
                     help=f'relative gap of the extensive form and stand-alone MILPs '
                          f'(default {EF_GAP})')
@@ -4477,8 +4578,11 @@ def build_parser():
     ap.add_argument('--pricing-solver', default='gurobi', choices=['highs', 'gurobi'])
     ap.add_argument('--pricing-gap', type=float, default=MIP_GAP,
                     help=f'relative gap of the pricing MILPs (default {MIP_GAP})')
-    ap.add_argument('--pricing-workers', type=int, default=0,
-                    help='prosumers priced in parallel (0: one per core)')
+    ap.add_argument('--pricing-workers', type=int, default=8,
+                    help='prosumers priced in parallel (0: one per core). Default 8 since '
+                         '2026-10-05: two Gurobi threads per worker on a 16-core machine '
+                         'beat 16 x 1 by 3-10%% at n=60, 20 scenarios, KL 0.5 '
+                         '(ieee_owen/kl_experiment_plan.md)')
     ap.add_argument('--round-tol', type=float, default=None,
                     help='column admission tolerance of the penalty rounds before the '
                          'last (default: --cg-gap)')
@@ -4605,6 +4709,21 @@ def build_parser():
     ap.add_argument('--doi-skip', default='',
                     help="grid columns to leave out, as carrier:side pairs, e.g. 'G:exp' "
                          "or 'G:exp,E:imp'")
+    ap.add_argument('--adm-units', action='store_true',
+                    help='admit columns with reduced cost below -0.1 tol / (pricing units) '
+                         'rather than the fixed 1e-9 |z| (tag _admu)')
+    ap.add_argument('--partial-pricing', type=int, default=0,
+                    help='price only units that produced a column within their last K '
+                         'passes (0: off; tag _pp<K>)')
+    ap.add_argument('--partial-full-every', type=int, default=5,
+                    help='with --partial-pricing: price every unit on every m-th pass')
+    ap.add_argument('--stall-barrier', dest='stall_barrier', action='store_true',
+                    default=True,
+                    help='on a stall reset, price at the centred duals of a barrier solve '
+                         'of the RMP (no crossover) rather than its vertex duals (default '
+                         'on)')
+    ap.add_argument('--no-stall-barrier', dest='stall_barrier', action='store_false',
+                    help='price the stall reset at the RMP vertex duals (tag _nosbar)')
     ap.add_argument('--stall-reset', type=int, default=None,
                     help='passes without progress before one unsmoothed pass (default 10; 0 off)')
     ap.add_argument('--no-doi-certify', dest='doi_certify', action='store_false',
