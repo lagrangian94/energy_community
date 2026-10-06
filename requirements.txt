@@ -1,6 +1,13 @@
 # Energy Community Project Dependencies
-# Add your project dependencies here
-# Example:
-# numpy==1.24.3
-# pandas==2.0.3
-# matplotlib==3.7.1 
+# Python >= 3.10 (gurobipy 13 has no 3.9 wheels). Tested on 3.12.14.
+
+numpy==2.3.5          # >= 2.4 breaks components.find_i_from_p (fsolve result into a scalar slot)
+pandas==3.0.6
+scipy==1.18.1
+matplotlib==3.11.2
+
+# Solvers
+PySCIPOpt==6.2.1      # SCIP: MILP dispatch
+highspy==1.15.1       # fast pricing (optional)
+gurobipy==13.0.1      # separation (optional); match the local Gurobi install (C:\gurobi1301)
+Mosek==11.0.30        # ieee_owen/copositive/sdp_relax.py only; match the local MOSEK 11.0

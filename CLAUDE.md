@@ -155,13 +155,22 @@ maintained.
 
 ## Environment
 
+The venv is `.venv/` at the repo root (Windows layout, so `Scripts/`, not `bin/`):
+
 ```bash
-source ../.venv/bin/activate     # venv lives in the parent directory
+source .venv/Scripts/activate    # Git Bash;  PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
+It runs Python 3.12, created from the conda env `zonal_consistency`
+(`~/.conda/envs/zonal_consistency/python.exe -m venv .venv`), so it breaks if that
+env is removed. Python must be >= 3.10: Anaconda's base 3.9 has no `gurobipy` 13 wheel.
+The `activate_venv.bat`/`.sh` helpers still point at `../.venv` and are stale.
+
 Key dependencies: `pyscipopt` (SCIP), `gurobipy` (separation, optional), `highspy`
-(fast pricing, optional), `numpy`, `pandas`, `matplotlib`, `scipy`.
+(fast pricing, optional), `numpy`, `pandas`, `matplotlib`, `scipy`, `Mosek`
+(`copositive/sdp_relax.py` only). `gurobipy` and `Mosek` are pinned to the local
+installs (Gurobi 13.0.1, MOSEK 11.0); bump them together with those.
 
 ## Known wart
 

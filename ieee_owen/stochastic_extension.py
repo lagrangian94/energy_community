@@ -113,6 +113,10 @@ CG_GAP = 1e-6
 # a floor that does not fall with n (n=60, day 1: 0.038, all of eps). Only the
 # tables need it tight; the allocation itself is computed with the loose default.
 TABLE_EF_GAP = 1e-5
+# EF_NODEFILE_START (--ef-nodefile-start): Gurobi NodefileStart [GB] for the extensive
+# forms, so B&B nodes beyond it go to disk instead of RAM (None: Gurobi's default).
+# The search is unchanged; it caps memory on a 16 GB machine at |Omega|=20, n=60.
+EF_NODEFILE_START = None
 # OMEGA_TOL: column generation also stops once omega^LR is known to this relative
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
 # absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
@@ -344,6 +348,19 @@ class ScenarioStack:
             return {n: m.getVal(v) for n, v in self.vars.items()}
         return {n: m.getSolVal(sol, v) for n, v in self.vars.items()}
 
+    def release_model(self):
+        """Drop the SCIP model once a solver copy of it exists. At n=60, |Omega|=20 it
+        holds ~3.5 GB that sat next to Gurobi's copy for the whole EF solve. Keeps the
+        names, costs and scenario map (cost_split, scaled_cost, first_stage), so only
+        values() and anything reading .model or .blocks stop working."""
+        import gc
+        self.n_vars = self.model.getNVars()
+        self.objoffset = self.model.getObjoffset()
+        self.model = None
+        self.blocks = []
+        self.vars = dict.fromkeys(self.vars)
+        gc.collect()
+
     def cost_split(self, vals, names=None):
         """(first-stage cost, [unweighted second-stage cost per scenario])."""
         first, per = 0.0, [0.0] * len(self.scenarios)
@@ -399,7 +416,7 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
 # Extensive form
 # =============================================================================
 def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
-                         solver='highs', kl_radius=None, log_file=None):
+                         solver='highs', kl_radius=None, log_file=None, release_scip=False):
     """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
 
     solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
@@ -407,6 +424,8 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
     min_x max_{KL(rho || rho_hat) <= r} E_rho[cost(x)] (Gurobi only).
     log_file: with Gurobi, write its progress log (bound, incumbent, gap) there,
     appended across the KL refinement rounds; the console stays quiet.
+    release_scip: with Gurobi, free the SCIP model once copied (ScenarioStack.
+    release_model); the returned stack then has no .model.
     """
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
@@ -420,9 +439,10 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
             raise ValueError('the KL-robust extensive form needs --mip-solver gurobi '
                              '(lazy constraints)')
         return _solve_extensive_kl(st, build, time_limit, gap, quiet, kl_radius,
-                                   log_file=log_file)
+                                   log_file=log_file, release_scip=release_scip)
     if solver == 'gurobi':
-        return _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=log_file)
+        return _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=log_file,
+                                       release_scip=release_scip)
     if solver == 'highs':
         return _solve_extensive_highs(st, build, time_limit, gap, quiet)
     if solver != 'scip':
@@ -629,18 +649,24 @@ def _gurobi_log(g, quiet, log_file):
         g.Params.OutputFlag = 0 if quiet else 1
 
 
-def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None):
+def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
+                            release_scip=False):
     """solve_extensive_form on a gurobipy copy of the stacked SCIP model."""
     m = st.model
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
     g, gv = _to_gurobi(m, 'DP_Omega', time_limit, gap)
     _gurobi_log(g, quiet, log_file)
+    if EF_NODEFILE_START is not None:
+        g.Params.NodefileStart = EF_NODEFILE_START
     names = list(gv)
     by_name = {v.name: v for v in m.getVars()}
     gvars = [gv[n] for n in names]
     g.setAttr('Obj', gvars, [by_name[n].getObj() for n in names])
     g.ObjCon = m.getObjoffset()
+    if release_scip:
+        del by_name, m
+        st.release_model()
     g.optimize()
     if g.SolCount == 0:
         raise RuntimeError(f'extensive form ({len(st.players)} players, gurobi): '
@@ -670,7 +696,8 @@ def _kl_tangent(s):
 
 
 def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30,
-                        log_file=None, round_gap=1e-3, prepare=None, budget=None):
+                        log_file=None, round_gap=1e-3, prepare=None, budget=None,
+                        release_scip=False):
     """The KL-robust extensive form through the dual of the inner max
     (Love & Bayraksan, phi-divergence constrained two-stage programs, eq. 9):
 
@@ -713,7 +740,10 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
     g, gv = _to_gurobi(m, 'DP_Omega_KL', time_limit, gap)
+    off = m.getObjoffset()
     _gurobi_log(g, quiet, log_file)
+    if EF_NODEFILE_START is not None:
+        g.Params.NodefileStart = EF_NODEFILE_START
     gap = g.Params.MIPGap
     q = np.array(st.probs)
     S = len(q)
@@ -738,7 +768,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     for v in g.getVars():
         v.Obj = 0.0
     g.setObjective(mu + radius * lam + gp.quicksum(q[w] * t[w] for w in range(S))
-                   + m.getObjoffset(), GRB.MINIMIZE)
+                   + off, GRB.MINIMIZE)
 
     def add_tangents(w, ss):
         for s in ss:
@@ -754,6 +784,9 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
 
     if prepare is not None:
         prepare(g, gv)
+    if release_scip:
+        del m
+        st.release_model()
     rounds, t0 = [], time.time()
     loose = max(gap, round_gap)
     for k in range(max_rounds):
@@ -768,7 +801,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         x = np.array(g.getAttr('X', gvars))
         c = scen_costs(x)
         psi, rho, eta = kl_worst(c, q, radius)
-        psi += m.getObjoffset()
+        psi += off
         bound = g.ObjBound
         rounds.append({'obj_model': g.ObjVal, 'bound': bound, 'psi': psi,
                        'time': g.Runtime, 'nodes': g.NodeCount, 'mip_gap': loose})
@@ -812,7 +845,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         'worth_cost': [fc + x for x in per],
         'time_build': build, 'time_solve': time.time() - t0,
         'kl': {'radius': radius, 'rho': rho.tolist(), 'eta': eta,
-               'kl': kl_div(rho, q), 'expected_cost': float(q @ c) + m.getObjoffset(),
+               'kl': kl_div(rho, q), 'expected_cost': float(q @ c) + off,
                'solves': len(rounds), 'refinements': rounds, 'lambda': lam.X, 'mu': mu.X},
     }
 
@@ -4278,6 +4311,8 @@ def solve_deterministic(players, T, params, ef_gap=None, omega_tol=None, time_li
 
 
 def run(args):
+    global EF_NODEFILE_START
+    EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
     if args.engine != 'direct':
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
@@ -4351,8 +4386,11 @@ def run(args):
         ef['cached'] = True
         print(f'  (read from {args.ef_cache})')
     else:
-        ef = solve_extensive_form(players, T, scen, log_file=args.ef_log, **mip_kw)
-        ef['n_vars'] = ef['stack'].model.getNVars()
+        # --dual-init re-solves the EF's LP from its SCIP model (duals_from_ef)
+        ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
+                                  release_scip=args.dual_init == 'none', **mip_kw)
+        st = ef['stack']
+        ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
         ef['first_stage_names'] = sorted(ef['stack'].first_stage)
         if args.ef_cache:
             import pickle
@@ -4588,6 +4626,9 @@ def build_parser():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--ef-nodefile-start', type=float, default=None,
+                    help='Gurobi NodefileStart [GB] for the extensive form: B&B nodes '
+                         'beyond it go to disk (default: off)')
     ap.add_argument('--ef-log', default=None,
                     help='write the Gurobi log of the extensive form (bound, incumbent, '
                          'gap per node line) to this file')
@@ -4742,9 +4783,13 @@ def build_parser():
     ap.add_argument('--fallback-purge-age', type=int, default=None,
                     help='before the DOI switch-off, purge prosumer columns unused for '
                          'this many passes (default 0: off; did not help, see DirectMaster)')
-    ap.add_argument('--kl-master', default='cut', choices=['cut', 'dual'],
-                    help="KL: master form. 'cut' = distribution cuts (robust_core.md "
-                         "2.3); 'dual' = Love & Bayraksan's dual with tangent planes")
+    ap.add_argument('--kl-master', default='dual', choices=['cut', 'dual'],
+                    help="KL: master form. 'dual' (default since 2026-10-06) = Love & "
+                         "Bayraksan's dual with tangent planes, the rows eq:dwr_kl of the "
+                         "manuscript's Algorithm 1; 'cut' = distribution cuts "
+                         "(robust_core.md 2.3). n=60, day 3, |Omega|=20, r=0.096: CG "
+                         "1,150 s (dual) vs 1,268 s (cut), same 144 iterations. The file "
+                         "name keeps the _dual suffix, so older files without it are 'cut'")
     ap.add_argument('--doi-markup', type=float, default=0.0,
                     help='KL: extra cost per unit on the grid (DOI) columns, a tie-break '
                          'against settling with grid trade (default 0: any markup slows '
