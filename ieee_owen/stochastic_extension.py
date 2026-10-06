@@ -121,7 +121,10 @@ EF_NODEFILE_START = None
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
 # absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
 # high (ieee_owen/cg_scaling.md, section 11). --no-omega-tol restores CG_GAP alone.
-OMEGA_TOL = 0.02
+# 0.05 since 2026-10-06: the stop only has to be good enough for eps = (EF - LB)/n,
+# which any LB certifies (Prop. rcg); at 0.02 n=60, day 1, |Omega|=20 sat an hour
+# in the last round 0.0003 short of the tolerance.
+OMEGA_TOL = 0.05
 
 # Names LocalEnergyMarket gives the first-stage variables (f"{prefix}{u}_{t}" and
 # f"r_sym_{i}"). Heat-pump commitment is deliberately absent: it is redispatched.
@@ -2511,8 +2514,21 @@ class DirectMaster:
             return 0.0
         return self.omega_tol * max(self.incumbent - self.lb, 0.0)
 
+    def _floor_tol(self, ref):
+        """The gap the stopping test can always reach (Prop. rcg: the termination
+        tolerance must be at least |U| (delta_c + delta_p)). Each of the |U| pricing
+        units may keep a reduced cost just above the admission zero 1e-9 (1 + |ref|)
+        and a pricing gap of tol / (2 |U|), so RMP - LB can rest at |U| x zero + tol / 2.
+        A tolerance of 3 |U| x zero covers both with |U| x zero / 2 to spare for the KL
+        row generation (delta_r) and round-off; 2 |U| x zero would leave none. n=60,
+        |Omega|=20: 972 units, floor 0.057; omega_tol 0.02 asked 0.0201 on day 1
+        (omega 1.0), and the last round sat an hour at RMP - LB = 0.0204."""
+        if self.adm_units:
+            return 0.0
+        return 3.0 * len(self.units) * 1e-9 * (1.0 + abs(ref))
+
     def _gap_tol(self, ref):
-        return max(self.gap_tol * (1.0 + abs(ref)), self._omega_abs())
+        return max(self.gap_tol * (1.0 + abs(ref)), self._omega_abs(), self._floor_tol(ref))
 
     def _set_pricing_abs(self, tol):
         """Absolute pricing gap tol / (2 n), refreshed when it moves by 20%."""
@@ -2726,6 +2742,15 @@ class DirectMaster:
     # 0.02-0.06; with it they closed in 2,280 s and 2,617 s, and day 3, which never
     # stalls, was unchanged (2,214 s vs 2,224 s). See ieee_owen/kl_experiment_plan.md.
     stall_barrier = True
+    # stall_barrier_max: in the last (unpenalized) round, stop with status 'stalled'
+    # after this many consecutive barrier passes that leave LB where it was. Every
+    # barrier pass that helped (7 runs, price 17, n=60) raised LB on its first try;
+    # where the first failed, the next ones failed too and the run had to be stopped
+    # by hand. n=60, day 1, |Omega|=20, r=0.096 sat 1 h at 550+ passes with
+    # RMP - LB = 0.0204 against a tolerance of 0.0201, columns entering on degenerate
+    # pivots. LB and its duals stay valid at any stop (Prop. rcg), so the run reports
+    # omega from that LB and its allocation from the best duals.
+    stall_barrier_max = 3
     # partial_k (--partial-pricing K, 0 = off): price only units that gave a column
     # within their last K passes; all units every partial_full_every-th pass.
     partial_k = 0
@@ -2870,7 +2895,7 @@ class DirectMaster:
                 # violates no original row is feasible, and so bounds z_MP; with the
                 # DOIs, only one that buys nothing from the grid)
                 self._update_ub(lp_obj)
-            tol = max(rel * (1.0 + abs(lp_obj)), self._omega_abs())
+            tol = max(rel * (1.0 + abs(lp_obj)), self._omega_abs(), self._floor_tol(lp_obj))
             if self.pricing_abs:
                 self._set_pricing_abs(self._gap_tol(lp_obj))
             adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
@@ -2935,6 +2960,18 @@ class DirectMaster:
                             print(f'    [stall barrier] LB {L_before:.4f} -> {self.lb:.4f}  '
                                   f'(RMP {lp_obj:.4f})  +{added}')
                         mode = 'barrier'
+                        # counted in the last round only, so earlier rounds' passes
+                        # do not shorten it
+                        self._futile_barrier = (getattr(self, '_futile_barrier', 0) + 1
+                                                if self.lb <= L_before + prog
+                                                and not self._penalized() else 0)
+                        if (not self._penalized()
+                                and self._futile_barrier >= self.stall_barrier_max):
+                            status = 'stalled'
+                            if self.verbose:
+                                print(f'    [stall barrier] {self._futile_barrier} passes '
+                                      f'without LB progress: stop the last round, '
+                                      f'RMP - LB {lp_obj - self.lb:.4e} (tol {tol:.4e})')
                 if alpha < 1.0:
                     st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
                           for k in set(duals) | set(self.center)}

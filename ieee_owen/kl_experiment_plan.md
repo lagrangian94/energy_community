@@ -250,6 +250,7 @@ PYTHONHASHSEED=21 PYTHONUNBUFFERED=1 python ieee_owen/stochastic_extension.py \
 - **radius: r = χ²_{1,0.95}/(2\|Ω\|)** (Duchi–Glynn–Namkoong, 양쪽 95% 구간): \|Ω\|=5, 10, 20에서 0.384, 0.192, 0.0960. KL이 국소적으로 χ²-divergence의 절반이라 그들의 ρ/n이 KL 반경 ρ/(2n)이 된다. 원고 815행의 "of order 1/\|Ω\|"는 차수이고, 상수는 이 보정에서 나온다. 한쪽 95% 하한이 목적이면 χ²_{1,0.90}(0.068)이지만 지금은 양쪽 값을 쓴다.
 - **KL master: `dual`**(원고 Algorithm 1의 eq:dwr_kl 행). 2026-10-06부터 CLI 기본값. 파일 이름의 `_dual` 접미사는 유지하므로 접미사 없는 옛 파일은 `cut`이다.
 - CG 기본값(`--stall-barrier`, worker 8), EF 라운드당 3시간(`--mip-time-limit 10800`), gap 1e-4, `--ef-nodefile-start 3`.
+- **CG 종료 (2026-10-07 수정).** 종료 허용치 = max(상대 gap 1e-6 × |목적값|, ω의 5%(`OMEGA_TOL` 0.02 → 0.05), **3 × |U| × 1e-9 × |목적값|**). 셋째 항은 Prop. rcg의 조건(허용치 ≥ |U|(δ_c + δ_p))이다. pricing 단위 |U|(n=60, |Ω|=20에서 972개)마다 열 채택 문턱(1e-9 × |목적값| ≈ 2e-5) 아래의 reduced cost와 pricing gap이 남을 수 있어, RMP − LB는 약 0.03 아래로 확실히 내려가지 않는다. 옛 기준(ω의 2%)은 ω가 작은 날(1일차 ω ≈ 1.0) 이 바닥보다 낮아서, n=60 1일차가 마지막 라운드에 0.0204에서 한 시간 갇혔다. ω 허용치만 올리는 것은 ω가 더 작은 날 다시 갇히므로, 바닥을 넣어 원리적으로 막는다. 안전장치로 barrier가 3번 연속 LB를 못 올리면 마지막 라운드를 끝낸다(`stall_barrier_max`). 어떤 종료든 LB와 그 dual은 유효하고, 보고하는 ε가 남은 gap/n만큼 보수적일 뿐이다.
 - Gurobi `Method`와 `Threads`는 기본값(concurrent root, 24 스레드). Method는 고정하지 않는다.
 - 이 PC(Windows, Gurobi 13.0.1, 24 스레드, 16 GB). `PYTHONHASHSEED=21`. 한 번에 하나씩. **WSL은 꺼 둔다**(켜지면 VM이 3 GB를 잡아 n=60, \|Ω\|=20 EF가 메모리 부족에 걸린다).
 - 큐: `ieee_owen/weak_eps_experiment/run_kl_main.py` (순서 \|Ω\|=20 → 10 → 5, 그 안에서 날짜, 그 안에서 n). 결과 `stochastic/main17/`, 실행별 시간·메모리는 `main17/runs.csv`.
