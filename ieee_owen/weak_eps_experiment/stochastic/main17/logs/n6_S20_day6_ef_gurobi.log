@@ -1,0 +1,281 @@
+
+Gurobi 13.0.1 (win64) logging started Wed Oct  7 10:08:43 2026
+
+Set parameter LogFile to value "ieee_owen\weak_eps_experiment\stochastic\main17\logs\n6_S20_day6_ef_gurobi.log"
+Set parameter NodefileStart to value 3
+Set parameter MIPGap to value 0.001
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (win64 - Windows 10.0 (19045.2))
+
+CPU model: AMD Ryzen 9 5900X 12-Core Processor, instruction set [SSE2|AVX|AVX2]
+Thread count: 12 physical cores, 24 logical processors, using up to 24 threads
+
+Non-default parameters:
+TimeLimit  10800
+MIPGap  0.001
+NodefileStart  3
+LogToConsole  0
+
+Optimize a model with 29902 rows, 26126 columns and 120165 nonzeros (Min)
+Model fingerprint: 0xb8d0e02a
+Model has 22 linear objective coefficients
+Variable types: 22646 continuous, 3480 integer (3480 binary)
+Coefficient statistics:
+  Matrix range     [3e-04, 2e+02]
+  Objective range  [5e-02, 1e+00]
+  Bounds range     [2e-01, 4e+01]
+  RHS range        [2e-01, 1e+01]
+
+Presolve removed 14488 rows and 9868 columns
+Presolve time: 0.12s
+Presolved: 15414 rows, 16258 columns, 59443 nonzeros
+Variable types: 12906 continuous, 3352 integer (3351 binary)
+Found heuristic solution: objective -2011.345016
+
+Root relaxation: objective -2.298856e+03, 13326 iterations, 0.71 seconds (0.99 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -2298.8556    0  502 -2011.3450 -2298.8556  14.3%     -    1s
+H    0     0                    -2266.497084 -2298.8556  1.43%     -    1s
+H    0     0                    -2282.651232 -2297.0636  0.63%     -    1s
+     0     0 -2297.0636    0  241 -2282.6512 -2297.0636  0.63%     -    1s
+     0     0 -2297.0226    0  263 -2282.6512 -2297.0226  0.63%     -    1s
+     0     0 -2297.0029    0  270 -2282.6512 -2297.0029  0.63%     -    1s
+     0     0 -2293.9774    0  239 -2282.6512 -2293.9774  0.50%     -    1s
+     0     0 -2293.9774    0  242 -2282.6512 -2293.9774  0.50%     -    1s
+H    0     0                    -2283.505160 -2293.9774  0.46%     -    2s
+     0     0 -2292.2678    0  243 -2283.5052 -2292.2678  0.38%     -    2s
+     0     0 -2292.2678    0  243 -2283.5052 -2292.2678  0.38%     -    2s
+     0     0 -2292.2678    0  212 -2283.5052 -2292.2678  0.38%     -    2s
+H    0     0                    -2285.909765 -2292.2678  0.28%     -    2s
+     0     2 -2292.2678    0  212 -2285.9098 -2292.2678  0.28%     -    2s
+H   20    22                    -2288.643017 -2290.1658  0.07%   284    3s
+
+Cutting planes:
+  Gomory: 46
+  Cover: 18
+  Implied bound: 224
+  MIR: 254
+  Flow cover: 260
+  RLT: 1
+  Relax-and-lift: 127
+  BQP: 2
+
+Explored 27 nodes (24160 simplex iterations) in 3.07 seconds (3.69 work units)
+Thread count was 24 (of 24 available processors)
+
+Solution count 6: -2288.64 -2285.91 -2283.51 ... -2011.35
+
+Optimal solution found (tolerance 1.00e-03)
+Best objective -2.288643017163e+03, best bound -2.289182024268e+03, gap 0.0236%
+Set parameter MIPGap to value 0.001
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (win64 - Windows 10.0 (19045.2))
+
+CPU model: AMD Ryzen 9 5900X 12-Core Processor, instruction set [SSE2|AVX|AVX2]
+Thread count: 12 physical cores, 24 logical processors, using up to 24 threads
+
+Non-default parameters:
+TimeLimit  10800
+MIPGap  0.001
+NodefileStart  3
+LogToConsole  0
+
+Optimize a model with 29922 rows, 26126 columns and 120245 nonzeros (Min)
+Model fingerprint: 0xc30fd70a
+Model has 22 linear objective coefficients
+Variable types: 22646 continuous, 3480 integer (3480 binary)
+Coefficient statistics:
+  Matrix range     [3e-04, 2e+02]
+  Objective range  [5e-02, 1e+00]
+  Bounds range     [2e-01, 4e+01]
+  RHS range        [2e-01, 1e+01]
+
+Warning: Completing partial solution with 3456 unfixed non-continuous variables out of 3480
+User MIP start produced solution with objective -2287.55 (0.06s)
+User MIP start produced solution with objective -2287.55 (0.06s)
+Loaded user MIP start with objective -2287.55
+MIP start from previous solve produced solution with objective -2287.55 (0.26s)
+MIP start from previous solve produced solution with objective -2287.55 (0.26s)
+Loaded MIP start from previous solve with objective -2287.55
+
+Presolve removed 14488 rows and 9868 columns
+Presolve time: 0.12s
+Presolved: 15434 rows, 16258 columns, 59503 nonzeros
+Variable types: 12906 continuous, 3352 integer (3351 binary)
+
+Root relaxation: objective -2.297737e+03, 13237 iterations, 0.74 seconds (0.94 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -2297.7366    0  481 -2287.5513 -2297.7366  0.45%     -    1s
+     0     0 -2292.7250    0  327 -2287.5513 -2292.7250  0.23%     -    1s
+     0     0 -2290.3312    0  326 -2287.5513 -2290.3312  0.12%     -    1s
+     0     0 -2290.3312    0  326 -2287.5513 -2290.3312  0.12%     -    1s
+     0     0 -2289.8826    0  254 -2287.5513 -2289.8826  0.10%     -    2s
+     0     0 -2289.4061    0  256 -2287.5513 -2289.4061  0.08%     -    2s
+
+Cutting planes:
+  Gomory: 75
+  Cover: 18
+  Implied bound: 223
+  Clique: 2
+  MIR: 280
+  Flow cover: 243
+  Network: 44
+  RLT: 2
+  Relax-and-lift: 155
+  BQP: 7
+
+Explored 1 nodes (15221 simplex iterations) in 2.43 seconds (2.77 work units)
+Thread count was 24 (of 24 available processors)
+
+Solution count 2: -2287.55 -2287.55 
+
+Optimal solution found (tolerance 1.00e-03)
+Best objective -2.287551281635e+03, best bound -2.289406116297e+03, gap 0.0811%
+Set parameter MIPGap to value 0.0001
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (win64 - Windows 10.0 (19045.2))
+
+CPU model: AMD Ryzen 9 5900X 12-Core Processor, instruction set [SSE2|AVX|AVX2]
+Thread count: 12 physical cores, 24 logical processors, using up to 24 threads
+
+Non-default parameters:
+TimeLimit  10800
+NodefileStart  3
+LogToConsole  0
+
+Optimize a model with 29942 rows, 26126 columns and 120325 nonzeros (Min)
+Model fingerprint: 0xa2faa130
+Model has 22 linear objective coefficients
+Variable types: 22646 continuous, 3480 integer (3480 binary)
+Coefficient statistics:
+  Matrix range     [3e-04, 2e+02]
+  Objective range  [5e-02, 1e+00]
+  Bounds range     [2e-01, 4e+01]
+  RHS range        [2e-01, 1e+01]
+
+Warning: Completing partial solution with 3456 unfixed non-continuous variables out of 3480
+User MIP start produced solution with objective -2287.55 (0.06s)
+User MIP start produced solution with objective -2287.55 (0.06s)
+Loaded user MIP start with objective -2287.55
+MIP start from previous solve did not produce a new incumbent solution
+
+Presolve removed 14488 rows and 9868 columns
+Presolve time: 0.13s
+Presolved: 15454 rows, 16258 columns, 59563 nonzeros
+Variable types: 12906 continuous, 3352 integer (3351 binary)
+
+Root relaxation: objective -2.297736e+03, 13090 iterations, 0.62 seconds (0.86 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -2297.7356    0  463 -2287.5512 -2297.7356  0.45%     -    1s
+     0     0 -2292.8056    0  290 -2287.5512 -2292.8056  0.23%     -    1s
+     0     0 -2292.4510    0  304 -2287.5512 -2292.4510  0.21%     -    1s
+     0     0 -2290.3132    0  298 -2287.5512 -2290.3132  0.12%     -    1s
+     0     0 -2289.8771    0  245 -2287.5512 -2289.8771  0.10%     -    1s
+     0     0 -2289.6009    0  248 -2287.5512 -2289.6009  0.09%     -    2s
+     0     0 -2289.6009    0  252 -2287.5512 -2289.6009  0.09%     -    2s
+     0     0 -2287.9238    0  241 -2287.5512 -2287.9238  0.02%     -    2s
+     0     0 -2287.9238    0  241 -2287.5512 -2287.9238  0.02%     -    2s
+     0     0 -2287.9238    0  265 -2287.5512 -2287.9238  0.02%     -    2s
+H    0     0                    -2287.605654 -2287.9238  0.01%     -    3s
+     0     0 -2287.9238    0  229 -2287.6057 -2287.9238  0.01%     -    3s
+     0     0 -2287.9238    0  229 -2287.6057 -2287.9238  0.01%     -    3s
+     0     0 -2287.9238    0  200 -2287.6057 -2287.9238  0.01%     -    3s
+     0     2 -2287.9238    0  200 -2287.6057 -2287.9238  0.01%     -    3s
+H  137   336                    -2287.639650 -2287.9238  0.01%  34.8    4s
+H  155   336                    -2287.710352 -2287.9238  0.01%  30.9    4s
+H  191   336                    -2287.715680 -2287.9238  0.01%  25.3    4s
+
+Cutting planes:
+  Gomory: 66
+  Cover: 24
+  Implied bound: 239
+  Clique: 2
+  MIR: 284
+  Flow cover: 242
+  Network: 49
+  RLT: 1
+  Relax-and-lift: 149
+  BQP: 1
+
+Explored 357 nodes (21414 simplex iterations) in 4.36 seconds (4.78 work units)
+Thread count was 24 (of 24 available processors)
+
+Solution count 5: -2287.72 -2287.71 -2287.64 ... -2287.55
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective -2.287715680473e+03, best bound -2.287923836952e+03, gap 0.0091%
+Set parameter MIPGap to value 0.0001
+Gurobi Optimizer version 13.0.1 build v13.0.1rc0 (win64 - Windows 10.0 (19045.2))
+
+CPU model: AMD Ryzen 9 5900X 12-Core Processor, instruction set [SSE2|AVX|AVX2]
+Thread count: 12 physical cores, 24 logical processors, using up to 24 threads
+
+Non-default parameters:
+TimeLimit  10800
+NodefileStart  3
+LogToConsole  0
+
+Optimize a model with 29962 rows, 26126 columns and 120405 nonzeros (Min)
+Model fingerprint: 0xf92eca53
+Model has 22 linear objective coefficients
+Variable types: 22646 continuous, 3480 integer (3480 binary)
+Coefficient statistics:
+  Matrix range     [3e-04, 2e+02]
+  Objective range  [5e-02, 1e+00]
+  Bounds range     [2e-01, 4e+01]
+  RHS range        [2e-01, 1e+01]
+
+Warning: Completing partial solution with 3456 unfixed non-continuous variables out of 3480
+User MIP start produced solution with objective -2287.66 (0.06s)
+User MIP start produced solution with objective -2287.66 (0.08s)
+Loaded user MIP start with objective -2287.66
+MIP start from previous solve produced solution with objective -2287.67 (0.27s)
+MIP start from previous solve produced solution with objective -2287.67 (0.29s)
+Loaded MIP start from previous solve with objective -2287.67
+
+Presolve removed 14488 rows and 9868 columns
+Presolve time: 0.13s
+Presolved: 15474 rows, 16258 columns, 59623 nonzeros
+Variable types: 12906 continuous, 3352 integer (3351 binary)
+
+Root relaxation: objective -2.297710e+03, 12912 iterations, 0.63 seconds (0.80 work units)
+
+    Nodes    |    Current Node    |     Objective Bounds      |     Work
+ Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+
+     0     0 -2297.7101    0  501 -2287.6655 -2297.7101  0.44%     -    1s
+     0     0 -2292.7127    0  268 -2287.6655 -2292.7127  0.22%     -    1s
+     0     0 -2292.4918    0  273 -2287.6655 -2292.4918  0.21%     -    1s
+     0     0 -2292.4918    0  275 -2287.6655 -2292.4918  0.21%     -    1s
+     0     0 -2292.4918    0  278 -2287.6655 -2292.4918  0.21%     -    1s
+     0     0 -2290.2412    0  295 -2287.6655 -2290.2412  0.11%     -    2s
+     0     0 -2290.1290    0  301 -2287.6655 -2290.1290  0.11%     -    2s
+     0     0 -2290.1290    0  301 -2287.6655 -2290.1290  0.11%     -    2s
+     0     0 -2288.9526    0  256 -2287.6655 -2288.9526  0.06%     -    2s
+     0     0 -2288.3990    0  256 -2287.6655 -2288.3990  0.03%     -    2s
+     0     0 -2288.3990    0  231 -2287.6655 -2288.3990  0.03%     -    2s
+     0     2 -2288.3990    0  227 -2287.6655 -2288.3990  0.03%     -    3s
+
+Cutting planes:
+  Gomory: 60
+  Cover: 31
+  Implied bound: 253
+  MIR: 259
+  Flow cover: 234
+  Network: 42
+  RLT: 2
+  Relax-and-lift: 163
+
+Explored 23 nodes (19937 simplex iterations) in 3.55 seconds (3.90 work units)
+Thread count was 24 (of 24 available processors)
+
+Solution count 2: -2287.67 -2287.66 
+
+Optimal solution found (tolerance 1.00e-04)
+Best objective -2.287665517468e+03, best bound -2.287882511602e+03, gap 0.0095%
