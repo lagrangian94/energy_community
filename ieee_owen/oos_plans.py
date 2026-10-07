@@ -63,7 +63,7 @@ def main():
     a = ap.parse_args()
 
     players, T, base, name = E3.instance(a.n, a.day)
-    test = E3.scenarios(base, players, T, a.test, E3.TEST_SEED)
+    test = E3.scenarios(base, players, T, a.test, E3.TEST_SEED, day=a.day)
     st = SE.ScenarioStack('fs', players, T, [test[0]], dwr=False)
     fs_names = sorted(st.first_stage)
     del st

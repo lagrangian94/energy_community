@@ -117,6 +117,17 @@ TABLE_EF_GAP = 1e-5
 # forms, so B&B nodes beyond it go to disk instead of RAM (None: Gurobi's default).
 # The search is unchanged; it caps memory on a 16 GB machine at |Omega|=20, n=60.
 EF_NODEFILE_START = None
+# EF_KL_GRID / EF_KL_SINGLE (--ef-kl-grid, --ef-kl-single): the KL extensive form's
+# tangent grid and its refinement. 'coarse' is the original 0.25 grid on
+# [-8, ln(1/q_w)]; 'fine' (_kl_grid_fine) covers only the ratios the ball can reach,
+# with a step that keeps the absolute error of each tangent piece constant.
+# EF_KL_SINGLE solves the MILP once at the final gap and reports the incumbent's
+# exact worst case psi with Gurobi's bound, instead of re-solving from 0 nodes after
+# adding tangents at the incumbent (each round is a full stochastic MILP; n=60,
+# day 6 needed four). Any tangent set keeps the bound valid, and psi is exact, so
+# the refinement only ever tightened the reported EF gap.
+EF_KL_GRID = 'fine'
+EF_KL_SINGLE = True
 # OMEGA_TOL: column generation also stops once omega^LR is known to this relative
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
 # absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
@@ -198,60 +209,114 @@ def _ar1(rng, n, rho):
     return e
 
 
+# Idiosyncratic share of each forecast error (2026-10-07). The *_sigma arguments of
+# make_scenarios are the TOTAL standard deviations; the member-specific part xi_j of
+# the manuscript (its generation and load, Sec. model) has these, and the common part
+# xi_0 (weather, prices) the rest, sqrt(total^2 - idio^2): wind 0.24 / 0.07, solar
+# 0.19 / 0.06, loads 0.05 / 0.087 (a temperature-driven common part, household
+# variation per member), prices all common.
+IDIO_SIGMA = {'wind': 0.07, 'solar': 0.06, 'load': 0.087}
+
+
+def _stream(seed, day, w, tag):
+    """An independent normal stream for (seed, day, scenario, entity): the draw of a
+    member never depends on which other members, days or scenarios are generated, so
+    a coalition's scenarios are the projection of the grand coalition's and every
+    community size shares its members' errors."""
+    import zlib
+    return np.random.default_rng([int(seed), int(day or 0), int(w), zlib.crc32(tag.encode())])
+
+
 def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
                    solar_sigma=0.20, load_sigma=0.10, price_sigma=0.15, rho=0.7,
-                   price_carriers=('E',), load_carriers=CARRIERS):
+                   price_carriers=('E',), load_carriers=CARRIERS, utility=False,
+                   day=None, idio=None):
     """Forecast-error scenarios around one deterministic instance, equiprobable.
 
-    Every scenario is a copy of `base` with multiplicative AR(1) errors on
-      renewable availability  renewable_cap_{u}_{t}   one path for wind, one for solar
-                              (common weather), clipped to [0, the day's peak]
-      non-flexible load       d_{k}_nfl_{u}_{t}        one path per carrier in
-                                                        `load_carriers`
-      market prices           pi_{k}_gri_{import,export}_{t} and u_{k}_{u}_{t},
-                              one factor per carrier in `price_carriers`
+    The error vector is xi = (xi_0, (xi_j)_j) as in the manuscript: xi_0 common to the
+    community (weather and prices), xi_j specific to member j (its generation and
+    load). Every path is a standard-normal AR(1) over the day, and each quantity is
+    multiplied by 1 + sigma_c e_c + sigma_j e_j with a common path e_c and a member
+    path e_j (IDIO_SIGMA, or idio={'wind':, 'solar':, 'load':}); the *_sigma
+    arguments are the totals, sigma_c^2 + sigma_j^2:
+      renewable availability  renewable_cap_{u}_{t}   wind and solar weather paths,
+                              each owner its own path; clipped to [0, the day's peak],
+                              which is the installed capacity (ElecGen scales each
+                              day's peak to it)
+      non-flexible load       d_{k}_nfl_{u}_{t}        a common path per carrier in
+                              `load_carriers` and each member its own; floored at 0
+      market prices           pi_{k}_gri_{import,export}_{t}, one common factor per
+                              carrier in `price_carriers` (floored at 0.05)
     Import and export move by the same factor, so pi^imkt >= pi^emkt survives
-    scenario by scenario (Assumption env(iii) as the supplement reads it), and the
-    willingness to pay u moves with the import price it is defined from.
+    scenario by scenario (Assumption env(iii) as the supplement reads it).
+
+    Draws come from _stream(seed, day, scenario, entity): days are independent (day=None
+    keeps one stream per seed), and the first m of n_scen scenarios are the scenarios
+    of a size-m sample.
+
+    utility=False (default since 2026-10-07) sets every willingness to pay
+    u_{k}_{u}_{t} to 0, so the objective is the manuscript's eq:dp_obj: market revenue
+    less import, production, start-up, peak and shortfall costs, with the loads served
+    in full and no consumer utility. With fixed loads u d never moves a decision, but
+    it moved each scenario's welfare (and with u following the price shock by more than
+    the costs: n=60, day 3, scenario sd 1,127 EUR of utility against 873 EUR of
+    welfare), and the KL worst case weights scenarios by welfare. utility=True keeps u,
+    scaled with the import price.
 
     The import bounds i_{k}_cap are raised to the largest scenario load and then
     shared by every scenario: bounds are part of the fixed support, not of the draw.
     Production costs, the peak tariff and the reserve price stay deterministic.
+    Before 2026-10-07 every path was common and one stream per seed served every day.
     """
-    rng = np.random.default_rng(seed)
+    sig_i = dict(IDIO_SIGMA, **(idio or {}))
+
+    def split(total, kind):
+        si = min(sig_i[kind], total)
+        return float(np.sqrt(max(total ** 2 - si ** 2, 0.0))), si
+
+    (wc, wi), (sc_, si_), (lc, li) = (split(wind_sigma, 'wind'), split(solar_sigma, 'solar'),
+                                      split(load_sigma, 'load'))
     wind = [u for u in base.get('players_with_wind', []) if u in players]
     solar = [u for u in base.get('players_with_solar', []) if u in players]
     nT = len(T)
     scen = []
-    for _ in range(n_scen):
+    for w in range(n_scen):
+        def path(tag):
+            return _ar1(_stream(seed, day, w, tag), nT, rho)
         p = dict(base)
-        fw = 1.0 + wind_sigma * _ar1(rng, nT, rho)
-        fs = 1.0 + solar_sigma * _ar1(rng, nT, rho)
-        for us, f in ((wind, fw), (solar, fs)):
+        for us, sc, si, kind in ((wind, wc, wi, 'wind'), (solar, sc_, si_, 'solar')):
+            common = path(kind)
             for u in us:
+                f = 1.0 + sc * common + si * path(f'{kind}_{u}')
                 peak = max(base[f'renewable_cap_{u}_{t}'] for t in T)
                 for i, t in enumerate(T):
                     p[f'renewable_cap_{u}_{t}'] = float(
                         np.clip(base[f'renewable_cap_{u}_{t}'] * f[i], 0.0, peak))
-        for k in CARRIERS:
-            f = np.maximum(0.0, 1.0 + load_sigma * _ar1(rng, nT, rho))
-            if k not in load_carriers:
-                continue            # drawn anyway, so the other paths do not move
+        for k in load_carriers:
+            common = path(f'load_{k}')
             for u in players:
+                if f'd_{k}_nfl_{u}_{T[0]}' not in base:
+                    continue
+                f = np.maximum(0.0, 1.0 + lc * common + li * path(f'load_{k}_{u}'))
                 for i, t in enumerate(T):
                     key = f'd_{k}_nfl_{u}_{t}'
                     if key in base:
                         p[key] = float(base[key] * f[i])
         for k in price_carriers:
-            f = np.maximum(0.05, 1.0 + price_sigma * _ar1(rng, nT, rho))
+            f = np.maximum(0.05, 1.0 + price_sigma * path(f'price_{k}'))
             for i, t in enumerate(T):
                 for side in ('import', 'export'):
                     key = f'pi_{k}_gri_{side}_{t}'
                     p[key] = float(base[key] * f[i])
-                for u in players:
-                    key = f'u_{k}_{u}_{t}'
-                    if key in base:
-                        p[key] = float(base[key] * f[i])
+                if utility:
+                    for u in players:
+                        key = f'u_{k}_{u}_{t}'
+                        if key in base:
+                            p[key] = float(base[key] * f[i])
+        if not utility:
+            for key in [key for key in p if key.startswith('u_') and key[2:3] in 'EHG'
+                        and key[3:4] == '_']:
+                p[key] = 0.0
         scen.append(p)
     for k in CARRIERS:
         loads = [s[key] for s in scen for key in s if key.startswith(f'd_{k}_nfl_')]
@@ -698,6 +763,35 @@ def _kl_tangent(s):
     return a, a - 1.0 - s * a
 
 
+def _kl_grid_fine(q, r, top_step=0.05, s_lo=-8.0, max_step=1.0):
+    """Tangent ratios s for one scenario of probability q in the KL ball of radius r.
+
+    No distribution in the ball gives the scenario more than p_max, the root of
+    p ln(p/q) + (1-p) ln((1-p)/(1-q)) = r on (q, 1) (all of 1 if the ball is that
+    large), so the worst case never needs s > s_top = ln(p_max / q). Below s_top the
+    step grows as top_step e^{(s_top - s)/2}: a tangent piece of width d misses e^s by
+    at most d^2 e^s / 8, so the absolute error stays top_step^2 e^{s_top} / 8 per unit
+    of lam q. Their sum over scenarios is at most lam top_step^2 max_w e^{s_top,w} / 8;
+    at n=60, |Omega|=20, r=0.096 (s_top 1.22, lam ~ 2,000) about 2 EUR at 0.05, i.e.
+    1e-4 of |psi|, against the 0.25 grid's 0.03%."""
+    def kl1(p):
+        return p * np.log(p / q) + (1 - p) * np.log((1 - p) / (1 - q))
+    if kl1(1.0 - 1e-12) <= r:
+        p_max = 1.0
+    else:
+        lo, hi = q, 1.0 - 1e-12
+        for _ in range(100):
+            mid = 0.5 * (lo + hi)
+            lo, hi = (mid, hi) if kl1(mid) <= r else (lo, mid)
+        p_max = hi
+    s_top = float(np.log(p_max / q))
+    out, s = [s_top], s_top
+    while s > s_lo:
+        s -= min(max_step, top_step * np.exp(0.5 * (s_top - s)))
+        out.append(max(s, s_lo))
+    return sorted(set(out))
+
+
 def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30,
                         log_file=None, round_gap=1e-3, prepare=None, budget=None,
                         release_scip=False):
@@ -782,7 +876,10 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     # suppressed scenario (p/q = e^-8) to all the mass on one (p/q = 1/q_w); spacing
     # 0.25 leaves an error below 0.8% of each term, which the refinement removes
     for w in range(S):
-        add_tangents(w, np.arange(-8.0, np.log(1.0 / q[w]) + 0.25, 0.25))
+        if EF_KL_GRID == 'fine':
+            add_tangents(w, _kl_grid_fine(q[w], radius))
+        else:
+            add_tangents(w, np.arange(-8.0, np.log(1.0 / q[w]) + 0.25, 0.25))
         g.addLConstr(t[w] + lam, GRB.GREATER_EQUAL, 0.0)      # the asymptote s -> -inf
 
     if prepare is not None:
@@ -791,7 +888,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         del m
         st.release_model()
     rounds, t0 = [], time.time()
-    loose = max(gap, round_gap)
+    loose = gap if EF_KL_SINGLE else max(gap, round_gap)
     for k in range(max_rounds):
         g.Params.MIPGap = loose
         if budget is not None:
@@ -809,7 +906,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         rounds.append({'obj_model': g.ObjVal, 'bound': bound, 'psi': psi,
                        'time': g.Runtime, 'nodes': g.NodeCount, 'mip_gap': loose})
         tol = gap * max(1.0, abs(psi))
-        if psi - bound <= tol:
+        if psi - bound <= tol or EF_KL_SINGLE:
             break
         if g.Status == GRB.TIME_LIMIT:
             break
@@ -4348,8 +4445,10 @@ def solve_deterministic(players, T, params, ef_gap=None, omega_tol=None, time_li
 
 
 def run(args):
-    global EF_NODEFILE_START
+    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE
     EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
+    EF_KL_GRID = getattr(args, 'ef_kl_grid', EF_KL_GRID)
+    EF_KL_SINGLE = getattr(args, 'ef_kl_single', EF_KL_SINGLE)
     if args.engine != 'direct':
         raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
@@ -4372,7 +4471,7 @@ def run(args):
         base['pi_res'] = base['pi_up'] = base['pi_dn'] = float(args.reserve_price_flat)
     if args.day is not None:
         name = f'{name}_day{args.day}'
-    scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed,
+    scen = make_scenarios(base, players, T, args.scenarios, seed=args.seed, day=args.day,
                           wind_sigma=args.wind_sigma, solar_sigma=args.solar_sigma,
                           load_sigma=args.load_sigma, price_sigma=args.price_sigma,
                           rho=args.rho,
@@ -4558,6 +4657,9 @@ def run(args):
         'config': {k: getattr(args, k) for k in ('seed', 'wind_sigma', 'solar_sigma', 'load_sigma',
                                                    'price_sigma', 'rho', 'price_carriers',
                                                    'mip_gap', 'ef_gap', 'mip_time_limit')},
+        'scenario_model': {'errors': 'xi_0 common + xi_j member (2026-10-07)',
+                           'idio_sigma': dict(IDIO_SIGMA), 'utility': False,
+                           'streams': 'per (seed, day, scenario, entity)'},
         'm_linking_rows': len(master.row_keys),
         'ef': {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
                                      'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
@@ -4663,6 +4765,14 @@ def build_parser():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--ef-kl-grid', choices=('coarse', 'fine'), default=EF_KL_GRID,
+                    help="KL EF tangent grid: 'fine' covers only the ratios the ball can "
+                         "reach (_kl_grid_fine); 'coarse' the original 0.25 grid")
+    ap.add_argument('--ef-kl-single', dest='ef_kl_single', action='store_true',
+                    default=EF_KL_SINGLE,
+                    help='KL EF: solve once at the final gap, no refinement re-solves')
+    ap.add_argument('--ef-kl-refine', dest='ef_kl_single', action='store_false',
+                    help='KL EF: re-solve after tangents at the incumbent (old behaviour)')
     ap.add_argument('--ef-nodefile-start', type=float, default=None,
                     help='Gurobi NodefileStart [GB] for the extensive form: B&B nodes '
                          'beyond it go to disk (default: off)')

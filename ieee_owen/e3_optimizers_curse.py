@@ -45,9 +45,9 @@ def instance(n, day):
     return players, T, base, name
 
 
-def scenarios(base, players, T, m, seed):
+def scenarios(base, players, T, m, seed, day=None):
     # the CLI's defaults (stochastic_extension.run), so the instance is the same
-    return SE.make_scenarios(base, players, T, m, seed=seed, wind_sigma=0.25,
+    return SE.make_scenarios(base, players, T, m, seed=seed, day=day, wind_sigma=0.25,
                              solar_sigma=0.20, load_sigma=0.10, price_sigma=0.15,
                              rho=0.7, price_carriers=('E',),
                              load_carriers=('E', 'H', 'G'))
@@ -109,13 +109,13 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     players, T, base, name = instance(a.n, a.day)
-    test = scenarios(base, players, T, a.test, TEST_SEED)
+    test = scenarios(base, players, T, a.test, TEST_SEED, day=a.day)
     path = os.path.join(a.out, f'e3_{name}_day{a.day}_test{a.test}.json')
     done = json.load(open(path)) if os.path.exists(path) else {}
     ts = None
     for s in [int(v) for v in a.seeds.split(',')]:
         for m in [int(v) for v in a.train.split(',')]:
-            train = scenarios(base, players, T, m, s)
+            train = scenarios(base, players, T, m, s, day=a.day)
             for r in [float(v) for v in a.radii.split(',')]:
                 key = f'S{m}_seed{s}_r{r:g}'
                 if key in done:
