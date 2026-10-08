@@ -21,7 +21,7 @@ os.chdir(_ROOT)
 
 from scipy.stats import chi2
 
-OUT = os.path.join('ieee_owen', 'weak_eps_experiment', 'stochastic', 'main17')
+OUT = os.path.join('ieee_owen', 'weak_eps_experiment', 'stochastic', 'main17_xi')
 PRICE_SCALE = 17.0 / 56.0
 ALPHA = 0.05
 POLL = 30

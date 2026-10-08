@@ -128,6 +128,14 @@ EF_NODEFILE_START = None
 # the refinement only ever tightened the reported EF gap.
 EF_KL_GRID = 'fine'
 EF_KL_SINGLE = True
+# EF_TIME_CAP (--ef-time-cap, CLI default 1800 s since 2026-10-07): the extensive
+# forms stop at the gap or at this many seconds, whichever comes first, and report the
+# incumbent and bound they have. The reported eps rests on the incumbent, which comes
+# well before the proof: day 1 on the xi_0 + xi_j scenarios, within 0.1 EUR of its
+# final value after 405 s of 835 (n=15) and 1,725 s of 2,693 (n=30). Days whose EF
+# stopped loose are re-solved afterwards; CG need not rerun, its LB and allocation
+# hold for any EF. None (the module default) leaves only time_limit.
+EF_TIME_CAP = None
 # OMEGA_TOL: column generation also stops once omega^LR is known to this relative
 # precision (UB - LB <= OMEGA_TOL * (EF value - LB)); pricing then runs on the
 # absolute gap that precision needs. 19-28% faster at 10-20 scenarios, omega 1.5-1.9%
@@ -723,6 +731,8 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
     m = st.model
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
+    if EF_TIME_CAP:
+        time_limit = min(time_limit or EF_TIME_CAP, EF_TIME_CAP)
     g, gv = _to_gurobi(m, 'DP_Omega', time_limit, gap)
     _gurobi_log(g, quiet, log_file)
     if EF_NODEFILE_START is not None:
@@ -836,6 +846,8 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     m = st.model
     if m.getObjectiveSense() != 'minimize':
         raise ValueError('extensive form is expected to minimise')
+    if EF_TIME_CAP:
+        time_limit = min(time_limit or EF_TIME_CAP, EF_TIME_CAP)
     g, gv = _to_gurobi(m, 'DP_Omega_KL', time_limit, gap)
     off = m.getObjoffset()
     _gurobi_log(g, quiet, log_file)
@@ -3069,6 +3081,11 @@ class DirectMaster:
                                 print(f'    [stall barrier] {self._futile_barrier} passes '
                                       f'without LB progress: stop the last round, '
                                       f'RMP - LB {lp_obj - self.lb:.4e} (tol {tol:.4e})')
+                            if added:
+                                # the pass just added columns the last LP solution does
+                                # not cover, and solve() reads it next (_grid_uncovered,
+                                # _update_ub): n=60, day 11 failed with an IndexError
+                                lp_obj = self.lp.solve()
                 if alpha < 1.0:
                     st = {k: alpha * duals.get(k, 0.0) + (1 - alpha) * self.center.get(k, 0.0)
                           for k in set(duals) | set(self.center)}
@@ -4445,7 +4462,8 @@ def solve_deterministic(players, T, params, ef_gap=None, omega_tol=None, time_li
 
 
 def run(args):
-    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE
+    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP
+    EF_TIME_CAP = getattr(args, 'ef_time_cap', EF_TIME_CAP) or None
     EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
     EF_KL_GRID = getattr(args, 'ef_kl_grid', EF_KL_GRID)
     EF_KL_SINGLE = getattr(args, 'ef_kl_single', EF_KL_SINGLE)
@@ -4765,6 +4783,9 @@ def build_parser():
                          'last (default: --cg-gap)')
     ap.add_argument('--max-rounds', type=int, default=12)
     ap.add_argument('--tag', default='', help='suffix for the output file name')
+    ap.add_argument('--ef-time-cap', type=float, default=1800.0,
+                    help='seconds: the extensive form stops at its gap or here, whichever '
+                         'first, and reports its incumbent and bound (default 1800; 0: off)')
     ap.add_argument('--ef-kl-grid', choices=('coarse', 'fine'), default=EF_KL_GRID,
                     help="KL EF tangent grid: 'fine' covers only the ratios the ball can "
                          "reach (_kl_grid_fine); 'coarse' the original 0.25 grid")

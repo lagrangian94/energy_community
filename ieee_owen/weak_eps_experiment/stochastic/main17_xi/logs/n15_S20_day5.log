@@ -1,0 +1,73 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 15p_reserve_peak_day5_S20_seed0_grb_direct-gurobi_kl0.0960365_dual_ndw_rsc0.303571_main: n=15, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter Username
+Set parameter LicenseID to value 2742039
+Academic license - for non-commercial use only - expires 2026-11-20
+Set parameter OutputFlag to value 1
+Set parameter LogToConsole to value 0
+  obj 2077.477982  status optimal  gap 9.94e-05  697.7s  vars 89684
+  KL r=0.0960365: worst case 2077.477982 vs expected 1963.641730; 1 MILP solve(s); rho* 0.057 0.028 0.036 0.037 0.087 0.029 0.035 0.089 0.039 0.024 0.070 0.032 0.049 0.062 0.056 0.022 0.050 0.032 0.101 0.065 (KL 0.0960)
+    round 1: MIPGap 1e-04  697.6s  7187 nodes  psi-bound 9.94e-05  psi-incumbent 9.94e-05
+
+[2] column generation (DWR_N^Omega)
+  seed columns: largest carrier-row residual 1.07e-14 (repaired)
+  CG   12 | RMP     1382.8984 | LB     1398.3036 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.11s solver 0.11s 1257 it 11355 cols 119456 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 1382.8984 LB 1398.3036 UB 2077.4780 gap 3.27e-01 [round] 8s
+  CG   25 | RMP     2053.7316 | LB     1875.7771 | UB     2077.4780 | a 0.10 smooth   | min rc -1.6567e+01 | +55 | lp 0.29s solver 0.28s 1981 it 12734 cols 208910 nz
+  CG   50 | RMP     2044.9259 | LB     2039.8705 | UB     2077.4780 | a 0.10 smooth   | min rc -9.0121e+00 | +55 | lp 0.48s solver 0.46s 1750 it 14144 cols 292967 nz
+  CG   53 | RMP     2044.3183 | LB     2042.7870 | UB     2077.4780 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.48s solver 0.46s 1924 it 14073 cols 288261 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 2044.3183 LB 2042.7870 UB 2077.4780 gap 1.67e-02 [round] 134s
+  CG   75 | RMP     2069.0962 | LB     2059.2833 | UB     2077.4780 | a 0.10 smooth   | min rc -6.2593e+00 | +34 | lp 0.90s solver 0.88s 2918 it 15335 cols 364251 nz
+  CG  100 | RMP     2065.6999 | LB     2064.5519 | UB     2077.4780 | a 0.10 smooth   | min rc -1.0366e+00 | +23 | lp 1.40s solver 1.38s 3889 it 16738 cols 447926 nz
+  CG  104 | RMP     2065.4515 | LB     2065.0338 | UB     2077.4780 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 1.13s solver 1.11s 3159 it 16535 cols 434675 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 2065.4515 LB 2065.0338 UB 2077.4780 gap 5.99e-03 [round] 370s
+  CG  125 | RMP     2067.2524 | LB     2066.6561 | UB     2077.4780 | a 0.10 smooth   | min rc -4.4233e-01 | +10 | lp 1.36s solver 1.34s 3497 it 17095 cols 467792 nz
+  CG  129 | RMP     2067.2166 | LB     2066.8107 | UB     2077.4780 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 1.00s solver 0.98s 2805 it 17374 cols 484566 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 2067.2166 LB 2066.8107 UB 2077.4780 gap 5.13e-03 [round] 499s
+  CG  139 | RMP     2067.4470 | LB     2067.0124 | UB     2077.4780 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.80s solver 0.77s 2038 it 17477 cols 490703 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 2067.4470 LB 2067.0124 UB 2077.4780 gap 5.04e-03 [round] 551s
+  CG  141 | RMP     2067.4858 | LB     2067.0376 | UB     2077.4780 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 2.14s solver 2.11s 5770 it 17126 cols 469136 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 2067.4858 LB 2067.0376 UB 2077.4780 gap 5.02e-03 [round] 563s
+  CG  142 | RMP     2067.5007 | LB     2067.0376 | UB     2067.5053 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.88s solver 0.85s 2497 it 17126 cols 469136 nz
+  -- penalty round 7: eps 0 delta 0 RMP 2067.5007 LB 2067.0376 UB 2067.5053 gap 2.26e-04 [done] 564s
+  obj 2067.505307  LB 2067.037569  gap 2.26e-04  iters 142  564.3s  rounds 7  status optimal
+  KL r=0.0960365: 980 tangent planes; rho* 0.058 0.029 0.036 0.037 0.089 0.030 0.035 0.088 0.039 0.024 0.072 0.032 0.048 0.060 0.055 0.022 0.050 0.032 0.101 0.066 (KL 0.0960)
+  time: master LP 133.0s  pricing 426.2s (32805 MILPs, 8 worker(s))
+
+[3] robust Owen allocation
+  omega_LR,rob 10.411509  eps_LR 0.694101  certified [9.766235, 10.440413]
+  EF slack 0.2064 = 2% of the reported omega
+  checks: budget 0.00e+00  duality -2.89e-02  pricing 0.00e+00
+
+[4] stand-alone values val(DP_{j}^Omega)
+   player         Owen        E[x*]        alone       chi^LR
+       u1    1480.7307    1480.0366     970.4183     509.6183
+       u2       0.0111      -0.6830      -0.0000      -0.6830
+       u3     511.3873     510.6932     266.2766     244.4166
+       u4    -786.3926    -787.0867    -825.0358      37.9491
+       u5    -387.3138    -388.0079    -510.2808     122.2729
+       u6   -1023.8030   -1024.4971   -1154.0486     129.5516
+       u7     504.8372     504.1431     306.5900     197.5531
+       u8       3.3837       2.6896      -0.0000       2.6896
+       u9     520.6410     519.9469     266.2766     253.6703
+      u10     741.9521     741.2580     600.6030     140.6550
+      u11      99.4725      98.7784      91.6932       7.0852
+      u12    -654.6121    -655.3062    -721.8955      66.5893
+      u13    -381.6349    -382.3290    -507.0469     124.7179
+      u14    -891.3475    -892.0416    -979.8848      87.8432
+      u15   -1804.3783   -1805.0724   -1962.1205     157.0480
+
+wrote ieee_owen\weak_eps_experiment\stochastic\main17_xi\15p_reserve_peak_day5_S20_seed0_grb_direct-gurobi_kl0.0960365_dual_ndw_rsc0.303571_main.json
