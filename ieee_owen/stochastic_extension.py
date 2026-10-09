@@ -3348,9 +3348,19 @@ class DirectMaster:
             if self.verbose:
                 print(f'  -- converged on the master with grid columns: RMP {obj:.4f} '
                       f'LB {self.lb:.4f} (y {self._y_total():.4g}); no switch-off')
-        if status != 'done' and self.doi_active and self.doi_taper_steps:
+        if status == 'stalled' and self.doi_active:
+            # The last round stopped on a stall: LB and its duals already certify the
+            # allocation (Prop. rcg), and switching the grid columns off only buys a
+            # certified UB at the price of re-converging a heavier master. n=60, day 28:
+            # after the stall stop at 2,109 s the switch-off pass ran over an hour, LP
+            # solves 0.14 s -> 20 s, LB unchanged. Stop here with the stall.
+            self.doi_skipped_on_stall = True
+            if self.verbose:
+                print('  -- last round stalled: grid columns left on, no switch-off')
+        if status != 'done' and status != 'stalled' and self.doi_active \
+                and self.doi_taper_steps:
             status = self._taper_doi(rounds, t0)
-        if status != 'done' and self.doi_active:
+        if status != 'done' and status != 'stalled' and self.doi_active:
             self._purge_before_fallback()
             self._repair_doi()
         # Switch-off. With the certificate on, only the grid columns the members'
@@ -3359,7 +3369,7 @@ class DirectMaster:
         # repeated while some grid column is still left uncovered. Without it, or on
         # the last pass, every grid column goes.
         for sw in range(self.doi_switch_passes):
-            if status == 'done' or not self.doi_active:
+            if status in ('done', 'stalled') or not self.doi_active:
                 break
             keys = (self._grid_uncovered() if self.doi_certify
                     and sw + 1 < self.doi_switch_passes else None)
