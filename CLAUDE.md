@@ -133,6 +133,26 @@ capability, and `solve_standalone_r_sym()` for the no-pooling baseline.
 The pooling gain and the time/direction mechanism split are **separate objects
 with different baselines**; do not chain them.
 
+### Uncertainty extension (KL-DRO game), in progress
+
+A second manuscript, `manuscript_ieee_uncertainty.tex` (Overleaf, not in this repo),
+puts the same game under scenario uncertainty with a KL ambiguity set. Its code is
+`ieee_owen/stochastic_extension.py` (extensive form, nested row-and-column
+generation, robust Owen allocation) and `ieee_owen/stochastic_core.py` (coalition
+generation). **The plan, every decision and the results so far are in
+`ieee_owen/kl_experiment_plan.md`, section 8; start at 8.12 for what is left and how
+to continue on another machine.** Entry points, in `ieee_owen/weak_eps_experiment/`:
+
+```bash
+python ieee_owen/weak_eps_experiment/run_kl_main.py --scen 20   # main runs: n x 31 days (done, stochastic/main17_xi)
+python ieee_owen/weak_eps_experiment/run_kl_bench.py            # benchmarks of the RCG (stochastic/bench17_xi)
+python ieee_owen/weak_eps_experiment/resolve_ef.py --n 60 --days 3   # better EF plan for chosen days
+```
+
+All three run one job at a time under a memory watchdog and skip what is already
+recorded, so they can be stopped and restarted. Timings are only comparable within
+one machine. The watchdog uses the Windows API.
+
 ## applied_energy/ — earlier submission (archive)
 
 Core-selecting mechanism design for local energy markets; compares three pricing

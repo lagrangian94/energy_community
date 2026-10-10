@@ -357,3 +357,65 @@ PYTHONHASHSEED=21 PYTHONUNBUFFERED=1 python ieee_owen/stochastic_extension.py \
   - 4일차 n=60: 21분 동안 새 incumbent 없음(ω 2.908 그대로).
   - 정수 고정 LP는 n=60에서 0.008€, n=6에서 0.001€ 이하: 격자 오차는 연속변수로 회수되지 않는다.
 - **결정: 표는 124개 모두 30분 기준 값으로 통일한다.** 보고 ε는 실제 값의 상한이고, 가장 느슨한 7일(3·4·13·14·15·17·19, ω 2.8~4.8)이 모두 3일차만큼 내려가도 n=60 평균은 0.037 → 0.032라 n에 따른 추세가 바뀌지 않는다. 3·4일차 JSON의 주 값은 재풀이 값이고 30분 값은 `ef_first`에 있으므로, 표 스크립트는 `ef_first`가 있으면 그것을 읽는다. 3일차는 민감도 메모로만 쓴다. 원고 Setup에는 "EF는 30분 제한, ε는 그 incumbent 기준 상한"이라고 적는다.
+
+### 8.12 남은 실험 계획과 다른 컴퓨터에서 이어 돌리는 법 (2026-10-10)
+
+이 절만 읽고 이어서 돌릴 수 있게 적는다. 8.4의 B·D·E를 아래로 대체한다.
+
+#### (1) 계산 벤치마크: Table II
+
+열: KL EF(기준) | coalition generation | flat DW | 원뿔 CG | nested RCG. 모두 |Ω|=20, Duchi r = 0.096.
+
+| 방법 | 내용 | 실행 |
+|---|---|---|
+| `coalgen` | KL-DRO 게임 위의 coalition generation (cost-of-stability 행 생성) | `coalition_bench.py` |
+| `flat` | flat DW: 시나리오 분할 없음, MP1/MP2 없음, 접평면 행 생성은 RCG와 같음 | `--kl-master dual --no-split-scenarios --no-mp12` |
+| `conic` | RCG와 같은 pricing, 마스터만 MOSEK 지수 원뿔(행 생성 없음) | `--kl-master conic` |
+| `rcg` | nested RCG 자체 | `--kl-master dual` (주 실행과 같음) |
+
+큐는 `ieee_owen/weak_eps_experiment/run_kl_bench.py`, 결과는 `stochastic/bench17_xi/`(`bench.csv` 한 줄이 실행 하나, 있는 줄은 건너뜀).
+
+- **재는 값은 "하한 도달 시간"(`t_target`)이다.** flat·conic·rcg는 Lagrangian 하한이 *주 실행 RCG의 최종 LB − 0.05 ω*(RCG 자신의 종료 허용치)에 처음 닿는 시각을 재고, 닿으면 바로 멈춘다(`--cg-target-lb`). 종료 판정 통과 시간을 재지 않는 이유: 판정이 nested 마스터에 맞춰 조정돼 있어서, n=6 2일차 flat DW는 252 s에 RCG의 하한에 닿고도 penalty 6라운드 기준(RMP − LB ≤ 0.300)에 0.313으로 걸려 한 시간을 썼다. 그걸 시간 초과로 적으면 불공정하다.
+- **예산 3,600 s.** CG는 예산에서 스스로 멈추고 하한과 기록을 남긴다(`--cg-budget`, 로그의 `t`). coalition generation은 수렴 시간을 잰다.
+- **상태**: `target`(하한 도달), `converged`(목표 하한 아래에서 자체 종료), `timeout`(예산 안에 둘 다 못 함), `failed`.
+- **순서**: 1~3일차를 방법별로(conic → flat → coalgen), 작은 n부터. 그다음 4~5일차, 그다음 6~31일차. 5일이 끝나면 표의 모든 칸이 차고, 이후는 평균만 갱신된다.
+- **조기 중단**: 어떤 n에서 1~3일차가 모두 `timeout`이면 그 n의 나머지 날은 돌리지 않고 "> 3,600 (0/3)"으로 적는다. `coalgen`과 `flat`은 그보다 큰 n도 돌리지 않는다. `conic`은 n마다 따로 판단한다.
+- **EF 캐시**: 주 실행의 `main17_xi/ef_cache/`를 읽는다(3·4일차 n=60은 `.first.pkl`, 주 실행이 쓴 계획). 캐시는 git에 없다. 없는 컴퓨터에서는 첫 실행이 EF를 다시 풀어 만든다(n=60은 최대 30분). 목표 하한은 커밋된 주 실행 JSON에서 읽으므로 어느 컴퓨터에서나 같다.
+- **컴퓨터가 다르면 시간이 비교되지 않는다.** 주 실행 PC(Windows, 24 스레드, 16 GB)에서는 RCG 시간을 주 실행 로그에서 같은 기준으로 계산한다(`run_kl_bench.time_to`). 다른 컴퓨터에서 돌리면 RCG도 거기서 같이 재야 하므로 `--methods rcg,conic,flat,coalgen`으로 돌리고, 표의 한 행(n)은 한 컴퓨터의 값으로만 채운다.
+
+지금까지(이 PC, 1~3일차, n=6), 하한 도달 시간 [s]:
+
+| 날 | RCG | 원뿔 CG | flat DW | coalition generation (수렴) |
+|---|---|---|---|---|
+| 1 | 69 | 125 | 314 | 1,132 |
+| 2 | 56 | 97 | 252 | 958 |
+| 3 | 52 | 119 | (대기) | 387 |
+
+원뿔 CG 구현 메모(`KLConicMaster`, `_LP`의 `mosek` 백엔드): 내부점법이라 warm start가 없어 마스터를 매번 처음부터 푼다(n=60 최종 마스터 16,132행 × 31,315열에서 3.75 s, warm simplex 0.03 s). 쌍대값은 허용 오차만큼만 실행 가능해서, Lagrangian 하한에 쓰기 전에 부호가 틀린 값을 자르고 공유 열(예비력·shortfall·peak)의 reduced cost를 0 이상으로 맞추고 ρ̄를 KL 공 안으로 당긴다(`_duals`). n=6 2일차 전체 수렴 검증: CG 143 s(RCG 67 s), LB 317.179(317.153), ε 1.108(1.112). **원뿔 CG가 큰 n에서 RCG보다 빠르면 논문을 그쪽으로 튼다**(사용자 결정). r=0은 공이 한 점이라 행 생성이 필요 없고 원뿔은 퇴화하므로(κ → ∞) 어느 방법이든 LP로 푼다(`--kl-radius 0 --kl-master cut`, 미검증).
+
+#### (2) 실제 worst violation: Dinkelbach는 뺀다
+
+Table I의 "실제 ε(χ)" 행은 이렇게 채운다.
+- n=6: 연합 62개 전수(`--check-core`, 31일에 2~3시간 예상, 아직 안 돌림).
+- n=15, 30: 단독 연합의 초과(주 실행 JSON의 `standalone`과 `Ex`로 계산, 추가 풀이 없음). 실제 ε는 ε^LR을 넘을 수 없으므로(Cor. eps), 단독 연합이 ε^LR에 닿는 날은 실제 ε = ε^LR로 확정된다. 124개 실행 어디서도 ε^LR을 넘지 않는다. 단독 초과가 ε^LR의 99.9% 이상인 날: n=30 29/31, n=15 1/31(90% 이상은 24/31), n=60 0/31, n=6 0/31.
+- n=60: 상한 ε^LR만 보고한다(단독 연합은 거의 모든 멤버가 단독보다 크게 이득이라 정보가 없다).
+
+#### (3) OOS (Table III): 지금 결과로 예산 경로를 채운다
+
+- 31일을 독립 학습 표본 31개로 쓴다(시나리오 흐름이 날짜마다 독립). 주 실행 JSON의 1단계 계획(`ef_first_stage`)을 `ieee_owen/oos_plans.py`로 테스트 500개에 평가하면 Duchi r의 약속 충족 비율과 "약속 − 실현"이 n별로 나온다. 새로 풀 것이 없다. 아직 안 돌림.
+- SAA(r=0) 행은 r=0 EF만 풀면 된다(CG 불필요, n=6은 하루 몇 초). 아직 안 돌림.
+- 유인 경로(참 분포에서 이탈하는 연합, ε_oos)는 n=6에서만 가능하고 뒤로 미룬다.
+
+#### (4) 다른 컴퓨터에서 이어 돌리기
+
+```bash
+git pull
+python -m venv .venv && source .venv/Scripts/activate      # Linux: .venv/bin/activate
+pip install -r requirements.txt                            # Gurobi 13, MOSEK 11 라이선스 필요
+# 벤치마크 (RCG 포함, 1~5일차). 끝난 실행은 bench.csv로 건너뛴다
+python ieee_owen/weak_eps_experiment/run_kl_bench.py --methods rcg,conic,flat,coalgen --days 1-5 --out ieee_owen/weak_eps_experiment/stochastic/bench17_xi_<machine>
+```
+
+- `run_kl_main.py`의 메모리 감시는 Windows API(ctypes)를 쓴다. Linux에서 돌리려면 `watched()`의 메모리 조회를 바꿔야 한다(미구현).
+- 한 번에 하나씩 돌린다(시간 측정). n=60 EF를 다시 푸는 실행은 12~14 GB를 쓴다.
+- 결과 폴더를 컴퓨터마다 따로 두면 표 스크립트가 섞지 않는다.

@@ -97,10 +97,10 @@ def command(n, scen, day, out, ef_round_limit=10800, nodefile=3.0, ef_log=None):
             '--tag', 'main', '--out', out]
 
 
-def watched(cmd, log, min_free_gb):
+def watched(cmd, log, min_free_gb, kill_after=None):
     """Run cmd with its output in log, polling the interpreter's memory; kill it if
-    the machine's available memory falls below min_free_gb. Returns
-    (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed)."""
+    the machine's available memory falls below min_free_gb, or after kill_after
+    seconds. Returns (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed)."""
     os.makedirs(os.path.dirname(log), exist_ok=True)
     env = dict(os.environ, PYTHONHASHSEED='21', PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8')
     t0 = time.time()
@@ -120,7 +120,7 @@ def watched(cmd, log, min_free_gb):
                 peak_ws = max(peak_ws, c.PeakWorkingSetSize / 2**30)
             free = avail_gb()
             min_free = min(min_free, free)
-            if free < min_free_gb:
+            if free < min_free_gb or (kill_after and time.time() - t0 > kill_after):
                 p.kill()
                 if kid:
                     subprocess.run(['taskkill', '/F', '/T', '/PID', str(kid)],

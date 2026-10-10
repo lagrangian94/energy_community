@@ -1880,13 +1880,43 @@ class _LP:
             if presolve == 'off':
                 self.m.Params.Presolve = 0
             self.rows, self.cols = [], []
+        elif backend == 'mosek':
+            # conic interior point, for the exponential-cone KL master (add_expcone).
+            # No basis: every solve is a cold start and `method` is ignored.
+            import mosek
+            self.msk, self.INF = mosek, float('inf')
+            self.task = mosek.Task()
+            self.task.putobjsense(mosek.objsense.minimize)
+            self.task.putintparam(mosek.iparam.intpnt_basis, mosek.basindtype.never)
+            self.nrow, self._lb, self._ub, self._expdom = 0, [], [], None
         else:
-            raise ValueError(f"lp solver must be 'highs' or 'gurobi', got {backend!r}")
+            raise ValueError(f"lp solver must be 'highs', 'gurobi' or 'mosek', got {backend!r}")
         if backend == 'highs' and presolve == 'off':
             self.h.setOptionValue('presolve', 'off')
         self._apply_method()
 
+    def _bound(self, lo, hi):
+        """MOSEK bound key and finite values of [lo, hi]."""
+        k = self.msk.boundkey
+        fl, fu = lo > -self.INF, hi < self.INF
+        key = (k.fx if lo == hi else k.ra) if fl and fu else k.lo if fl else k.up if fu else k.fr
+        return key, (lo if fl else 0.0), (hi if fu else 0.0)
+
+    def add_expcone(self, e1, e2, e3):
+        """(e1, e2, e3) in the exponential cone, e1 >= e2 exp(e3 / e2), e2 > 0; each e
+        is a list of (column handle, coefficient). MOSEK only."""
+        k = self.task.getnumafe()
+        self.task.appendafes(3)
+        for i, e in enumerate((e1, e2, e3)):
+            for j, a in e:
+                self.task.putafefentry(k + i, self.pos[j], a)
+        if self._expdom is None:
+            self._expdom = self.task.appendprimalexpconedomain()
+        self.task.appendacc(self._expdom, [k, k + 1, k + 2], None)
+
     def _apply_method(self):
+        if self.backend == 'mosek':
+            return
         # 'barrier': interior point without crossover, i.e. the well-centred duals of
         # primal-dual column generation (Gondzio, Gonzalez-Brevis & Munari 2013)
         if self.backend == 'highs':
@@ -1907,6 +1937,11 @@ class _LP:
             self.h.addRow(lo, hi, 0, np.array([], dtype=np.int32), np.array([]))
             self.nrow += 1
             return self.nrow - 1
+        if self.backend == 'mosek':
+            self.task.appendcons(1)
+            self.task.putconbound(self.nrow, *self._bound(lo, hi))
+            self.nrow += 1
+            return self.nrow - 1
         expr = self.gp.LinExpr()
         if lo == hi:
             c = self.m.addLConstr(expr, self.gp.GRB.EQUAL, lo)
@@ -1921,6 +1956,16 @@ class _LP:
         if self.backend == 'highs':
             self.h.addCol(obj, lb, ub, len(rows), np.array(rows, dtype=np.int32),
                           np.array(coefs, dtype=float))
+        elif self.backend == 'mosek':
+            p = len(self.handle_at)
+            self.task.appendvars(1)
+            self.task.putvarbound(p, *self._bound(lb, ub))
+            if obj:
+                self.task.putcj(p, float(obj))
+            if len(rows):
+                self.task.putacol(p, [int(r) for r in rows], [float(a) for a in coefs])
+            self._lb.append(lb)
+            self._ub.append(ub)
         else:
             col = self.gp.Column(list(coefs), [self.rows[r] for r in rows])
             self.cols.append(self.m.addVar(lb=lb, ub=ub, obj=obj, column=col))
@@ -1934,6 +1979,13 @@ class _LP:
         if self.backend == 'highs':
             idx = np.array([self.pos[j] for j in handles], dtype=np.int32)
             self.h.addRow(lo, hi, len(idx), idx, np.asarray(coefs, dtype=float))
+            self.nrow += 1
+            return self.nrow - 1
+        if self.backend == 'mosek':
+            self.task.appendcons(1)
+            self.task.putarow(self.nrow, [self.pos[j] for j in handles],
+                              [float(a) for a in coefs])
+            self.task.putconbound(self.nrow, *self._bound(lo, hi))
             self.nrow += 1
             return self.nrow - 1
         expr = self.gp.LinExpr(list(coefs), [self.cols[self.pos[j]] for j in handles])
@@ -1953,6 +2005,11 @@ class _LP:
             return
         if self.backend == 'highs':
             self.h.deleteCols(len(drop), np.array(drop, dtype=np.int32))
+        elif self.backend == 'mosek':
+            self.task.removevars(drop)          # the rest move down, cones included
+            gone = set(drop)
+            self._lb = [v for p, v in enumerate(self._lb) if p not in gone]
+            self._ub = [v for p, v in enumerate(self._ub) if p not in gone]
         else:
             self.m.remove([self.cols[p] for p in drop])
             gone = set(drop)
@@ -1976,6 +2033,14 @@ class _LP:
                 self.h.changeColsBounds(len(ps), idx, np.asarray(cur[3]),
                                         np.asarray(ub, dtype=float))
             return
+        if self.backend == 'mosek':
+            if obj is not None:
+                self.task.putclist(ps, [float(c) for c in obj])
+            if ub is not None:
+                for p, u in zip(ps, ub):
+                    self._ub[p] = u
+                    self.task.putvarbound(p, *self._bound(self._lb[p], u))
+            return
         vs = [self.cols[p] for p in ps]
         if obj is not None:
             self.m.setAttr('Obj', vs, list(obj))
@@ -1992,6 +2057,14 @@ class _LP:
                 lo = cur[3][0] if lb is None else lb
                 up = cur[4][0] if ub is None else ub
                 self.h.changeColBounds(p, lo, up)
+            return
+        if self.backend == 'mosek':
+            if obj is not None:
+                self.task.putcj(p, float(obj))
+            if lb is not None or ub is not None:
+                self._lb[p] = self._lb[p] if lb is None else lb
+                self._ub[p] = self._ub[p] if ub is None else ub
+                self.task.putvarbound(p, *self._bound(self._lb[p], self._ub[p]))
             return
         v = self.cols[p]
         if obj is not None:
@@ -2024,6 +2097,24 @@ class _LP:
             self._rc = np.asarray(sol.col_dual)
             self._pi = np.asarray(sol.row_dual)
             return float(self.h.getObjectiveValue())
+        if self.backend == 'mosek':
+            msk, t0 = self.msk, time.time()
+            self.task.optimize()
+            itr = msk.soltype.itr
+            sta = self.task.getsolsta(itr)
+            obj = self.task.getprimalobj(itr) if sta in (msk.solsta.optimal,
+                                                         msk.solsta.unknown) else None
+            # 'unknown': stopped short of its tolerances; usable if the two objectives
+            # agree, as with a barrier LP without crossover
+            if obj is None or (sta == msk.solsta.unknown and abs(
+                    obj - self.task.getdualobj(itr)) > 1e-6 * (1.0 + abs(obj))):
+                raise RuntimeError(f'master (mosek): {sta}, {self.task.getprosta(itr)}')
+            self._x = np.array(self.task.getxx(itr))
+            self._pi = np.array(self.task.gety(itr))
+            self._rc = np.array(self.task.getslx(itr)) - np.array(self.task.getsux(itr))
+            self.stats = (time.time() - t0, self.task.getintinf(msk.iinfitem.intpnt_iter),
+                          self.task.getnumvar(), self.task.getnumanz())
+            return float(obj)
         self.m.optimize()
         self.stats = (self.m.Runtime, self.m.IterCount, self.m.NumVars, self.m.NumNZs)
         ok = self.m.Status == self.gp.GRB.OPTIMAL or (
@@ -2093,6 +2184,10 @@ class _TwinLP:
         r = self.main.add_row_with(lo, hi, handles, coefs)
         assert self.shadow.add_row_with(lo, hi, handles, coefs) == r
         return r
+
+    def add_expcone(self, e1, e2, e3):
+        self.main.add_expcone(e1, e2, e3)
+        self.shadow.add_expcone(e1, e2, e3)
 
     def rc(self, j):
         return self.main.rc(j)
@@ -3131,6 +3226,10 @@ class DirectMaster:
                 status = 'done'
             elif not cuts and self.lb >= lp_obj - self.round_frac * tol:
                 status = 'round'
+            elif self.cg_target is not None and self.lb >= self.cg_target:
+                status = 'target'
+            elif self.cg_budget and time.time() - self._t_start > self.cg_budget:
+                status = 'timelimit'
             if status is None and self.pool_on:
                 added = self._pool_price(duals, conv, adm)
                 if added:
@@ -3295,6 +3394,7 @@ class DirectMaster:
                              'ub': self.ub, 'alpha': alpha, 'mode': mode,
                              'min_rc': min_rc, 'added': added, 'cuts': cuts, 'round': tag,
                              't_lp': t_lp, 't_price': self._it_price,
+                             't': time.time() - self._t_start,
                              'lp_stats': getattr(self.lp, 'stats', None)})
             if self.verbose and (self.iteration % 25 == 0 or status or mode == 'tighten'):
                 print(f'  CG {self.iteration:4d} | RMP {lp_obj:13.4f} | LB {self.lb:13.4f} '
@@ -3401,8 +3501,17 @@ class DirectMaster:
                 bnds = sum(1 for v in self.lp.cols if v.IISLB or v.IISUB)
                 print(f'  seed master infeasible; IIS rows {rows[:30]} '
                       f'({len(rows)} rows, {bnds} bounds)')
+    # cg_budget (--cg-budget): seconds after which column generation stops where it
+    # is, status 'timelimit', and reports the bounds and the dual point it has. A
+    # benchmark that ran out of time then still has its bound and its trajectory
+    # (the log's 't'), where a killed process has neither.
+    # cg_target (--cg-target-lb): stop, status 'target', once the Lagrangian bound is
+    # this high: a benchmark is timed to the bound the RCG reports, not to the end of
+    # its own stopping test.
+    cg_budget, cg_target, _t_start = None, None, 0.0
+
     def solve(self, init_vals=None, init_cols=None, init_duals=None):
-        t0 = time.time()
+        t0 = self._t_start = time.time()
         self._add_seeds(init_vals, init_cols)
         if init_duals is not None:
             # dual warm start: price at the guess before the first round, so the
@@ -3439,7 +3548,7 @@ class DirectMaster:
                       f'RMP {obj:.4f} LB {self.lb:.4f} UB {self.ub:.4f} '
                       f'gap {(self.ub - self.lb) / (1 + abs(self.ub)):.2e} '
                       f'[{status}] {time.time() - t0:.0f}s')
-            if status == 'done' or last:
+            if status in ('done', 'timelimit', 'target') or last:
                 break
             eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
             if eps < 1e-4:
@@ -3466,10 +3575,10 @@ class DirectMaster:
             self.doi_skipped_on_stall = True
             if self.verbose:
                 print('  -- last round stalled: grid columns left on, no switch-off')
-        if status != 'done' and status != 'stalled' and self.doi_active \
+        if status not in ('done', 'stalled', 'timelimit', 'target') and self.doi_active \
                 and self.doi_taper_steps:
             status = self._taper_doi(rounds, t0)
-        if status != 'done' and status != 'stalled' and self.doi_active:
+        if status not in ('done', 'stalled', 'timelimit', 'target') and self.doi_active:
             self._purge_before_fallback()
             self._repair_doi()
         # Switch-off. With the certificate on, only the grid columns the members'
@@ -3478,7 +3587,7 @@ class DirectMaster:
         # repeated while some grid column is still left uncovered. Without it, or on
         # the last pass, every grid column goes.
         for sw in range(self.doi_switch_passes):
-            if status in ('done', 'stalled') or not self.doi_active:
+            if status in ('done', 'stalled', 'timelimit', 'target') or not self.doi_active:
                 break
             keys = (self._grid_uncovered() if self.doi_certify
                     and sw + 1 < self.doi_switch_passes else None)
@@ -3506,7 +3615,7 @@ class DirectMaster:
                     print(f'  -- penalty round {len(rounds)} (no DOI): eps {eps:.3g} '
                           f'RMP {obj:.4f} LB {self.lb:.4f} UB {self.ub:.4f} [{status}] '
                           f'{time.time() - t0:.0f}s')
-                if status == 'done' or last:
+                if status in ('done', 'timelimit', 'target') or last:
                     break
                 eps, delta = eps * self.pen_shrink, delta * self.pen_shrink
                 if eps < 1e-4:
@@ -3922,9 +4031,13 @@ class KLDualMaster(KLMaster):
         self.H = [lp.add_col(0.0, -INF, INF, [self.hrow[w]], [-1.0]) for w in range(S)]
         self.n_tangents = 0
         for w in range(S):
-            lp.add_row_with(-INF, 0.0, [self.kappa, self.t[w]], [-1.0, -1.0])
-            self._tangents(w, np.arange(-8.0, np.log(1.0 / self._ref[w]) + 0.25, 0.25))
+            self._epigraph(w)
         self.theta = None
+
+    def _epigraph(self, w):
+        """t_w >= kappa (exp((H_w - mu)/kappa) - 1): the asymptote and a grid of tangents."""
+        self.lp.add_row_with(-self.lp.INF, 0.0, [self.kappa, self.t[w]], [-1.0, -1.0])
+        self._tangents(w, np.arange(-8.0, np.log(1.0 / self._ref[w]) + 0.25, 0.25))
 
     def _tangents(self, w, ss):
         for s_ in ss:
@@ -3959,6 +4072,100 @@ class KLDualMaster(KLMaster):
         if rho.sum() <= 0.0:
             return np.array(self.probs)
         return rho / rho.sum()
+
+
+class KLConicMaster(KLDualMaster):
+    """KLDualMaster with the perspective term as an exponential cone, solved by MOSEK:
+
+        (t_w + kappa, kappa, H_w - mu) in K_exp   <=>   t_w >= kappa (exp((H_w - mu)/kappa) - 1)
+
+    one cone per scenario instead of the tangent rows, so the master is exact from the
+    first pass and nothing is separated: column generation without row generation,
+    the benchmark of the nested RCG. Everything else (pricing, stabilization, grid
+    columns, bounds) is KLDualMaster's.
+
+    The price is the solver. A conic interior point has no basis: every master is a
+    cold start (n=6, 12,000 columns: 0.6 s against 0.02 s for the warm simplex), and
+    its duals are feasible only to its tolerance (same master: 314 inequality rows
+    with a dual of the wrong sign, up to 7e-6, shared columns with a reduced cost of
+    -1e-5 of their cost), where the Lagrangian bound needs them feasible. _duals
+    repairs that, and the measure, before any pricing.
+    """
+    kl_master = 'conic'
+
+    def __init__(self, *args, **kw):
+        kw['lp_solver'] = 'mosek'
+        super().__init__(*args, **kw)
+
+    def _epigraph(self, w):
+        self.lp.add_expcone([(self.t[w], 1.0), (self.kappa, 1.0)], [(self.kappa, 1.0)],
+                            [(self.H[w], 1.0), (self.mu, -1.0)])
+
+    def _tangents(self, w, ss):
+        pass
+
+    def _separate_dist(self, lp_obj):
+        self._psi_main = kl_worst(self._scen_costs(self.lp.x), self.probs, self.kl_radius)[0]
+        return 0
+
+    def _rho_bar(self):
+        """The H rows' duals, pulled into the ball along the segment to rho_hat if the
+        interior point left them just outside (KL is convex and 0 at rho_hat)."""
+        rho = super()._rho_bar()
+        if kl_div(rho, self._ref) > self.kl_radius:
+            lo, hi = 0.0, 1.0
+            for _ in range(60):
+                mid = 0.5 * (lo + hi)
+                if kl_div(mid * rho + (1.0 - mid) * self._ref, self._ref) <= self.kl_radius:
+                    lo = mid
+                else:
+                    hi = mid
+            rho = lo * rho + (1.0 - lo) * self._ref
+        return rho
+
+    def _duals(self):
+        """Duals for pricing, made feasible for the Lagrangian bound: inequality rows
+        get pi <= 0, and every shared column (reserve, shortfall, peak; unbounded
+        above) a reduced cost >= 0. A column with coefficients -1 caps the sum of
+        |pi| over its rows at its cost: scale them down to it. One with +1 (reserve
+        sold) needs that sum to reach its payment: raise the |pi| of its rows, each
+        within the cap its shortfall column leaves."""
+        duals, conv = DirectMaster._duals(self)
+        rho = self._rho_bar()
+        for k, v in duals.items():
+            if k[0] not in CARRIERS and v > 0.0:
+                duals[k] = 0.0
+        cost = {k: self.x0_first[k] + sum(rho[w] * c for w, c in self.x0_scen[k].items())
+                for k in self.x0_rows}
+        cap = {}
+        for k, rows in self.x0_rows.items():
+            if rows and all(a < 0 for _, a in rows):
+                tot = sum(-duals.get(r, 0.0) * -a for r, a in rows)
+                if tot > cost[k]:
+                    f = max(cost[k], 0.0) / tot
+                    for r, _ in rows:
+                        duals[r] = duals.get(r, 0.0) * f
+                if len(rows) == 1:
+                    cap[rows[0][0]] = max(cost[k], 0.0) / -rows[0][1]
+        for k, rows in self.x0_rows.items():
+            if rows and all(a > 0 for _, a in rows):
+                short = -cost[k] - sum(-duals.get(r, 0.0) * a for r, a in rows)
+                if short > 0.0:
+                    room = {r: (cap[r] + duals.get(r, 0.0) if r in cap else np.inf)
+                            for r, _ in rows}
+                    free = [r for r, v in room.items() if not np.isfinite(v)]
+                    if free:
+                        for r, a in rows:
+                            if r in free:
+                                duals[r] = duals.get(r, 0.0) - short / (a * len(free))
+                    else:
+                        tot = sum(max(v, 0.0) * a for (r, a), v in zip(rows, room.values()))
+                        if tot >= short:
+                            for r, a in rows:
+                                duals[r] = duals.get(r, 0.0) - max(room[r], 0.0) * short / tot
+        for w, r in enumerate(rho):
+            duals[rho_key(w)] = float(r)
+        return duals, conv
 
 
 class BundleMaster(DirectMaster):
@@ -4233,9 +4440,10 @@ def solve_dwr_direct(players, T, scenarios, params, init_vals=None, dual_init=No
 def solve_dwr_kl(players, T, scenarios, params, init_vals=None, kl_radius=0.0,
                  kl_nested=False, kl_cut_frac=0.05, doi_markup=0.0, kl_master='cut',
                  kl_seed=None, **kw):
-    """The KL-ball DRO master, no exp cone: distribution cuts (KLMaster, 'cut') or
-    the dual form with tangent planes (KLDualMaster, 'dual')."""
-    cls = {'cut': KLMaster, 'dual': KLDualMaster}[kl_master]
+    """The KL-ball DRO master: distribution cuts (KLMaster, 'cut'), the dual form
+    with tangent planes (KLDualMaster, 'dual'), or the dual form with exponential
+    cones and no row generation (KLConicMaster, 'conic')."""
+    cls = {'cut': KLMaster, 'dual': KLDualMaster, 'conic': KLConicMaster}[kl_master]
     master = cls(players, T, scenarios, params, kl_radius=kl_radius,
                       kl_nested=kl_nested, kl_cut_frac=kl_cut_frac,
                       doi_markup=doi_markup, kl_seed=kl_seed, **kw)
@@ -4483,6 +4691,8 @@ def _configure_direct(args):
     if args.lp_mixed:
         DirectMaster.lp_mixed = True
     DirectMaster.doi_certify = args.doi_certify
+    DirectMaster.cg_budget = getattr(args, 'cg_budget', None)
+    DirectMaster.cg_target = getattr(args, 'cg_target_lb', None)
     if args.stall_reset is not None:
         DirectMaster.stall_reset = args.stall_reset
     DirectMaster.adm_units = args.adm_units
@@ -4628,14 +4838,9 @@ def _rewrite_ef(path, ef):
     return js
 
 
-def run(args):
-    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP
-    EF_TIME_CAP = getattr(args, 'ef_time_cap', EF_TIME_CAP) or None
-    EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
-    EF_KL_GRID = getattr(args, 'ef_kl_grid', EF_KL_GRID)
-    EF_KL_SINGLE = getattr(args, 'ef_kl_single', EF_KL_SINGLE)
-    if args.engine != 'direct':
-        raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
+def instance(args):
+    """The instance the command line describes: (players, T, base, name, scenarios).
+    Shared with the benchmarks, which must play the same game (coalition_bench.py)."""
     sys.path.insert(0, os.path.join(_PAPER, 'weak_eps_experiment'))
     from run_experiment import build_instance
     players, _, T, base, name = build_instance(args.n, day=args.day)
@@ -4662,6 +4867,19 @@ def run(args):
                           rho=args.rho,
                           price_carriers=tuple(args.price_carriers.split(',')),
                           load_carriers=tuple(args.load_carriers.split(',')))
+    return players, T, base, name, scen
+
+
+def run(args):
+    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP
+    EF_TIME_CAP = getattr(args, 'ef_time_cap', EF_TIME_CAP) or None
+    EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
+    EF_KL_GRID = getattr(args, 'ef_kl_grid', EF_KL_GRID)
+    EF_KL_SINGLE = getattr(args, 'ef_kl_single', EF_KL_SINGLE)
+    if args.engine != 'direct':
+        raise SystemExit(f"--engine {args.engine}: SCIP is not a supported solver here; use 'gurobi' or 'highs' (use --engine direct)")
+    players, T, base, name, scen = instance(args)
+    from run_experiment import RESERVE_BLOCK_HOURS as _BLK_DEFAULT
     kl = args.kl_radius is not None
     args.ef_gap = TABLE_EF_GAP if args.table else args.mip_gap
     mip_kw = dict(time_limit=args.mip_time_limit, gap=args.ef_gap,
@@ -4674,7 +4892,8 @@ def run(args):
         + ('_nopen' if args.no_penalty else '') \
         + (f'_direct-{args.lp_solver}' if args.engine == 'direct' else '') \
         + (f'_kl{args.kl_radius:g}' + ('_nested' if args.kl_nested else '')
-           + ('_dual' if args.kl_master == 'dual' else '') if kl else '') \
+           + ('_dual' if args.kl_master == 'dual' else
+              '_conic' if args.kl_master == 'conic' else '') if kl else '') \
         + ('_accdoi' if args.accept_doi_master else '') \
         + ('_ndw' if args.split_scenarios and args.mp12 else
            '_split' if args.split_scenarios else '_mp12' if args.mp12 else '') \
@@ -4958,6 +5177,12 @@ def build_parser():
     ap.add_argument('--mip-solver', default='gurobi', choices=['highs', 'gurobi'],
                     help='extensive form and stand-alone MILPs (DP_S^Omega)')
     ap.add_argument('--cg-time-limit', type=float, default=None)
+    ap.add_argument('--cg-target-lb', type=float, default=None,
+                    help='direct engine: stop column generation once its Lagrangian bound '
+                         "reaches this value (status 'target'; benchmarks)")
+    ap.add_argument('--cg-budget', type=float, default=None,
+                    help='direct engine: seconds after which column generation stops '
+                         "with what it has (status 'timelimit'; benchmarks)")
     ap.add_argument('--cold-start', action='store_true',
                     help='seed the master from zero-dual pricing instead of the EF solution')
     ap.add_argument('--doi', dest='doi', action='store_true', default=True,
@@ -5167,8 +5392,10 @@ def build_parser():
     ap.add_argument('--fallback-purge-age', type=int, default=None,
                     help='before the DOI switch-off, purge prosumer columns unused for '
                          'this many passes (default 0: off; did not help, see DirectMaster)')
-    ap.add_argument('--kl-master', default='dual', choices=['cut', 'dual'],
-                    help="KL: master form. 'dual' (default since 2026-10-06) = Love & "
+    ap.add_argument('--kl-master', default='dual', choices=['cut', 'dual', 'conic'],
+                    help="KL: master form. 'conic' = the dual form with exponential cones "
+                         "(MOSEK), no row generation: the benchmark (KLConicMaster). "
+                         "'dual' (default since 2026-10-06) = Love & "
                          "Bayraksan's dual with tangent planes, the rows eq:dwr_kl of the "
                          "manuscript's Algorithm 1; 'cut' = distribution cuts "
                          "(robust_core.md 2.3). n=60, day 3, |Omega|=20, r=0.096: CG "
