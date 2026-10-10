@@ -419,3 +419,21 @@ python ieee_owen/weak_eps_experiment/run_kl_bench.py --methods rcg,conic,flat,co
 - `run_kl_main.py`의 메모리 감시는 Windows API(ctypes)를 쓴다. Linux에서 돌리려면 `watched()`의 메모리 조회를 바꿔야 한다(미구현).
 - 한 번에 하나씩 돌린다(시간 측정). n=60 EF를 다시 푸는 실행은 12~14 GB를 쓴다.
 - 결과 폴더를 컴퓨터마다 따로 두면 표 스크립트가 섞지 않는다.
+
+#### (5) 벤치마크 중간 결과 (2026-10-10 저녁, 이 PC, 1~3일차)
+
+RCG 최종 하한에서 ω의 5% 이내에 닿는 시간 [s]. RCG는 주 실행 로그에서 어림한 값이고(같은 방식의 재측정 `rcg`가 큐에 있다), 원뿔 CG는 목표에서 멈춘 실측이다.
+
+| n | 날 | RCG | 원뿔 CG | 비고 |
+|---|---|---|---|---|
+| 6 | 1 / 2 / 3 | 69 / 56 / 52 | 125 / 97 / 119 | 1.7~2.3배 |
+| 15 | 1 / 2 / 3 | 540 / 508 / 372 | 571 / 728 / 526 | 1.1~1.4배 |
+| 30 | 1 | 651 | 미도달 | 5.02%에서 정체 (LB 3979.438, 목표 3979.439) |
+| 30 | 2 | 552 | 미도달 | 10.2%에서 정체 (약 1,600 s 이후 하한 +0.001) |
+| 30 | 3 | 573 | 3,572 | 6.2배 |
+
+- **원뿔 CG는 n=30에서 막바지 정밀도에 막힌다.** 마스터 풀이는 끝까지 반복당 5~9 s(합계 666~1,083 s)이고, 느려지는 것은 pricing이다(초반 반복당 1~8 s → 후반 60~117 s, 합계 2,500~2,900 s). 후반에는 반복마다 열이 약 180개씩 들어오는데 하한은 오르지 않는다. 내부점법 쌍대값의 정확도 한계로 추정하지만, 구현(쌍대값 정리 `_duals`, 열 채택 문턱 `adm`, MOSEK 허용 오차)을 다듬어 나아지는지는 확인하지 않았다.
+- **기준을 한 줄로 두면 표가 뭉개진다.** n=30 1일차, 기준별 도달 시간(RCG / 원뿔): 50% 493 / 570, 20% 548 / 714, 10% 590 / 956, 5% 651 / 미도달. 2일차: 50% 392 / 588, 20% 460 / 1,042, 10%·5% 미도달. 실행은 5% 목표나 예산에서 멈추고 로그에 시각(`t`)을 남기므로 느슨한 기준은 다시 돌리지 않고 계산된다(`run_kl_bench.time_to`). 표는 20% 기준 시간과 "예산 시점에 남은 차이"를 함께 적고, 시간별 하한 곡선을 그림으로 붙이는 안이 있다(미결정).
+- flat DW n=6: 1일차 314 s(자체 종료 613 s), 2일차 252 s(자체 종료 못 함). coalition generation n=6: 1,132 / 958 / 387 s에 수렴, 세 날 모두 cost of stability 0(core가 비어 있지 않음).
+- 원뿔 CG의 선행연구: Chicoisne (2023), "Computational aspects of column generation for nonlinear and conic optimization: classical and linearized schemes", Comput. Optim. Appl. 84(3), 789–831. 벤치마크로 쓸 때 인용한다. 그 논문의 linearized scheme과 우리 접평면 방식의 관계는 본문을 읽고 확인해야 한다(미확인).
+- 원고(`manuscript_ieee_uncertainty.tex`)의 `tab:results`와 `tab:runtime`의 EF·RCG 행은 `kl_paper_tables.py` 출력으로 채웠다(Overleaf 38fb32a). `\TBD`로 남은 칸: Prop. eps bound, 실제 ε(χ)의 n=6·15·60, OOS 표, single master·conic master 행.
