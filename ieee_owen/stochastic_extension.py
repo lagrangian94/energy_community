@@ -1888,6 +1888,9 @@ class _LP:
             self.task = mosek.Task()
             self.task.putobjsense(mosek.objsense.minimize)
             self.task.putintparam(mosek.iparam.intpnt_basis, mosek.basindtype.never)
+            # Tolerances stay at MOSEK's 1e-8. At 1e-10 the n=30 master stopped short
+            # of them in the first penalty round (solsta unknown, objectives apart),
+            # and at n=6 the master time rose from ~75 s to 102 s for nothing.
             self.nrow, self._lb, self._ub, self._expdom = 0, [], [], None
         else:
             raise ValueError(f"lp solver must be 'highs', 'gurobi' or 'mosek', got {backend!r}")
@@ -3114,6 +3117,10 @@ class DirectMaster:
     def _converged(self):
         return np.isfinite(self.ub) and self.ub - self.lb <= self._gap_tol(self.ub)
 
+    def _adm_floor(self, duals, conv, adm):
+        """Numerical zero for reduced costs: a column enters if it prices below -adm."""
+        return adm
+
     # hooks for the KL master (KLMaster); the plain master has no distribution cuts
     kl_nested, round_frac, doi_markup = False, 1.0, 0.0
     # (carrier, side) pairs left without a grid column, e.g. {('G', 'exp')}. At n=60,
@@ -3211,7 +3218,7 @@ class DirectMaster:
             tol = max(rel * (1.0 + abs(lp_obj)), self._omega_abs(), self._floor_tol(lp_obj))
             if self.pricing_abs:
                 self._set_pricing_abs(self._gap_tol(lp_obj))
-            adm = 1e-9 * (1.0 + abs(lp_obj))        # numerical zero for reduced costs
+            adm = self._adm_floor(duals, conv, 1e-9 * (1.0 + abs(lp_obj)))
             if self.adm_units:
                 adm = min(adm, 0.1 * tol / max(1, len(self.units)))
             self.iteration += 1
@@ -4095,6 +4102,7 @@ class KLConicMaster(KLDualMaster):
 
     def __init__(self, *args, **kw):
         kw['lp_solver'] = 'mosek'
+        self.rc_noise = []
         super().__init__(*args, **kw)
 
     def _epigraph(self, w):
@@ -4107,6 +4115,36 @@ class KLConicMaster(KLDualMaster):
     def _separate_dist(self, lp_obj):
         self._psi_main = kl_worst(self._scen_costs(self.lp.x), self.probs, self.kl_radius)[0]
         return 0
+
+    def _adm_floor(self, duals, conv, adm):
+        """The columns the master itself uses have reduced cost 0 at exact duals; what
+        they show at the interior point's repaired duals is noise, and a new column has
+        to beat it. With the simplex threshold (1e-9 |z|) every pass took ~200 columns
+        whose reduced costs of -0.02 to -0.06 EUR were that noise: n=30, day 2 added
+        them for 2,000 s with the bound standing still and the smoothing never seeing
+        a misprice. The largest |reduced cost| over the columns carrying weight is the
+        threshold instead. Read off the scenario-split units only: a prosumer with a
+        first stage sits in the master as MP1/MP2 pieces, whose reduced cost needs the
+        pattern rows' duals as well."""
+        noise = 0.0
+        for u in self.units:
+            if not isinstance(u, tuple):
+                continue
+            for h, col in zip(self.col_idx[u], self.columns[u]):
+                if self.lp.x(h) > 1e-3:
+                    rc = self._col_cost(col, duals) - sum(
+                        duals.get(k, 0.0) * a for k, a in col.coef.items()) - conv[u]
+                    noise = max(noise, abs(rc))
+        self.rc_noise.append(noise)
+        return max(adm, noise)
+
+    def solve(self, init_vals=None, init_cols=None, init_duals=None):
+        res = super().solve(init_vals, init_cols, init_duals)
+        if self.rc_noise:
+            res['kl']['rc_noise'] = {'median': float(np.median(self.rc_noise)),
+                                     'max': float(max(self.rc_noise)),
+                                     'last': float(self.rc_noise[-1])}
+        return res
 
     def _rho_bar(self):
         """The H rows' duals, pulled into the ball along the segment to rho_hat if the

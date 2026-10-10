@@ -437,3 +437,13 @@ RCG 최종 하한에서 ω의 5% 이내에 닿는 시간 [s]. RCG는 주 실행 
 - flat DW n=6: 1일차 314 s(자체 종료 613 s), 2일차 252 s(자체 종료 못 함). coalition generation n=6: 1,132 / 958 / 387 s에 수렴, 세 날 모두 cost of stability 0(core가 비어 있지 않음).
 - 원뿔 CG의 선행연구: Chicoisne (2023), "Computational aspects of column generation for nonlinear and conic optimization: classical and linearized schemes", Comput. Optim. Appl. 84(3), 789–831. 벤치마크로 쓸 때 인용한다. 그 논문의 linearized scheme과 우리 접평면 방식의 관계는 본문을 읽고 확인해야 한다(미확인).
 - 원고(`manuscript_ieee_uncertainty.tex`)의 `tab:results`와 `tab:runtime`의 EF·RCG 행은 `kl_paper_tables.py` 출력으로 채웠다(Overleaf 38fb32a). `\TBD`로 남은 칸: Prop. eps bound, 실제 ε(χ)의 n=6·15·60, OOS 표, single master·conic master 행.
+
+#### (6) 원뿔 CG의 최소 조정 (2026-10-10 밤)
+
+RCG는 여러 날 조정됐고 flat DW는 그 설정을 물려받았지만 원뿔 CG는 조정이 없었다. n=30의 막바지 정체가 방법의 한계인지 보려고 한 가지만 맞췄다.
+
+- **정체 원인.** n=30 2일차 후반 60여 회 반복 동안 매번 열이 약 210개 들어왔고 reduced cost는 −0.02~−0.06 €였다. 내부점법 쌍대값(과 `_duals`의 정리)의 오차 크기다. 채택 문턱이 simplex용(1e-9 |z| ≈ 4e-6 €)이라 전부 들어왔고, "열이 안 나오면 RMP 쌍대값에서 다시 pricing해 하한을 갱신"하는 장치가 한 번도 돌지 않아 하한이 2,000 s 동안 멈췄다.
+- **조정: 채택 문턱을 잡음 수준에 맞춘다(`KLConicMaster._adm_floor`).** 마스터가 가중치를 주고 있는 열은 정확한 쌍대값에서 reduced cost가 0이므로, 그 열들이 보이는 |reduced cost|의 최댓값을 잡음으로 보고 새 열은 그보다 좋아야 들어온다. 시나리오 분할 단위의 열에서만 읽는다(1단계가 있는 멤버는 MP1/MP2 조각 열이라 pattern 행의 쌍대값 없이는 reduced cost가 맞지 않는다. 처음에 이를 빼먹어 잡음이 수백으로 나오고 열이 하나도 안 들어왔다).
+- **시도했다가 뺀 것: MOSEK 허용 오차 1e-10.** n=30 첫 penalty 라운드에서 solsta unknown으로 마스터가 실패했고, n=6에서는 마스터 시간만 늘었다(약 75 → 102 s). 기본값 1e-8로 둔다.
+- **효과 (n=30 2일차, 기준별 도달 시간 [s], RCG / 조정 전 / 조정 후)**: 50% 392 / 588 / 985, 20% 460 / 1,042 / 1,135, 10% 509 / 미도달 / 1,250, 5% 552 / 미도달 / 1,365. pricing 2,506 → 442 s, 반복당 열 164 → 41개, 잡음 추정 중앙값 0.003 €(최대 0.042 €). 이제 시간의 대부분은 마스터다(920 s, 반복당 약 7 s). 초반은 조정 전보다 느리다.
+- 조정 전 결과는 `bench17_xi/conic_untuned/`와 `bench.csv`의 `conic_untuned` 행에 남겼다. 22:24부터 원뿔 CG를 전 크기 1~3일차 다시 돌린다(순서 conic → rcg → flat → coalgen).
