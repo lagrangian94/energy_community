@@ -4100,7 +4100,7 @@ class KLConicMaster(KLDualMaster):
     """
     kl_master = 'conic'
 
-    noise_after = 5
+    noise_after = 0
 
     def __init__(self, *args, **kw):
         kw['lp_solver'] = 'mosek'
@@ -4129,10 +4129,18 @@ class KLConicMaster(KLDualMaster):
         first stage sits in the master as MP1/MP2 pieces, whose reduced cost needs the
         pattern rows' duals as well.
 
-        Only once the bound has stood still for noise_after passes. While it rises the
-        simplex threshold is the better one: with the noise threshold from the first
-        pass, n=15, day 1 took 1,125 s to the target instead of 571 s, and n=6 162 s
-        instead of 125 s (fewer columns per pass early on)."""
+        noise_after > 0 holds the threshold back until the bound has stood still for
+        that many passes. Seconds to the bound (within 5% of omega of the RCG's):
+
+                                 n=6 d1   n=15 d1   n=30 d2
+            simplex threshold      125       571   stalls at 10%
+            noise, from pass 1     162     1,125     1,365
+            noise after 5 passes     -       635   10% at 1,816, 5% not in 2,700
+
+        From the first pass is the only one that gets there at n=30, at twice the
+        time on the small sizes (fewer columns per pass early on, more passes that
+        price nothing and re-solve the unpenalized twin). It is the default: the
+        benchmark has to finish where the comparison matters."""
         if self.lb > self._adm_lb + 1e-7 * (1.0 + abs(self.lb)):
             self._adm_lb, self._adm_it = self.lb, self.iteration
         if self.iteration - self._adm_it < self.noise_after:
