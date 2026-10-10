@@ -492,7 +492,8 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
 # Extensive form
 # =============================================================================
 def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
-                         solver='highs', kl_radius=None, log_file=None, release_scip=False):
+                         solver='highs', kl_radius=None, log_file=None, release_scip=False,
+                         improve=None):
     """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
 
     solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
@@ -502,7 +503,10 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
     appended across the KL refinement rounds; the console stays quiet.
     release_scip: with Gurobi, free the SCIP model once copied (ScenarioStack.
     release_model); the returned stack then has no .model.
+    improve: KL only, a better plan from a known one (_solve_extensive_kl).
     """
+    if improve is not None and kl_radius is None:
+        raise ValueError('improve is implemented for the KL extensive form only')
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
     gap = EF_GAP if gap is None else gap
@@ -515,7 +519,8 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
             raise ValueError('the KL-robust extensive form needs --mip-solver gurobi '
                              '(lazy constraints)')
         return _solve_extensive_kl(st, build, time_limit, gap, quiet, kl_radius,
-                                   log_file=log_file, release_scip=release_scip)
+                                   log_file=log_file, release_scip=release_scip,
+                                   improve=improve)
     if solver == 'gurobi':
         return _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=log_file,
                                        release_scip=release_scip)
@@ -765,6 +770,29 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
     }
 
 
+def _stall_stop(seconds, min_gain=0.0):
+    """Gurobi callback: stop once the incumbent has gained no more than min_gain over
+    the last `seconds` (min_gain 0: no new incumbent at all). Heuristic gains come in
+    lumps (n=60, day 3: 0.06 EUR in 18 minutes, then 0.8 at once), so the window
+    should be long."""
+    from gurobipy import GRB
+    hist = []                       # (runtime, incumbent) at every new incumbent
+
+    def cb(model, where):
+        if where == GRB.Callback.MIPSOL:
+            hist.append((model.cbGet(GRB.Callback.RUNTIME),
+                         min(model.cbGet(GRB.Callback.MIPSOL_OBJ),
+                             model.cbGet(GRB.Callback.MIPSOL_OBJBST))))
+        elif where == GRB.Callback.MIP:
+            now = model.cbGet(GRB.Callback.RUNTIME)
+            if now <= seconds:
+                return
+            old = [o for t, o in hist if t <= now - seconds]
+            if not hist or (old and old[-1] - hist[-1][1] <= min_gain):
+                model.terminate()
+    return cb
+
+
 def _kl_tangent(s):
     """Tangent of g(h, mu, lam) = lam (exp((h - mu)/lam) - 1) at the ratio s:
     g >= a (h - mu) + b lam with a = e^s, b = e^s - 1 - s e^s, for every h, mu and
@@ -804,7 +832,7 @@ def _kl_grid_fine(q, r, top_step=0.05, s_lo=-8.0, max_step=1.0):
 
 def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30,
                         log_file=None, round_gap=1e-3, prepare=None, budget=None,
-                        release_scip=False):
+                        release_scip=False, improve=None):
     """The KL-robust extensive form through the dual of the inner max
     (Love & Bayraksan, phi-divergence constrained two-stage programs, eq. 9):
 
@@ -840,6 +868,21 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     bounds, e.g. stochastic_core's KL separation fixing or bounding its z). budget:
     wall-clock seconds for ALL rounds together (time_limit caps each round); the
     last round's ObjBound is still a valid bound when it runs out.
+
+    improve: a better plan from a known one instead of a better bound (--ef-improve),
+    a dict with 'vals' (the plan), 'time' (seconds of MILP; 0 skips it), 'stop' (value
+    at which to stop, None: off), 'stall' and 'gain' (stop once the incumbent has
+    gained no more than 'gain' in 'stall' seconds, None: off), 'polish' and 'bound'
+    (a bound already proved). The reported omega is
+    psi(incumbent) - LB of the column generation, so the MILP's bound never enters it,
+    and at n=60 the bound is the weaker of the two anyway (below the CG LB on all 28
+    days the 30-minute cap stopped, 2026-10-10). The MILP starts from the plan with
+    MIPFocus 1 and with the exact tangents at the plan's own ratios, so the model
+    objective is psi at the plan and close to it around it: 'stop' is in psi's terms
+    and what the MILP gains is a gain in psi, not in the grid's underestimate of it
+    (~1e-4 |psi| at n=60). The polish then fixes every integer and re-optimises the
+    rest against the exact worst case, an LP per pass with the tangents at its own
+    ratios (n=6, day 3: 1e-4 EUR, i.e. the grid's error is not the plan's to recover).
     """
     import gurobipy as gp
     from gurobipy import GRB
@@ -901,12 +944,28 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         st.release_model()
     rounds, t0 = [], time.time()
     loose = gap if EF_KL_SINGLE else max(gap, round_gap)
+    cb, bound = None, -np.inf
+    if improve:
+        for n, v in gv.items():
+            if n in improve['vals']:
+                v.Start = improve['vals'][n]
+        rho0 = kl_worst(scen_costs(np.array([improve['vals'][n] for n in names])), q, radius)[1]
+        for w in np.nonzero(rho0 > 0)[0]:
+            add_tangents(w, [np.log(rho0[w] / q[w])])
+        g.Params.MIPFocus = 1
+        loose = 0.0                 # it ends on stop, stall or time, not on a gap
+        g.Params.TimeLimit = max(improve['time'], 1.0)
+        if improve.get('stop') is not None:
+            g.Params.BestObjStop = improve['stop']
+        if improve.get('stall'):
+            cb = _stall_stop(improve['stall'], improve.get('gain', 0.0))
+        max_rounds = 1 if improve['time'] > 0 else 0
     for k in range(max_rounds):
         g.Params.MIPGap = loose
         if budget is not None:
             left = max(1.0, budget - (time.time() - t0))
             g.Params.TimeLimit = min(left, time_limit) if time_limit else left
-        g.optimize()
+        g.optimize(cb)
         if g.SolCount == 0:
             raise RuntimeError(f'KL extensive form ({len(st.players)} players): no '
                                f'solution, status {g.Status}')
@@ -918,7 +977,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         rounds.append({'obj_model': g.ObjVal, 'bound': bound, 'psi': psi,
                        'time': g.Runtime, 'nodes': g.NodeCount, 'mip_gap': loose})
         tol = gap * max(1.0, abs(psi))
-        if psi - bound <= tol or EF_KL_SINGLE:
+        if psi - bound <= tol or EF_KL_SINGLE or improve:
             break
         if g.Status == GRB.TIME_LIMIT:
             break
@@ -946,20 +1005,70 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         for v, val in start.items():
             v.Start = val
     allv = [n for n in gv]
-    vals = dict(zip(allv, g.getAttr('X', [gv[n] for n in allv])))
+    status = {2: 'optimal', 9: 'timelimit', 11: 'stall', 15: 'objstop'}.get(g.Status, str(g.Status))
+    imp = None
+    if improve:
+        if rounds:
+            vals = dict(zip(allv, g.getAttr('X', [gv[n] for n in allv])))
+            imp = {'status': status, 'time_mip': rounds[-1]['time'],
+                   'obj_model': rounds[-1]['obj_model'], 'psi_mip': psi}
+        else:
+            vals = dict(improve['vals'])
+            x = np.array([vals[n] for n in names])
+            c = scen_costs(x)
+            psi, rho, eta = kl_worst(c, q, radius)
+            psi += off
+            status, imp = 'start', {'status': 'start', 'time_mip': 0.0, 'psi_mip': psi}
+        bound = max(bound, improve.get('bound', -np.inf))
+        lam_x, mu_x = (lam.X, mu.X) if rounds else (float('nan'), float('nan'))
+        if improve.get('polish', True):
+            # integers fixed at the plan, the rest against the exact worst case
+            tp = time.time()
+            for n in allv:
+                if gv[n].VType != GRB.CONTINUOUS:
+                    gv[n].LB = gv[n].UB = round(vals[n])
+                    gv[n].VType = GRB.CONTINUOUS
+            g.Params.TimeLimit = GRB.INFINITY
+            g.Params.BestObjStop = -GRB.INFINITY
+            passes = []
+            for _ in range(50):
+                g.optimize()
+                if g.Status != GRB.OPTIMAL:
+                    passes.append({'status': g.Status})
+                    break
+                xp = np.array(g.getAttr('X', gvars))
+                cp = scen_costs(xp)
+                psi_p, rho_p, eta_p = kl_worst(cp, q, radius)
+                psi_p += off
+                passes.append({'lp': g.ObjVal, 'psi': psi_p})
+                if psi_p < psi:
+                    psi, rho, eta, c = psi_p, rho_p, eta_p, cp
+                    vals = dict(zip(allv, g.getAttr('X', [gv[n] for n in allv])))
+                    lam_x, mu_x = lam.X, mu.X
+                if psi_p - g.ObjVal <= 1e-7 * max(1.0, abs(psi_p)):
+                    break
+                for w in np.nonzero(rho_p > 0)[0]:
+                    add_tangents(w, [np.log(rho_p[w] / q[w])])
+            imp.update({'psi_polish': psi, 'passes': passes, 'time_polish': time.time() - tp})
+    else:
+        vals = dict(zip(allv, g.getAttr('X', [gv[n] for n in allv])))
+        lam_x, mu_x = lam.X, mu.X
     vals = {n: vals[n] for n in st.vars}
     fc, per = st.cost_split(vals)
     bound = min(bound, psi)
-    return {
-        'stack': st, 'status': {2: 'optimal', 9: 'timelimit'}.get(g.Status, str(g.Status)),
+    out = {
+        'stack': st, 'status': status,
         'obj': psi, 'dual_bound': bound, 'gap': (psi - bound) / max(abs(psi), 1e-10),
         'vals': vals, 'first_cost': fc, 'scen_cost': per,
         'worth_cost': [fc + x for x in per],
         'time_build': build, 'time_solve': time.time() - t0,
         'kl': {'radius': radius, 'rho': rho.tolist(), 'eta': eta,
                'kl': kl_div(rho, q), 'expected_cost': float(q @ c) + off,
-               'solves': len(rounds), 'refinements': rounds, 'lambda': lam.X, 'mu': mu.X},
+               'solves': len(rounds), 'refinements': rounds, 'lambda': lam_x, 'mu': mu_x},
     }
+    if imp is not None:
+        out['improve'] = imp
+    return out
 
 
 class PlayerPricing:
@@ -4471,6 +4580,54 @@ def solve_deterministic(players, T, params, ef_gap=None, omega_tol=None, time_li
     }
 
 
+def _merge_improved(prev, new):
+    """The extensive-form record after --ef-improve: the better of the two plans, the
+    better of the two bounds, both solves' time, and what the re-solve did."""
+    rec = dict(new['improve'], obj_before=prev['obj'], bound_before=prev['dual_bound'],
+               status_before=prev['status'], time_before=prev['time_solve'],
+               adopted=bool(new['obj'] < prev['obj']))
+    out = dict(new if rec['adopted'] else prev)
+    out['dual_bound'] = min(max(prev['dual_bound'], new['dual_bound']), out['obj'])
+    out['gap'] = (out['obj'] - out['dual_bound']) / max(abs(out['obj']), 1e-10)
+    out['time_solve'] = prev['time_solve'] + new['time_solve']
+    out['time_build'] = prev['time_build']
+    out['n_vars'], out['first_stage_names'] = prev['n_vars'], prev['first_stage_names']
+    out['improve'] = rec
+    return out
+
+
+def _rewrite_ef(path, ef):
+    """Put a re-solved extensive form into a finished run's JSON. The column
+    generation is not repeated: sigma, LB and UB are the run's own, and omega, eps, Ex
+    and chi follow from them as in robust_allocation. What the run reported first
+    stays under 'ef_first'."""
+    with open(path) as f:
+        js = json.load(f)
+    al, dw, n = js['allocation'], js['dw'], js['n']
+    was = js['ef']['obj'] - sum(dw['sigma'].values())
+    if abs(was - al['omega_LR']) > 1e-6 * max(1.0, abs(js['ef']['obj'])):
+        raise RuntimeError(f'{path}: omega {al["omega_LR"]} is not EF - sum sigma ({was})')
+    js.setdefault('ef_first', {'ef': js['ef'], 'omega_LR': al['omega_LR'],
+                               'eps_LR': al['eps_LR'],
+                               'omega_interval': al['omega_interval']})
+    omega = ef['obj'] - sum(dw['sigma'].values())
+    ex = {u: al['owen'][u] - omega / n for u in al['owen']}
+    al.update({'omega_LR': omega, 'eps_LR': omega / n, 'Ex': ex,
+               'omega_interval': [ef['dual_bound'] - dw['ub'], ef['obj'] - dw['lb']],
+               'budget_residual': abs(sum(ex.values()) + ef['obj']),
+               'duality_residual': omega - (ef['obj'] - dw['lb'])})
+    js['chi_LR'] = {u: ex[u] - js['standalone'][u] for u in ex}
+    js['ef'] = {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
+                                      'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
+                'cached': True, 'improve': ef['improve']}
+    js['ef_first_stage'] = {k: ef['vals'][k] for k in ef['first_stage_names']
+                            if abs(ef['vals'][k]) > 1e-9}
+    js['kl']['ef'] = ef['kl']
+    with open(path, 'w') as f:
+        json.dump(_jsonable(js), f, indent=1)
+    return js
+
+
 def run(args):
     global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP
     EF_TIME_CAP = getattr(args, 'ef_time_cap', EF_TIME_CAP) or None
@@ -4541,6 +4698,8 @@ def run(args):
         print(f'deterministic model on scenario 0: {det.model.getObjVal():.6f}')
 
     print('\n[1] extensive form (DP_N^Omega)')
+    ef = prev = None
+    improving = getattr(args, 'ef_improve', None) is not None
     if args.ef_cache and os.path.exists(args.ef_cache):
         # the same instance's EF from an earlier run (another CG configuration):
         # everything but the SCIP stack, which nothing downstream needs
@@ -4549,16 +4708,38 @@ def run(args):
             ef = pickle.load(f)
         ef['cached'] = True
         print(f'  (read from {args.ef_cache})')
-    else:
+        if improving:
+            prev, ef = ef, None
+    elif improving:
+        raise SystemExit('--ef-improve starts from the plan in --ef-cache, which is not there')
+    if ef is None:
+        imp = None if prev is None else {
+            'vals': prev['vals'], 'time': args.ef_improve, 'stop': args.ef_improve_stop,
+            'stall': args.ef_improve_stall, 'gain': args.ef_improve_gain,
+            'polish': not args.ef_improve_no_polish,
+            'bound': prev['dual_bound']}
         # --dual-init re-solves the EF's LP from its SCIP model (duals_from_ef)
         ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
-                                  release_scip=args.dual_init == 'none', **mip_kw)
+                                  release_scip=args.dual_init == 'none', improve=imp,
+                                  **mip_kw)
         st = ef['stack']
         ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
         ef['first_stage_names'] = sorted(ef['stack'].first_stage)
+        if prev is not None:
+            ef = _merge_improved(prev, ef)
+            ef['cached'] = True
+            r = ef['improve']
+            print(f'  improve: psi {r["obj_before"]:.6f} -> MILP {r["psi_mip"]:.6f} '
+                  f'({r["status"]}, {r["time_mip"]:.0f}s)'
+                  + (f' -> polish {r["psi_polish"]:.6f} ({len(r["passes"])} LP, '
+                     f'{r["time_polish"]:.0f}s)' if 'psi_polish' in r else '')
+                  + f'  adopted {r["adopted"]}')
         if args.ef_cache:
             import pickle
             os.makedirs(os.path.dirname(os.path.abspath(args.ef_cache)), exist_ok=True)
+            kept = os.path.splitext(args.ef_cache)[0] + '.first.pkl'
+            if prev is not None and not os.path.exists(kept):
+                os.replace(args.ef_cache, kept)       # the plan the run was made with
             with open(args.ef_cache, 'wb') as f:
                 pickle.dump({k: v for k, v in ef.items() if k != 'stack'}, f)
     print(f'  obj {ef["obj"]:.6f}  status {ef["status"]}  gap {ef["gap"]:.2e}  '
@@ -4573,6 +4754,16 @@ def run(args):
                   f'{rd["time"]:.1f}s  {rd["nodes"]:.0f} nodes  psi-bound '
                   f'{(rd["psi"] - rd["bound"]) / max(abs(rd["psi"]), 1.0):.2e}  '
                   f'psi-incumbent {(rd["psi"] - rd["obj_model"]) / max(abs(rd["psi"]), 1.0):.2e}')
+    path = os.path.join(args.out, f'{tag}.json')
+    if prev is not None and os.path.exists(path):
+        js = _rewrite_ef(path, ef)
+        was, al = js['ef_first'], js['allocation']
+        print(f'\n[3] robust Owen allocation, column generation as it was\n'
+              f'  omega_LR,rob {was["omega_LR"]:.6f} -> {al["omega_LR"]:.6f}  '
+              f'eps_LR {was["eps_LR"]:.6f} -> {al["eps_LR"]:.6f}  certified '
+              f'[{al["omega_interval"][0]:.6f}, {al["omega_interval"][1]:.6f}]')
+        print(f'\nrewrote {path}')
+        return None
     if args.ef_only:
         return None
 
@@ -4722,7 +4913,6 @@ def run(args):
                             if k != 'rho' and (not kl or dw['duals'][rho_key(w)] > 0)},
     }
     os.makedirs(args.out, exist_ok=True)
-    path = os.path.join(args.out, f'{tag}.json')
     with open(path, 'w') as f:
         json.dump(_jsonable(out), f, indent=1)
     try:
@@ -4807,6 +4997,22 @@ def build_parser():
     ap.add_argument('--ef-nodefile-start', type=float, default=None,
                     help='Gurobi NodefileStart [GB] for the extensive form: B&B nodes '
                          'beyond it go to disk (default: off)')
+    ap.add_argument('--ef-improve', type=float, default=None, metavar='SECONDS',
+                    help='KL EF: from the plan in --ef-cache, look for a better one '
+                         '(MIPFocus 1, then the LP polish of _solve_extensive_kl) for this '
+                         "long (0: polish only); a finished run's JSON gets the new omega "
+                         'and eps with its own column generation, and nothing else runs')
+    ap.add_argument('--ef-improve-stop', type=float, default=None,
+                    help='--ef-improve: stop once the plan is worth this (e.g. the CG '
+                         'lower bound plus the omega of the days solved to the gap)')
+    ap.add_argument('--ef-improve-stall', type=float, default=1200.0,
+                    help='--ef-improve: stop once the incumbent has gained no more than '
+                         '--ef-improve-gain in this many seconds (default 1200; 0: off)')
+    ap.add_argument('--ef-improve-gain', type=float, default=0.0,
+                    help='--ef-improve: the gain [EUR] below which --ef-improve-stall '
+                         'counts as a stall (default 0: any new incumbent keeps it going)')
+    ap.add_argument('--ef-improve-no-polish', action='store_true',
+                    help='--ef-improve: MILP only')
     ap.add_argument('--ef-log', default=None,
                     help='write the Gurobi log of the extensive form (bound, incumbent, '
                          'gap per node line) to this file')

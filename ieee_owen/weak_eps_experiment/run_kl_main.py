@@ -84,20 +84,24 @@ def radius(scen):
     return float(chi2.ppf(1 - ALPHA, 1) / (2 * scen))
 
 
-def run_one(n, scen, day, a):
+def command(n, scen, day, out, ef_round_limit=10800, nodefile=3.0, ef_log=None):
+    """The stochastic_extension.py call of one run of the queue."""
     tag = f'n{n}_S{scen}_day{day}'
-    log = os.path.join(a.out, 'logs', f'{tag}.log')
-    if os.path.exists(log) and 'wrote ' in open(log, encoding='utf-8', errors='replace').read():
-        return None
+    return [sys.executable, os.path.join('ieee_owen', 'stochastic_extension.py'),
+            '--n', str(n), '--scenarios', str(scen), '--day', str(day),
+            '--kl-radius', repr(radius(scen)), '--kl-master', 'dual',
+            '--reserve-price-scale', repr(PRICE_SCALE), '--stall-barrier',
+            '--mip-time-limit', str(ef_round_limit), '--ef-nodefile-start', str(nodefile),
+            '--ef-cache', os.path.join(out, 'ef_cache', f'{tag}.pkl'),
+            '--ef-log', ef_log or os.path.join(out, 'logs', f'{tag}_ef_gurobi.log'),
+            '--tag', 'main', '--out', out]
+
+
+def watched(cmd, log, min_free_gb):
+    """Run cmd with its output in log, polling the interpreter's memory; kill it if
+    the machine's available memory falls below min_free_gb. Returns
+    (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed)."""
     os.makedirs(os.path.dirname(log), exist_ok=True)
-    cmd = [sys.executable, os.path.join('ieee_owen', 'stochastic_extension.py'),
-           '--n', str(n), '--scenarios', str(scen), '--day', str(day),
-           '--kl-radius', repr(radius(scen)), '--kl-master', 'dual',
-           '--reserve-price-scale', repr(PRICE_SCALE), '--stall-barrier',
-           '--mip-time-limit', str(a.ef_round_limit), '--ef-nodefile-start', str(a.nodefile),
-           '--ef-cache', os.path.join(a.out, 'ef_cache', f'{tag}.pkl'),
-           '--ef-log', os.path.join(a.out, 'logs', f'{tag}_ef_gurobi.log'),
-           '--tag', 'main', '--out', a.out]
     env = dict(os.environ, PYTHONHASHSEED='21', PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8')
     t0 = time.time()
     with open(log, 'w', encoding='utf-8') as f:
@@ -116,7 +120,7 @@ def run_one(n, scen, day, a):
                 peak_ws = max(peak_ws, c.PeakWorkingSetSize / 2**30)
             free = avail_gb()
             min_free = min(min_free, free)
-            if free < a.min_free:
+            if free < min_free_gb:
                 p.kill()
                 if kid:
                     subprocess.run(['taskkill', '/F', '/T', '/PID', str(kid)],
@@ -129,8 +133,17 @@ def run_one(n, scen, day, a):
         c = mem(h)
         peak_priv = max(peak_priv, c.PeakPagefileUsage / 2**30)
         peak_ws = max(peak_ws, c.PeakWorkingSetSize / 2**30)
+    return rc, time.time() - t0, peak_priv, peak_ws, min_free, killed
+
+
+def run_one(n, scen, day, a):
+    log = os.path.join(a.out, 'logs', f'n{n}_S{scen}_day{day}.log')
+    if os.path.exists(log) and 'wrote ' in open(log, encoding='utf-8', errors='replace').read():
+        return None
+    rc, wall, peak_priv, peak_ws, min_free, killed = watched(
+        command(n, scen, day, a.out, a.ef_round_limit, a.nodefile), log, a.min_free)
     row = (f'{time.strftime("%Y-%m-%d %H:%M")},{n},{scen},{day},{radius(scen):.6g},{rc},'
-           f'{time.time() - t0:.0f},{peak_priv:.2f},{peak_ws:.2f},{min_free:.2f},{int(killed)}')
+           f'{wall:.0f},{peak_priv:.2f},{peak_ws:.2f},{min_free:.2f},{int(killed)}')
     csv = os.path.join(a.out, 'runs.csv')
     new = not os.path.exists(csv)
     with open(csv, 'a') as f:
