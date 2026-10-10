@@ -4100,9 +4100,11 @@ class KLConicMaster(KLDualMaster):
     """
     kl_master = 'conic'
 
+    noise_after = 5
+
     def __init__(self, *args, **kw):
         kw['lp_solver'] = 'mosek'
-        self.rc_noise = []
+        self.rc_noise, self._adm_lb, self._adm_it = [], -np.inf, 0
         super().__init__(*args, **kw)
 
     def _epigraph(self, w):
@@ -4125,7 +4127,16 @@ class KLConicMaster(KLDualMaster):
         a misprice. The largest |reduced cost| over the columns carrying weight is the
         threshold instead. Read off the scenario-split units only: a prosumer with a
         first stage sits in the master as MP1/MP2 pieces, whose reduced cost needs the
-        pattern rows' duals as well."""
+        pattern rows' duals as well.
+
+        Only once the bound has stood still for noise_after passes. While it rises the
+        simplex threshold is the better one: with the noise threshold from the first
+        pass, n=15, day 1 took 1,125 s to the target instead of 571 s, and n=6 162 s
+        instead of 125 s (fewer columns per pass early on)."""
+        if self.lb > self._adm_lb + 1e-7 * (1.0 + abs(self.lb)):
+            self._adm_lb, self._adm_it = self.lb, self.iteration
+        if self.iteration - self._adm_it < self.noise_after:
+            return adm
         noise = 0.0
         for u in self.units:
             if not isinstance(u, tuple):
