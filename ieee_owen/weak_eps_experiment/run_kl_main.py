@@ -10,10 +10,14 @@ child interpreter is the one measured); if the machine's available memory falls
 below --min-free GB the run is killed and the queue moves on. One row per run goes
 to <out>/runs.csv.
 
+On Linux the memory comes from /proc: peak_ws is the kernel's peak resident set
+(VmHWM) and peak_private the largest anonymous + swapped size seen at a poll, so a
+spike between two polls is in the first and not in the second.
+
     python ieee_owen/weak_eps_experiment/run_kl_main.py                 # whole queue
     python ieee_owen/weak_eps_experiment/run_kl_main.py --scen 20 --n 6,15 --days 1-3
 """
-import os, sys, time, argparse, subprocess, ctypes, ctypes.wintypes as wt
+import os, sys, time, argparse, subprocess
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_HERE))
@@ -26,58 +30,108 @@ PRICE_SCALE = 17.0 / 56.0
 ALPHA = 0.05
 POLL = 30
 
-k32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
-k32.OpenProcess.restype = wt.HANDLE
-k32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
-k32.CreateToolhelp32Snapshot.restype = wt.HANDLE
-psapi.GetProcessMemoryInfo.argtypes = [wt.HANDLE, ctypes.c_void_p, wt.DWORD]
+if os.name == 'nt':
+    import ctypes, ctypes.wintypes as wt
+
+    k32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+    k32.OpenProcess.restype = wt.HANDLE
+    k32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+    k32.CreateToolhelp32Snapshot.restype = wt.HANDLE
+    psapi.GetProcessMemoryInfo.argtypes = [wt.HANDLE, ctypes.c_void_p, wt.DWORD]
 
 
-class PMC(ctypes.Structure):
-    _fields_ = [('cb', wt.DWORD), ('PageFaultCount', wt.DWORD),
-                ('PeakWorkingSetSize', ctypes.c_size_t), ('WorkingSetSize', ctypes.c_size_t),
-                ('a', ctypes.c_size_t), ('b', ctypes.c_size_t), ('c', ctypes.c_size_t),
-                ('d', ctypes.c_size_t), ('PagefileUsage', ctypes.c_size_t),
-                ('PeakPagefileUsage', ctypes.c_size_t)]
+    class PMC(ctypes.Structure):
+        _fields_ = [('cb', wt.DWORD), ('PageFaultCount', wt.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t), ('WorkingSetSize', ctypes.c_size_t),
+                    ('a', ctypes.c_size_t), ('b', ctypes.c_size_t), ('c', ctypes.c_size_t),
+                    ('d', ctypes.c_size_t), ('PagefileUsage', ctypes.c_size_t),
+                    ('PeakPagefileUsage', ctypes.c_size_t)]
 
 
-class MSX(ctypes.Structure):
-    _fields_ = [('dwLength', wt.DWORD), ('dwMemoryLoad', wt.DWORD)] + \
-               [(f'u{i}', ctypes.c_ulonglong) for i in range(7)]
+    class MSX(ctypes.Structure):
+        _fields_ = [('dwLength', wt.DWORD), ('dwMemoryLoad', wt.DWORD)] + \
+                   [(f'u{i}', ctypes.c_ulonglong) for i in range(7)]
 
 
-class PE32(ctypes.Structure):
-    _fields_ = [('dwSize', wt.DWORD), ('cntUsage', wt.DWORD), ('th32ProcessID', wt.DWORD),
-                ('th32DefaultHeapID', ctypes.c_size_t), ('th32ModuleID', wt.DWORD),
-                ('cntThreads', wt.DWORD), ('th32ParentProcessID', wt.DWORD),
-                ('pcPriClassBase', ctypes.c_long), ('dwFlags', wt.DWORD),
-                ('szExeFile', ctypes.c_char * 260)]
+    class PE32(ctypes.Structure):
+        _fields_ = [('dwSize', wt.DWORD), ('cntUsage', wt.DWORD), ('th32ProcessID', wt.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_size_t), ('th32ModuleID', wt.DWORD),
+                    ('cntThreads', wt.DWORD), ('th32ParentProcessID', wt.DWORD),
+                    ('pcPriClassBase', ctypes.c_long), ('dwFlags', wt.DWORD),
+                    ('szExeFile', ctypes.c_char * 260)]
 
 
-def avail_gb():
-    m = MSX(); m.dwLength = ctypes.sizeof(m)
-    k32.GlobalMemoryStatusEx(ctypes.byref(m))
-    return m.u1 / 2**30                                  # ullAvailPhys
+    def avail_gb():
+        m = MSX(); m.dwLength = ctypes.sizeof(m)
+        k32.GlobalMemoryStatusEx(ctypes.byref(m))
+        return m.u1 / 2**30                                  # ullAvailPhys
 
 
-def child_of(pid):
-    snap = k32.CreateToolhelp32Snapshot(0x2, 0)
-    e = PE32(); e.dwSize = ctypes.sizeof(e)
-    ok = k32.Process32First(snap, ctypes.byref(e))
-    found = None
-    while ok:
-        if e.th32ParentProcessID == pid:
-            found = e.th32ProcessID
-            break
-        ok = k32.Process32Next(snap, ctypes.byref(e))
-    k32.CloseHandle(snap)
-    return found
+    def child_of(pid):
+        snap = k32.CreateToolhelp32Snapshot(0x2, 0)
+        e = PE32(); e.dwSize = ctypes.sizeof(e)
+        ok = k32.Process32First(snap, ctypes.byref(e))
+        found = None
+        while ok:
+            if e.th32ParentProcessID == pid:
+                found = e.th32ProcessID
+                break
+            ok = k32.Process32Next(snap, ctypes.byref(e))
+        k32.CloseHandle(snap)
+        return found
 
 
-def mem(handle):
-    c = PMC(); c.cb = ctypes.sizeof(c)
-    psapi.GetProcessMemoryInfo(handle, ctypes.byref(c), c.cb)
-    return c
+    def mem(handle):
+        c = PMC(); c.cb = ctypes.sizeof(c)
+        psapi.GetProcessMemoryInfo(handle, ctypes.byref(c), c.cb)
+        return c
+
+
+    def probe(p):
+        """(pid, handle) of the interpreter behind the launcher p, once it is there."""
+        kid = child_of(p.pid)
+        return (kid, k32.OpenProcess(0x1410, False, kid)) if kid else (None, None)
+
+
+    def peaks(handle):
+        c = mem(handle)
+        return c.PeakPagefileUsage / 2**30, c.PeakWorkingSetSize / 2**30
+
+
+    def kill(p, kid):
+        p.kill()
+        if kid:
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(kid)], capture_output=True)
+
+
+else:
+    def avail_gb():
+        for ln in open('/proc/meminfo'):
+            if ln.startswith('MemAvailable:'):
+                return int(ln.split()[1]) / 2**20
+        return float('inf')
+
+
+    def probe(p):
+        return p.pid, p.pid                  # no launcher: p is the interpreter
+
+
+    def peaks(pid):
+        """(anonymous + swapped now, peak resident) [GB]; zeros once the process is gone."""
+        kb = {}
+        try:
+            for ln in open(f'/proc/{pid}/status'):
+                key, _, val = ln.partition(':')
+                if key in ('RssAnon', 'VmSwap', 'VmHWM'):
+                    kb[key] = int(val.split()[0])
+        except OSError:
+            pass
+        return ((kb.get('RssAnon', 0) + kb.get('VmSwap', 0)) / 2**20,
+                kb.get('VmHWM', 0) / 2**20)
+
+
+    def kill(p, kid):
+        p.kill()                             # pricing workers are threads: no tree
 
 
 def radius(scen):
@@ -108,31 +162,24 @@ def watched(cmd, log, min_free_gb, kill_after=None):
         p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
         kid, h = None, None
         peak_priv = peak_ws = 0.0
-        min_free, killed = 99.0, False
+        min_free, killed = float('inf'), False
         while p.poll() is None:
             if h is None:                    # the interpreter may not be spawned yet
-                kid = child_of(p.pid)
-                if kid:
-                    h = k32.OpenProcess(0x1410, False, kid)
+                kid, h = probe(p)
             if h:
-                c = mem(h)
-                peak_priv = max(peak_priv, c.PeakPagefileUsage / 2**30)
-                peak_ws = max(peak_ws, c.PeakWorkingSetSize / 2**30)
+                priv, ws = peaks(h)
+                peak_priv, peak_ws = max(peak_priv, priv), max(peak_ws, ws)
             free = avail_gb()
             min_free = min(min_free, free)
             if free < min_free_gb or (kill_after and time.time() - t0 > kill_after):
-                p.kill()
-                if kid:
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(kid)],
-                                   capture_output=True)
+                kill(p, kid)
                 killed = True
                 break
             time.sleep(POLL if h else 2)
         rc = p.wait()
     if h:
-        c = mem(h)
-        peak_priv = max(peak_priv, c.PeakPagefileUsage / 2**30)
-        peak_ws = max(peak_ws, c.PeakWorkingSetSize / 2**30)
+        priv, ws = peaks(h)
+        peak_priv, peak_ws = max(peak_priv, priv), max(peak_ws, ws)
     return rc, time.time() - t0, peak_priv, peak_ws, min_free, killed
 
 
