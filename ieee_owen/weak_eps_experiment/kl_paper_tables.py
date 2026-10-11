@@ -125,10 +125,59 @@ def main():
         ok = [float(f['alg_s']) for f in rows if f['status'] == 'converged']
         cg.append(cell(ok, 0) if ok else (r'\TBD{$>3{,}600$}' if rows else r'\TBD{--}'))
         conv.append(rf'\TBD{{{len(ok)}/{len(rows)}}}' if rows else r'\TBD{--}')
+    # time to the bound: first moment the Lagrangian bound is within 5% of omega of the
+    # RCG's final bound (run_kl_bench.py), on the days the benchmarks ran. The RCG's
+    # own time by the same measure comes from the main runs' logs.
+    import run_kl_bench as RB
+    here = os.getcwd()
+
+    def to_bound(method, n):
+        rows = B.get((method, n), [])
+        got = [float(f['t_target']) for f in rows if f['status'] == 'target']
+        return got, len(rows)
+
+    days_run = sorted({int(f['day']) for (m, _), rs in B.items() if m in ('conic', 'flat')
+                       for f in rs})
+    rcg = {}
+    for n in SIZES:
+        for d in days_run:
+            f = glob.glob(os.path.join(MAIN, f'{n}p_*_day{d}_S{a.scen}_*_main.json'))
+            if f:
+                j = json.load(open(f[0]))
+                rcg[(n, d)] = RB.time_to(j['cg_log'], RB.target(n, a.scen, d), j['dw']['time'])
+    os.chdir(here)
+    w(r'\midrule')
+    w(f'% time to the bound, days {days_run}: geometric mean over the days it is reached '
+      f'(reached/run)')
+    w(r'RCG, nested master & '
+      + ' & '.join(num(gm([rcg[(n, d)] for d in days_run if (n, d) in rcg]), 0) for n in SIZES)
+      + r' \\')
+    ratio = {}
+    for name, m in ((r'CG, conic master', 'conic'), (r'RCG, single master', 'flat')):
+        cells = []
+        for n in SIZES:
+            rows = B.get((m, n), [])
+            hit = [f for f in rows if np.isfinite(float(f['t_target']))]
+            got = [float(f['t_target']) for f in hit]
+            if not rows:
+                cells.append('--')
+            elif not got:
+                cells.append(rf'$>3{{,}}600$ (0/{len(rows)})')
+            else:
+                cells.append(num(gm(got), 0)
+                             + (f' ({len(got)}/{len(rows)})' if len(got) < len(rows) else ''))
+                ratio[(m, n)] = gm(got) / gm([rcg[(n, int(f['day']))] for f in hit])
+        w(f'{name} & ' + ' & '.join(cells) + r' \\')
+    os.chdir(here)
     w(r'\midrule')
     w(r'Coalition generation & ' + ' & '.join(cg) + r' \\')
     w(r'\quad converged & ' + ' & '.join(conv) + r' \\')
     w('')
+    w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
+    for m in ('conic', 'flat'):
+        w(f'% {m}: ' + ', '.join(
+            f'n={n}: ' + (f'{ratio[(m, n)]:.1f}x' if ratio.get((m, n)) else 'not reached / not run')
+            for n in SIZES))
     w('% ---- quoted in the text')
     g = {n: gm(R[n]['g']) for n in SIZES}
     e = {n: gm(R[n]['eps']) for n in SIZES}

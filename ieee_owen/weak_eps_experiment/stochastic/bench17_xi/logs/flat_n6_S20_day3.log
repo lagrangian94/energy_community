@@ -1,0 +1,64 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 6p_reserve_peak_day3_S20_seed0_grb_direct-gurobi_kl0.0960365_dual_rsc0.303571_flat: n=6, |T|=24, |Omega|=20 ===
+
+[1] extensive form (DP_N^Omega)
+  (read from ieee_owen\weak_eps_experiment\stochastic\main17_xi\ef_cache\n6_S20_day3.pkl)
+  obj 557.113136  status optimal  gap 2.39e-04  5.5s  vars 26084
+  KL r=0.0960365: worst case 557.113136 vs expected 483.281516; 1 MILP solve(s); rho* 0.062 0.043 0.062 0.042 0.041 0.134 0.027 0.033 0.031 0.048 0.034 0.036 0.055 0.033 0.029 0.062 0.062 0.046 0.035 0.085 (KL 0.0960)
+    round 1: MIPGap 1e-04  5.5s  288 nodes  psi-bound 2.39e-04  psi-incumbent 2.39e-04
+
+[2] column generation (DWR_N^Omega)
+Set parameter Username
+Set parameter LicenseID to value 2742039
+Academic license - for non-commercial use only - expires 2026-11-20
+  seed columns: largest carrier-row residual 1.67e-16 (repaired)
+  CG    2 | RMP      -79.7689 | LB      -56.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.06s solver 0.05s 1074 it 9698 cols 30396 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP -79.7689 LB -56.1985 UB 557.1131 gap 1.10e+00 [round] 0s
+  CG   25 | RMP      498.8783 | LB      464.5456 | UB      557.1131 | a 0.10 smooth   | min rc -4.2165e+01 | +2 | lp 0.08s solver 0.07s 525 it 9753 cols 104518 nz
+  CG   34 | RMP      495.9934 | LB      494.4736 | UB      557.1131 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.11s solver 0.10s 750 it 9775 cols 133921 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 495.9934 LB 494.4736 UB 557.1131 gap 1.12e-01 [round] 9s
+  CG   50 | RMP      549.5003 | LB      524.5777 | UB      557.1131 | a 0.10 smooth   | min rc -2.0635e+01 | +2 | lp 0.19s solver 0.18s 1256 it 9805 cols 169958 nz
+  CG   75 | RMP      545.0251 | LB      532.6918 | UB      557.1131 | a 0.10 smooth   | min rc -1.3242e+01 | +2 | lp 0.18s solver 0.18s 743 it 9855 cols 234659 nz
+  CG  100 | RMP      542.8775 | LB      536.1530 | UB      557.1131 | a 0.10 smooth   | min rc -5.7690e+00 | +2 | lp 0.16s solver 0.15s 495 it 9905 cols 303870 nz
+  CG  125 | RMP      542.0085 | LB      537.7956 | UB      557.1131 | a 0.10 smooth   | min rc -9.5030e+00 | +2 | lp 0.20s solver 0.19s 543 it 9934 cols 343631 nz
+  CG  150 | RMP      541.1699 | LB      538.9552 | UB      557.1131 | a 0.10 smooth   | min rc -9.0805e+00 | +2 | lp 0.16s solver 0.15s 440 it 9944 cols 357775 nz
+  CG  171 | RMP      540.5235 | LB      539.7424 | UB      557.1131 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.24s solver 0.22s 573 it 9960 cols 382477 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 540.5235 LB 539.7424 UB 557.1131 gap 3.11e-02 [round] 62s
+  CG  175 | RMP      546.5763 | LB      539.7424 | UB      557.1131 | a 0.10 smooth   | min rc -1.0873e+01 | +2 | lp 0.52s solver 0.51s 1215 it 9966 cols 391014 nz
+  CG  200 | RMP      545.0737 | LB      540.4170 | UB      557.1131 | a 0.10 smooth   | min rc -9.6323e+00 | +2 | lp 0.28s solver 0.27s 632 it 10008 cols 448982 nz
+  CG  225 | RMP      544.4760 | LB      540.8974 | UB      557.1131 | a 0.10 smooth   | min rc -4.6879e+00 | +2 | lp 0.40s solver 0.39s 833 it 10047 cols 500389 nz
+  CG  250 | RMP      544.0440 | LB      541.3006 | UB      557.1131 | a 0.10 smooth   | min rc -3.7004e+00 | +2 | lp 0.34s solver 0.33s 687 it 10065 cols 525268 nz
+  CG  275 | RMP      543.8200 | LB      541.6243 | UB      557.1131 | a 0.10 smooth   | min rc -3.1379e+00 | +2 | lp 0.37s solver 0.36s 697 it 10085 cols 552852 nz
+  CG  300 | RMP      543.6144 | LB      541.7576 | UB      557.1131 | a 0.10 smooth   | min rc -4.0202e+00 | +2 | lp 0.30s solver 0.29s 527 it 10086 cols 552567 nz
+  CG  325 | RMP      543.4492 | LB      541.9461 | UB      557.1131 | a 0.10 smooth   | min rc -2.5029e+00 | +2 | lp 0.52s solver 0.50s 852 it 10095 cols 558014 nz
+  CG  350 | RMP      543.3704 | LB      542.2271 | UB      557.1131 | a 0.10 smooth   | min rc -2.4316e+00 | +2 | lp 0.43s solver 0.42s 588 it 10129 cols 603334 nz
+  CG  352 | RMP      543.3648 | LB      542.2499 | UB      557.1131 | a 1.00 std      | min rc  0.0000e+00 | +0  [target] | lp 0.39s solver 0.38s 551 it 10118 cols 588451 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 543.3648 LB 542.2499 UB 557.1131 gap 2.66e-02 [target] 170s
+  obj 557.113136  LB 542.249937  gap 2.66e-02  iters 352  171.0s  rounds 4  status target
+  KL r=0.0960365: 980 tangent planes; rho* 0.061 0.043 0.063 0.040 0.042 0.134 0.026 0.033 0.031 0.048 0.034 0.036 0.055 0.033 0.029 0.062 0.063 0.048 0.035 0.084 (KL 0.0960)
+  time: master LP 98.0s  pricing 66.7s (2088 MILPs, 6 worker(s))
+
+[3] robust Owen allocation
+  omega_LR,rob 14.840847  eps_LR 2.473475  certified [-0.132996, 14.863199]
+  EF slack 0.1330 = 1% of the reported omega
+  checks: budget 1.14e-13  duality -2.24e-02  pricing 0.00e+00
+   player         Owen        E[x*]        alone       chi^LR
+       u1    1119.7729    1117.2994          nan          nan
+       u2      24.8350      22.3616          nan          nan
+       u3     506.8527     504.3792          nan          nan
+       u4    -746.4239    -748.8974          nan          nan
+       u5    -418.8653    -421.3388          nan          nan
+       u6   -1028.4436   -1030.9171          nan          nan
+
+wrote ieee_owen\weak_eps_experiment\stochastic\bench17_xi\6p_reserve_peak_day3_S20_seed0_grb_direct-gurobi_kl0.0960365_dual_rsc0.303571_flat.json
