@@ -934,7 +934,11 @@ class CoreComputation:
             # objective magnitude. Use a relative tolerance (≈ MIPGap·|c(S)|) with an
             # absolute floor, rather than a fixed 1e-4 that only held for near-exact
             # solves and spuriously tripped with the Gurobi separation path.
-            verify_tol = max(1e-4, 2e-4 * abs(coalition_cost))
+            # The separation's gap is relative to ITS objective, the violation, which
+            # is not small when c(S) is: 6p day 14 (KL, |Omega|=20) had c(S) = -9.15
+            # under a violation of 499.005 with bound 499.055, and the exact 499.0547,
+            # inside that bracket, tripped a tolerance of 2e-4 * 9.15.
+            verify_tol = max(1e-4, 2e-4 * max(abs(coalition_cost), abs(violation)))
             if self.last_separation_truncated:
                 # A cut-off incumbent may carry a suboptimal dispatch for the coalition
                 # it selects, so its objective only bounds the true violation from
