@@ -1,0 +1,732 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+======================================================================
+Core Computation Initialized
+Players: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+Number of players: 6
+Time periods: 24
+======================================================================
+
+  c^KL0.0960365(['u1']) = -905.9213  (0.3s)
+  c^KL0.0960365(['u2']) = 0.0000  (0.5s)
+  c^KL0.0960365(['u3']) = -266.4303  (0.2s)
+  c^KL0.0960365(['u4']) = 824.8716  (0.0s)
+  c^KL0.0960365(['u5']) = 523.2154  (0.1s)
+  c^KL0.0960365(['u6']) = 1154.0447  (0.0s)
+
+======================================================================
+STARTING ROW GENERATION ALGORITHM
+Time limit: 3600 seconds
+======================================================================
+
+======================================================================
+Initializing Master Problem
+======================================================================
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u4', 'u5', 'u6']) = 323.8682  (7.0s)
+
+Grand coalition cost c(N): 323.8682
+
+Adding 6 initial coalition constraints:
+  Added constraint for ['u1']: Σp[i] <= -905.9213 + v
+  Added constraint for ['u2']: Σp[i] <= 0.0000 + v
+  Added constraint for ['u3']: Σp[i] <= -266.4303 + v
+  Added constraint for ['u4']: Σp[i] <= 824.8716 + v
+  Added constraint for ['u5']: Σp[i] <= 523.2154 + v
+  Added constraint for ['u6']: Σp[i] <= 1154.0447 + v
+======================================================================
+
+Convergence tolerance: 1.0e-06 relative -> 3.249e-04 (|c(N)| = 323.9)
+
+======================================================================
+ITERATION 1
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1911.8332
+    u2: 0.0000
+    u3: -266.4303
+    u4: 824.8716
+    u5: 523.2154
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1911.8332446944341, 'u2': 0.0, 'u3': -266.43031424215127, 'u4': 824.8716283930343, 'u5': 523.2154348869058, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u2', 'u3', 'u4', 'u5', 'u6']  violation 437.7627  bound 437.7630  (12.0s, 3486 binaries)
+  c^KL0.0960365(['u2', 'u3', 'u4', 'u5', 'u6']) = 1798.0567  (3.6s)
+
+Verification:
+  Coalition payoff sum: 2235.7015
+  Coalition cost c(S): 1798.0567
+  Actual violation (Σ payoffs - cost): 437.6448
+  Separation problem violation: 437.7627
+  Found coalition: ['u2', 'u3', 'u4', 'u5', 'u6']
+============================================================
+
+Adding violated coalition ['u2', 'u3', 'u4', 'u5', 'u6'] to master problem
+  Added constraint for ['u2', 'u3', 'u4', 'u5', 'u6']: Σp[i] <= 1798.0567 + v
+
+======================================================================
+ITERATION 2
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1382.6334
+    u2: -176.4000
+    u3: -442.8303
+    u4: 824.8716
+    u5: 346.8155
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1382.6333905510646, 'u2': -176.39995138112317, 'u3': -442.8302656232745, 'u4': 824.8716283930343, 'u5': 346.8154835057826, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u3', 'u4', 'u6']  violation 123.3942  bound 123.3942  (15.7s, 3486 binaries)
+  c^KL0.0960365(['u3', 'u4', 'u6']) = 1412.6919  (0.1s)
+
+Verification:
+  Coalition payoff sum: 1536.0861
+  Coalition cost c(S): 1412.6919
+  Actual violation (Σ payoffs - cost): 123.3942
+  Separation problem violation: 123.3942
+  Found coalition: ['u3', 'u4', 'u6']
+============================================================
+
+Adding violated coalition ['u3', 'u4', 'u6'] to master problem
+  Added constraint for ['u3', 'u4', 'u6']: Σp[i] <= 1412.6919 + v
+
+======================================================================
+ITERATION 3
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1036.5437
+    u2: 0.0000
+    u3: -266.4303
+    u4: 387.2269
+    u5: 85.5707
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1036.5437393680577, 'u2': 0.0, 'u3': -266.43031424215127, 'u4': 387.22687572984614, 'u5': 85.57068222371754, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u6']  violation 570.9060  bound 570.9062  (11.4s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u6']) = -719.8301  (8.5s)
+
+Verification:
+  Coalition payoff sum: -148.9293
+  Coalition cost c(S): -719.8301
+  Actual violation (Σ payoffs - cost): 570.9008
+  Separation problem violation: 570.9060
+  Found coalition: ['u1', 'u2', 'u3', 'u6']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u3', 'u6'] to master problem
+  Added constraint for ['u1', 'u2', 'u3', 'u6']: Σp[i] <= -719.8301 + v
+
+======================================================================
+ITERATION 4
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1474.1885
+    u2: -133.2560
+    u3: -266.4303
+    u4: 525.0775
+    u5: 518.6209
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1474.188492031246, 'u2': -133.2560420120626, 'u3': -266.43031424215127, 'u4': 525.0774687938638, 'u5': 518.6208838349507, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u3', 'u6']  violation 289.9781  bound 289.9781  (10.7s, 3486 binaries)
+  c^KL0.0960365(['u3', 'u6']) = 597.6363  (0.2s)
+
+Verification:
+  Coalition payoff sum: 887.6144
+  Coalition cost c(S): 597.6363
+  Actual violation (Σ payoffs - cost): 289.9781
+  Separation problem violation: 289.9781
+  Found coalition: ['u3', 'u6']
+============================================================
+
+Adding violated coalition ['u3', 'u6'] to master problem
+  Added constraint for ['u3', 'u6']: Σp[i] <= 597.6363 + v
+
+======================================================================
+ITERATION 5
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1317.4664
+    u2: 0.0000
+    u3: -556.4085
+    u4: 815.0556
+    u5: 228.6427
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1317.466394389199, 'u2': 0.0, 'u3': -556.4084538962609, 'u4': 815.0556084479733, 'u5': 228.6427441808412, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u4', 'u6']  violation 153.5902  bound 153.5903  (21.0s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u4', 'u6']) = -58.3647  (7.2s)
+
+Verification:
+  Coalition payoff sum: 95.2255
+  Coalition cost c(S): -58.3647
+  Actual violation (Σ payoffs - cost): 153.5902
+  Separation problem violation: 153.5902
+  Found coalition: ['u1', 'u2', 'u3', 'u4', 'u6']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u3', 'u4', 'u6'] to master problem
+  Added constraint for ['u1', 'u2', 'u3', 'u4', 'u6']: Σp[i] <= -58.3647 + v
+
+======================================================================
+ITERATION 6
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1474.1885
+    u2: 0.0000
+    u3: -566.2245
+    u4: 824.8716
+    u5: 385.3648
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1474.188492031246, 'u2': 0.0, 'u3': -566.2244738413219, 'u4': 824.8716283930343, 'u5': 385.36484182288814, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u2', 'u4', 'u6']  violation 16.5611  bound 16.5611  (17.6s, 3486 binaries)
+  c^KL0.0960365(['u2', 'u4', 'u6']) = 1962.3553  (0.8s)
+
+Verification:
+  Coalition payoff sum: 1978.9164
+  Coalition cost c(S): 1962.3553
+  Actual violation (Σ payoffs - cost): 16.5611
+  Separation problem violation: 16.5611
+  Found coalition: ['u2', 'u4', 'u6']
+============================================================
+
+Adding violated coalition ['u2', 'u4', 'u6'] to master problem
+  Added constraint for ['u2', 'u4', 'u6']: Σp[i] <= 1962.3553 + v
+
+======================================================================
+ITERATION 7
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1474.1885
+    u2: 0.0000
+    u3: -549.6634
+    u4: 815.0556
+    u5: 385.3648
+    u6: 1147.2997
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1474.188492031246, 'u2': 0.0, 'u3': -549.6633648285281, 'u4': 815.0556084479733, 'u5': 385.36484182288814, 'u6': 1147.2996534953036}
+  stochastic separation: S = ['u2', 'u3', 'u4', 'u6']  violation 1.5916  bound 1.5916  (58.7s, 3486 binaries)
+  c^KL0.0960365(['u2', 'u3', 'u4', 'u6']) = 1411.1096  (6.4s)
+
+Verification:
+  Coalition payoff sum: 1412.6919
+  Coalition cost c(S): 1411.1096
+  Actual violation (Σ payoffs - cost): 1.5823
+  Separation problem violation: 1.5916
+  Found coalition: ['u2', 'u3', 'u4', 'u6']
+============================================================
+
+Adding violated coalition ['u2', 'u3', 'u4', 'u6'] to master problem
+  Added constraint for ['u2', 'u3', 'u4', 'u6']: Σp[i] <= 1411.1096 + v
+
+======================================================================
+ITERATION 8
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1474.1885
+    u2: -137.8506
+    u3: -566.2245
+    u4: 824.8716
+    u5: 523.2154
+    u6: 1154.0447
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1474.188492031246, 'u2': -137.85059306401763, 'u3': -566.2244738413218, 'u4': 824.8716283930343, 'u5': 523.2154348869058, 'u6': 1154.0447425630364}
+  stochastic separation: S = ['u4', 'u5', 'u6']  violation 23.1563  bound 23.1563  (14.9s, 3486 binaries)
+  c^KL0.0960365(['u4', 'u5', 'u6']) = 2478.9756  (0.1s)
+
+Verification:
+  Coalition payoff sum: 2502.1318
+  Coalition cost c(S): 2478.9756
+  Actual violation (Σ payoffs - cost): 23.1563
+  Separation problem violation: 23.1563
+  Found coalition: ['u4', 'u5', 'u6']
+============================================================
+
+Adding violated coalition ['u4', 'u5', 'u6'] to master problem
+  Added constraint for ['u4', 'u5', 'u6']: Σp[i] <= 2478.9756 + v
+
+======================================================================
+ITERATION 9
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -905.9213
+    u2: 0.0000
+    u3: -266.4303
+    u4: 824.8716
+    u5: 523.2154
+    u6: 148.1328
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -905.921338727025, 'u2': 0.0, 'u3': -266.43031424215127, 'u4': 824.8716283930343, 'u5': 523.2154348869058, 'u6': 148.1328365956275}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u4', 'u5']  violation 708.6819  bound 708.6828  (14.7s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u4', 'u5']) = -532.8989  (7.0s)
+
+Verification:
+  Coalition payoff sum: 175.7354
+  Coalition cost c(S): -532.8989
+  Actual violation (Σ payoffs - cost): 708.6343
+  Separation problem violation: 708.6819
+  Found coalition: ['u1', 'u2', 'u3', 'u4', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u3', 'u4', 'u5'] to master problem
+  Added constraint for ['u1', 'u2', 'u3', 'u4', 'u5']: Σp[i] <= -532.8989 + v
+  [Time check at iteration 10] Elapsed: 221.6s / 3600s
+
+======================================================================
+ITERATION 10
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -905.9213
+    u2: 0.0000
+    u3: -670.6759
+    u4: 520.4829
+    u5: 523.2154
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -905.921338727025, 'u2': 0.0, 'u3': -670.6759417105694, 'u4': 520.482917741909, 'u5': 523.2154348869058, 'u6': 856.7671747151709}
+  stochastic separation: S = ['u1', 'u2', 'u5']  violation 422.3599  bound 422.3955  (13.9s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u5']) = -805.1010  (3.5s)
+
+Verification:
+  Coalition payoff sum: -382.7059
+  Coalition cost c(S): -805.1010
+  Actual violation (Σ payoffs - cost): 422.3951
+  Separation problem violation: 422.3599
+  Found coalition: ['u1', 'u2', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u5'] to master problem
+  Added constraint for ['u1', 'u2', 'u5']: Σp[i] <= -805.1010 + v
+
+======================================================================
+ITERATION 11
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -905.9213
+    u2: -422.3951
+    u3: -266.4303
+    u4: 538.6324
+    u5: 523.2154
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -905.921338727025, 'u2': -422.3951082704234, 'u3': -266.43031424215127, 'u4': 538.6323985439142, 'u5': 523.2154348869058, 'u6': 856.767174715171}
+  stochastic separation: S = ['u1', 'u3', 'u5']  violation 198.8482  bound 198.8482  (13.5s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u3', 'u5']) = -847.9844  (0.4s)
+
+Verification:
+  Coalition payoff sum: -649.1362
+  Coalition cost c(S): -847.9844
+  Actual violation (Σ payoffs - cost): 198.8482
+  Separation problem violation: 198.8482
+  Found coalition: ['u1', 'u3', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u3', 'u5'] to master problem
+  Added constraint for ['u1', 'u3', 'u5']: Σp[i] <= -847.9844 + v
+
+======================================================================
+ITERATION 12
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = -0.000000
+  Payoffs:
+    u1: -905.9213
+    u2: -422.3951
+    u3: -465.2785
+    u4: 737.4806
+    u5: 523.2154
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -905.921338727025, 'u2': -422.3951082704234, 'u3': -465.2785157731423, 'u4': 737.4806000749053, 'u5': 523.2154348869058, 'u6': 856.7671747151709}
+  stochastic separation: S = ['u1', 'u4', 'u5']  violation 244.7391  bound 244.7394  (17.5s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u4', 'u5']) = 110.0356  (0.5s)
+
+Verification:
+  Coalition payoff sum: 354.7747
+  Coalition cost c(S): 110.0356
+  Actual violation (Σ payoffs - cost): 244.7391
+  Separation problem violation: 244.7391
+  Found coalition: ['u1', 'u4', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u4', 'u5'] to master problem
+  Added constraint for ['u1', 'u4', 'u5']: Σp[i] <= 110.0356 + v
+
+======================================================================
+ITERATION 13
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1028.2909
+    u2: -300.0255
+    u3: -342.9089
+    u4: 615.1110
+    u5: 523.2154
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1028.2909072098846, 'u2': -300.02553978756396, 'u3': -342.90894729028287, 'u4': 615.111031592046, 'u5': 523.2154348869058, 'u6': 856.7671747151708}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u5']  violation 76.1406  bound 76.1461  (40.4s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u5']) = -1224.1065  (5.7s)
+
+Verification:
+  Coalition payoff sum: -1148.0100
+  Coalition cost c(S): -1224.1065
+  Actual violation (Σ payoffs - cost): 76.0966
+  Separation problem violation: 76.1406
+  Found coalition: ['u1', 'u2', 'u3', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u3', 'u5'] to master problem
+  Added constraint for ['u1', 'u2', 'u3', 'u5']: Σp[i] <= -1224.1065 + v
+
+======================================================================
+ITERATION 14
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -944.5128
+    u2: -383.8036
+    u3: -426.6870
+    u4: 531.3330
+    u5: 523.2154
+    u6: 1024.3233
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -944.512845967997, 'u2': -383.80360102945156, 'u3': -426.68700853217047, 'u4': 531.3329703501583, 'u5': 523.2154348869058, 'u6': 1024.323297198946}
+  stochastic separation: S = ['u1', 'u3', 'u5', 'u6']  violation 165.3935  bound 165.3935  (15.8s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u3', 'u5', 'u6']) = 10.9454  (0.9s)
+
+Verification:
+  Coalition payoff sum: 176.3389
+  Coalition cost c(S): 10.9454
+  Actual violation (Σ payoffs - cost): 165.3935
+  Separation problem violation: 165.3935
+  Found coalition: ['u1', 'u3', 'u5', 'u6']
+============================================================
+
+Adding violated coalition ['u1', 'u3', 'u5', 'u6'] to master problem
+  Added constraint for ['u1', 'u3', 'u5', 'u6']: Σp[i] <= 10.9454 + v
+
+======================================================================
+ITERATION 15
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1027.2096
+    u2: -301.1069
+    u3: -419.0055
+    u4: 614.0297
+    u5: 523.2154
+    u6: 933.9451
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1027.2095820067566, 'u2': -301.106864990692, 'u3': -419.0055076785227, 'u4': 614.0297063889179, 'u5': 523.2154348869058, 'u6': 933.9450603065388}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u5', 'u6']  violation 74.5718  bound 74.5729  (23.4s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u3', 'u5', 'u6']) = -364.7344  (8.3s)
+
+Verification:
+  Coalition payoff sum: -290.1615
+  Coalition cost c(S): -364.7344
+  Actual violation (Σ payoffs - cost): 74.5729
+  Separation problem violation: 74.5718
+  Found coalition: ['u1', 'u2', 'u3', 'u5', 'u6']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u3', 'u5', 'u6'] to master problem
+  Added constraint for ['u1', 'u2', 'u3', 'u5', 'u6']: Σp[i] <= -364.7344 + v
+
+======================================================================
+ITERATION 16
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = -0.000000
+  Payoffs:
+    u1: -1097.0691
+    u2: -90.2649
+    u3: -552.6695
+    u4: 824.8716
+    u5: 382.2330
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1097.0690535163849, 'u2': -90.26494298657553, 'u3': -552.6695440912714, 'u4': 824.8716283930343, 'u5': 382.23298439241773, 'u6': 856.7671747151708}
+  stochastic separation: S = ['u1', 'u2', 'u4', 'u5']  violation 195.1297  bound 195.1297  (17.0s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u2', 'u4', 'u5']) = -175.3591  (5.8s)
+
+Verification:
+  Coalition payoff sum: 19.7706
+  Coalition cost c(S): -175.3591
+  Actual violation (Σ payoffs - cost): 195.1297
+  Separation problem violation: 195.1297
+  Found coalition: ['u1', 'u2', 'u4', 'u5']
+============================================================
+
+Adding violated coalition ['u1', 'u2', 'u4', 'u5'] to master problem
+  Added constraint for ['u1', 'u2', 'u4', 'u5']: Σp[i] <= -175.3591 + v
+
+======================================================================
+ITERATION 17
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -968.9239
+    u2: -383.8036
+    u3: -266.4303
+    u4: 696.7264
+    u5: 382.2330
+    u6: 864.0666
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -968.923867551028, 'u2': -383.80360102945156, 'u3': -266.43031424215127, 'u4': 696.7264424276773, 'u5': 382.23298439241785, 'u6': 864.0666029089268}
+  stochastic separation: S = ['u1', 'u3', 'u4', 'u6']  violation 259.9394  bound 259.9394  (11.1s, 3486 binaries)
+  c^KL0.0960365(['u1', 'u3', 'u4', 'u6']) = 65.4995  (0.9s)
+
+Verification:
+  Coalition payoff sum: 325.4389
+  Coalition cost c(S): 65.4995
+  Actual violation (Σ payoffs - cost): 259.9394
+  Separation problem violation: 259.9394
+  Found coalition: ['u1', 'u3', 'u4', 'u6']
+============================================================
+
+Adding violated coalition ['u1', 'u3', 'u4', 'u6'] to master problem
+  Added constraint for ['u1', 'u3', 'u4', 'u6']: Σp[i] <= 65.4995 + v
+
+======================================================================
+ITERATION 18
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -1347.1924
+    u2: -123.8642
+    u3: -268.9469
+    u4: 824.8716
+    u5: 382.2330
+    u6: 856.7672
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1347.1924369954436, 'u2': -123.86419760533204, 'u3': -268.9469059934563, 'u4': 824.8716283930343, 'u5': 382.23298439241785, 'u6': 856.7671747151709}
+  stochastic separation: S = ['u3', 'u4']  violation 1.1735  bound 1.1735  (41.0s, 3486 binaries)
+  c^KL0.0960365(['u3', 'u4']) = 554.7512  (0.2s)
+
+Verification:
+  Coalition payoff sum: 555.9247
+  Coalition cost c(S): 554.7512
+  Actual violation (Σ payoffs - cost): 1.1735
+  Separation problem violation: 1.1735
+  Found coalition: ['u3', 'u4']
+============================================================
+
+Adding violated coalition ['u3', 'u4'] to master problem
+  Added constraint for ['u3', 'u4']: Σp[i] <= 554.7512 + v
+
+======================================================================
+ITERATION 19
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = -0.000000
+  Payoffs:
+    u1: -1347.1924
+    u2: -123.8642
+    u3: -270.1204
+    u4: 824.8716
+    u5: 382.2330
+    u6: 857.9407
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -1347.1924369954436, 'u2': -123.86419760533204, 'u3': -270.12039140667116, 'u4': 824.8716283930343, 'u5': 382.23298439241785, 'u6': 857.9406601283857}
+  stochastic separation: S = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']  violation 0.0291  bound 0.0291  (208.3s, 3486 binaries)
+
+Verification:
+  Coalition payoff sum: 323.8682
+  Coalition cost c(S): 323.8682
+  Actual violation (Σ payoffs - cost): 0.0000
+  Separation problem violation: 0.0291
+  Found coalition: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6']
+============================================================
+  Separation returned ['u1', 'u2', 'u3', 'u4', 'u5', 'u6'], already a master row; its violation 0.029074 is MIP-gap noise, the master's 0.000000 decides
+
+======================================================================
+COST-OF-STABILITY ROW GENERATION CONVERGED
+Converged after 19 iterations
+Cost of stability   v* = -0.000000
+Weak-eps-core eps = v*/n = -0.000000
+Core non-empty (v*≈0): True
+
+Budget-balanced weak-eps-core allocation (Σ q_i = c(N)):
+  Player u1: -1347.1924
+  Player u2: -123.8642
+  Player u3: -270.1204
+  Player u4: 824.8716
+  Player u5: 382.2330
+  Player u6: 857.9407
+  Total: 323.8682
+======================================================================
+
+
+coalition generation: converged True  655.1s  19 coalitions  weak eps -0.000000
+wrote ieee_owen/weak_eps_experiment/stochastic/bench17_xi_cykim/coalgen_n6_S20_day2.json
