@@ -17,10 +17,10 @@ CONVENTIONS.
   its incumbent. A day whose extensive form was re-solved later (resolve_ef.py) is
   read from 'ef_first', the 30-minute plan, so every day follows the same rule
   (kl_experiment_plan.md, sec. 8.11).
-- eps(chi) measured: no Dinkelbach (sec. 8.12). A single member j gains
-  val({j}) - chi_j by leaving, which bounds eps(chi) from below, and eps_K bounds it
-  from above; where the two agree on every day the cell is exact. Printed only for
-  the sizes at which a member gains on all days.
+- eps(chi) is not a row: without Dinkelbach (sec. 8.12) it is exact only where all
+  coalitions are valued. A single member j gains val({j}) - chi_j by leaving, which
+  bounds eps(chi) from below, and eps_K bounds it from above; how often the two meet
+  is counted in the comments below the tables, for the text to quote.
 - tab:oos is the budget side of Proposition prop:true. 'promised' is the value the
   plan was chosen by (v^DR(N), or the sample-average value at r = 0) and 'delivered'
   the mean of the same first stage over the test sample; the budget holds on a day
@@ -153,12 +153,6 @@ def main():
     row(r'$g_K^{\mathrm{LR\text{-}DR}}$', 'g', 2)
     w(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}=g_K^{\mathrm{LR\text{-}DR}}/n$ & '
       + ' & '.join(cell(R[n]['eps'], 3) for n in SIZES) + r' \\')
-    w(r'\midrule')
-    meas = []
-    for n in SIZES:
-        s = np.array(R[n]['single'])
-        meas.append(num(gm(s), 3) if len(s) >= DAYS and (s > 0).all() else r'\TBD{--}')
-    w(r'$\varepsilon(\chi^{\mathrm{LR\text{-}DR}})$ measured & ' + ' & '.join(meas) + r' \\')
     w('')
     w('% ---- tab:runtime')
     w(r'Solving $\vdr{N}$ & ' + ' & '.join(cell(R[n]['t_ef'], 0) for n in SIZES) + r' \\')
