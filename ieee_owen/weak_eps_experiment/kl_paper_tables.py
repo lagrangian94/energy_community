@@ -211,7 +211,8 @@ def main():
     os.chdir(here)
     w(r'\midrule')
     w(r'Coalition generation$^{b}$ & ' + ' & '.join(cg) + r' \\')
-    w(r'\quad converged & ' + ' & '.join(conv) + r' \\')
+    w('% coalition generation converged on (days/run): ' + ', '.join(
+        f'n={n}: {c}' for n, c in zip(SIZES, conv)))
     w('')
     w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
     for m in ('conic', 'flat'):
