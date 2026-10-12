@@ -39,7 +39,9 @@ MAIN = os.path.join(_HERE, 'stochastic', 'main17_xi')
 BENCH = os.path.join(_HERE, 'stochastic', 'bench17_xi')
 # coalition generation ran on another machine (kl_experiment_plan.md, sec. 8.14): 31 days
 # at n=6, days 1-3 at n=15, nothing beyond. Its times do not compare with the other rows
-# one to one (about 1.5 times faster on this method), which the table's note says.
+# one to one (about 1.5 times faster on this method). The manuscript's table carries no
+# note on machines or days (sec. 8.16): the rows print bare numbers and the comments of
+# the generated file say what each rests on.
 COALGEN = os.path.join(_HERE, 'stochastic', 'bench17_xi_cykim')
 OOS = os.path.join(_HERE, 'stochastic', 'oos17_xi')
 SIZES = (6, 15, 30, 60)
@@ -194,23 +196,25 @@ def main():
                   for n in SIZES))
     ratio = {}
     for name, m in ((r'CG, conic master', 'conic'), (r'RCG, single master', 'flat')):
-        cells = []
+        cells, reach = [], []
         for n in SIZES:
             rows = B.get((m, n), [])
             hit = [f for f in rows if np.isfinite(float(f['t_target']))]
             got = [float(f['t_target']) for f in hit]
+            reach.append(f'n={n}: {len(got)}/{len(rows)}' if rows else f'n={n}: not run')
             if not rows:
                 cells.append('--')
             elif not got:
-                cells.append(rf'$>3{{,}}600$ (0/{len(rows)})')
+                cells.append(r'$>3{,}600$')
             else:
-                cells.append(num(gm(got), 0)
-                             + (f' ({len(got)}/{len(rows)})' if len(got) < len(rows) else ''))
+                cells.append(num(gm(got), 0))
                 ratio[(m, n)] = gm(got) / gm([rcg[(n, int(f['day']))] for f in hit])
         w(f'{name} & ' + ' & '.join(cells) + r' \\')
+        w(f'%   bound reached on (days/run): ' + ', '.join(reach))
     os.chdir(here)
     w(r'\midrule')
-    w(r'Coalition generation$^{b}$ & ' + ' & '.join(cg) + r' \\')
+    w(r'Coalition generation & ' + ' & '.join(cg) + r' \\')
+    w('%   timed on another machine (stochastic/bench17_xi_cykim), about 1.5 times faster on it')
     w('% coalition generation converged on (days/run): ' + ', '.join(
         f'n={n}: {c}' for n, c in zip(SIZES, conv)))
     w('')

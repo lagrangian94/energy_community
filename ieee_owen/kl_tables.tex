@@ -13,10 +13,13 @@ RCG, nested master & 76 & 563 & 586 & 1{,}005 \\
 \midrule
 % time to the bound, days [1, 2, 3]: geometric mean over the days it is reached (reached/run)
 % RCG, nested master, by the same measure: n=6: 59, n=15: 467, n=30: 590, n=60: 917
-CG, conic master & 132 & 1{,}002 & 1{,}193 (2/3) & $>3{,}600$ (0/3) \\
-RCG, single master & 237 & 1{,}924 & 3{,}310 (2/3) & -- \\
+CG, conic master & 132 & 1{,}002 & 1{,}193 & $>3{,}600$ \\
+%   bound reached on (days/run): n=6: 3/3, n=15: 3/3, n=30: 2/3, n=60: 0/3
+RCG, single master & 237 & 1{,}924 & 3{,}310 & -- \\
+%   bound reached on (days/run): n=6: 3/3, n=15: 3/3, n=30: 2/3, n=60: not run
 \midrule
-Coalition generation$^{b}$ & 401 & $>3{,}600$ & -- & -- \\
+Coalition generation & 401 & $>3{,}600$ & -- & -- \\
+%   timed on another machine (stochastic/bench17_xi_cykim), about 1.5 times faster on it
 % coalition generation converged on (days/run): n=6: 31/31, n=15: 0/3, n=30: --, n=60: --
 
 % ---- time to the bound relative to the RCG, on the days the method reaches it
