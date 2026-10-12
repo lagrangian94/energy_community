@@ -9,7 +9,9 @@ on an independent test sample (oos_plans.py). Two plans per day:
 
   dro   the KL plan of the main run (radius chi2_{1,0.95} / (2 |Omega|))
   saa   the plan of the sample-average problem (r = 0), solved here as an extensive
-        form with no ambiguity set, --saa-cap seconds at most; only on --saa-days
+        form with no ambiguity set, --saa-cap seconds at most; only on --saa-days.
+        --saa-start DIR gives each form the plan of the same name in DIR as its
+        MIP start (a day solved again under a longer cap)
 
 What is compared is the budget: 'promised' is the value the plan was chosen by
 (v^DR(N), or v^SAA(N) at r = 0) and 'oos_mean' what it earns on the test sample. A
@@ -40,7 +42,11 @@ def saa_plan(n, scen, day, a):
     cmd = [sys.executable, os.path.join('ieee_owen', 'stochastic_extension.py'),
            '--n', str(n), '--scenarios', str(scen), '--day', str(day),
            '--reserve-price-scale', repr(Q.PRICE_SCALE), '--ef-time-cap', str(a.saa_cap),
-           '--ef-nodefile-start', '3', '--ef-only', '--ef-cache', cache, '--out', a.out]
+           '--ef-nodefile-start', '3', '--ef-only', '--ef-cache', cache, '--out', a.out,
+           '--ef-log', os.path.join(a.out, 'logs', f'saa_n{n}_S{scen}_day{day}_ef_gurobi.log')]
+    start = a.saa_start and os.path.join(a.saa_start, f'n{n}_S{scen}_day{day}.pkl')
+    if start and os.path.exists(start):
+        cmd += ['--ef-start', start]
     rc, wall, peak, _, _, killed = Q.watched(
         cmd, os.path.join(a.out, 'logs', f'saa_n{n}_S{scen}_day{day}.log'), a.min_free)
     if rc != 0 or not os.path.exists(cache):
@@ -91,6 +97,8 @@ def main():
     ap.add_argument('--days', default='1-31')
     ap.add_argument('--saa-days', default='', help="days that also get the r = 0 plan, e.g. 1-10")
     ap.add_argument('--saa-cap', type=float, default=600.0, help='seconds for an SAA extensive form')
+    ap.add_argument('--saa-start', default=None,
+                    help='folder of earlier SAA plans (.pkl) to start the forms from')
     ap.add_argument('--test', type=int, default=500, help='test scenarios')
     ap.add_argument('--min-free', type=float, default=0.7, help='kill below this [GB]')
     ap.add_argument('--out', default=OUT)

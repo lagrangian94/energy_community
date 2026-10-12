@@ -493,7 +493,7 @@ def _set_mip_params(m, time_limit=None, gap=None, quiet=True):
 # =============================================================================
 def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet=True,
                          solver='highs', kl_radius=None, log_file=None, release_scip=False,
-                         improve=None):
+                         improve=None, start=None):
     """Solve (DP_S^Omega). Returns a dict; objective in the cost convention.
 
     solver='highs' / 'gurobi' build the same SCIP model and solve a highspy /
@@ -504,9 +504,13 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
     release_scip: with Gurobi, free the SCIP model once copied (ScenarioStack.
     release_model); the returned stack then has no .model.
     improve: KL only, a better plan from a known one (_solve_extensive_kl).
+    start: Gurobi without KL only, {name: value} of a known plan given as the MIP
+    start (--ef-start); the solve is otherwise the same and still ends on the gap.
     """
     if improve is not None and kl_radius is None:
         raise ValueError('improve is implemented for the KL extensive form only')
+    if start is not None and (kl_radius is not None or solver != 'gurobi'):
+        raise ValueError('start is implemented for the Gurobi extensive form without KL only')
     if solver not in ('highs', 'gurobi'):
         raise ValueError(f"MIP solver {solver!r}: SCIP is not a supported solver here; use 'gurobi' or 'highs'")
     gap = EF_GAP if gap is None else gap
@@ -523,7 +527,7 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
                                    improve=improve)
     if solver == 'gurobi':
         return _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=log_file,
-                                       release_scip=release_scip)
+                                       release_scip=release_scip, start=start)
     if solver == 'highs':
         return _solve_extensive_highs(st, build, time_limit, gap, quiet)
     if solver != 'scip':
@@ -731,7 +735,7 @@ def _gurobi_log(g, quiet, log_file):
 
 
 def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
-                            release_scip=False):
+                            release_scip=False, start=None):
     """solve_extensive_form on a gurobipy copy of the stacked SCIP model."""
     m = st.model
     if m.getObjectiveSense() != 'minimize':
@@ -747,6 +751,10 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
     gvars = [gv[n] for n in names]
     g.setAttr('Obj', gvars, [by_name[n].getObj() for n in names])
     g.ObjCon = m.getObjoffset()
+    if start:
+        for n, v in gv.items():
+            if n in start:
+                v.Start = start[n]
     if release_scip:
         del by_name, m
         st.release_model()
@@ -4995,9 +5003,15 @@ def run(args):
             'polish': not args.ef_improve_no_polish,
             'bound': prev['dual_bound']}
         # --dual-init re-solves the EF's LP from its SCIP model (duals_from_ef)
+        start = None
+        if args.ef_start:
+            import pickle
+            with open(args.ef_start, 'rb') as f:
+                start = pickle.load(f)['vals']
+            print(f'  (MIP start from {args.ef_start})')
         ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
                                   release_scip=args.dual_init == 'none', improve=imp,
-                                  **mip_kw)
+                                  start=start, **mip_kw)
         st = ef['stack']
         ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
         ef['first_stage_names'] = sorted(ef['stack'].first_stage)
@@ -5476,6 +5490,10 @@ def build_parser():
     ap.add_argument('--ef-cache', default=None,
                     help='pickle of the extensive-form result: read it if it exists, else '
                          'solve and write it (same instance only; the caller names it)')
+    ap.add_argument('--ef-start', default=None,
+                    help='pickle of an earlier extensive-form result of the same instance '
+                         '(an --ef-cache file): its plan is the MIP start of this solve. '
+                         'Gurobi without --kl-radius only; with KL see --ef-improve')
     return ap
 
 
