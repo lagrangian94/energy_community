@@ -1,10 +1,12 @@
 """
-Emit the LaTeX bodies of tab:results and tab:runtime of the uncertainty manuscript
-(manuscript_ieee_uncertainty.tex) from the KL runs, and the numbers its text quotes.
+Emit the LaTeX bodies of tab:results, tab:runtime and tab:oos of the uncertainty
+manuscript (manuscript_ieee_uncertainty.tex) from the KL runs, and the numbers its
+text quotes.
 
 Same rule as paper_tables.py: the tables are generated, not typed. Sources:
   stochastic/main17_xi/*_main.json   main runs (run_kl_main.py), |Omega| = 20
   stochastic/bench17_xi/bench.csv    benchmarks (run_kl_bench.py)
+  stochastic/oos17_xi/oos_*.json     out-of-sample values (run_kl_oos.py)
 
 CONVENTIONS.
 - Geometric mean of |x| over the days, sign restored (val(DP_N) is a net cost here,
@@ -18,6 +20,13 @@ CONVENTIONS.
   val({j}) - chi_j by leaving, which bounds eps(chi) from below, and eps_K bounds it
   from above; where the two agree on every day the cell is exact. Printed only for
   the sizes at which a member gains on all days.
+- tab:oos is the budget side of Proposition prop:true. 'promised' is the value the
+  plan was chosen by (v^DR(N), or the sample-average value at r = 0) and 'delivered'
+  the mean of the same first stage over the test sample; the budget holds on a day
+  if delivered >= promised, and (delivered - promised) / n is the even shift of
+  eq. (true_bound) with v(N) replaced by what the plan earns. These are signed, so
+  the means are arithmetic. The cost of hedging is the paired difference of the two
+  plans on the same test scenarios, with the standard error of its mean over days.
 
 Usage:  python ieee_owen/weak_eps_experiment/kl_paper_tables.py [--out ieee_owen/kl_tables.tex]
 """
@@ -27,6 +36,7 @@ import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 MAIN = os.path.join(_HERE, 'stochastic', 'main17_xi')
 BENCH = os.path.join(_HERE, 'stochastic', 'bench17_xi')
+OOS = os.path.join(_HERE, 'stochastic', 'oos17_xi')
 SIZES = (6, 15, 30, 60)
 DAYS = 31
 
@@ -79,6 +89,36 @@ def bench_rows(scen):
         f = dict(zip(head, ln.split(',')))
         if int(f['scen']) == scen:
             out.setdefault((f['method'], int(f['n'])), []).append(f)
+    return out
+
+
+def oos_rows(scen):
+    """Per size, the days with both plans valued: promised and delivered value of
+    each, their standard errors, and the paired cost of hedging."""
+    out = {}
+    for n in SIZES:
+        r = {k: [] for k in ('day', 'saa_gap', 'p_saa', 'd_saa', 'se_saa', 'p_dro', 'd_dro',
+                             'se_dro', 'cost', 'cost_se', 'vdr', 'test')}
+        for f in glob.glob(os.path.join(OOS, f'oos_n{n}_S{scen}_day*.json')):
+            j = json.load(open(f))
+            pl = j['plans']
+            if 'saa' not in pl or 'dro' not in pl:
+                continue
+            day = j['day']
+            m = glob.glob(os.path.join(MAIN, f'{n}p_*_day{day}_S{scen}_*_main.json'))
+            mj = json.load(open(m[0]))
+            r['day'].append(day)
+            r['test'].append(j['test'])
+            r['saa_gap'].append(pl['saa']['ef_gap'])
+            for k in ('saa', 'dro'):
+                r[f'p_{k}'].append(pl[k]['promised'])
+                r[f'd_{k}'].append(pl[k]['oos_mean'])
+                r[f'se_{k}'].append(pl[k]['oos_se'])
+            pair = pl['dro']['paired_vs_saa']            # dro - saa on the same scenarios
+            r['cost'].append(-pair['mean'])
+            r['cost_se'].append(pair['se'])
+            r['vdr'].append(pl['dro']['promised'] - sum(mj['standalone'].values()))
+        out[n] = {k: np.array(v, float) for k, v in r.items()}
     return out
 
 
@@ -178,6 +218,46 @@ def main():
         w(f'% {m}: ' + ', '.join(
             f'n={n}: ' + (f'{ratio[(m, n)]:.1f}x' if ratio.get((m, n)) else 'not reached / not run')
             for n in SIZES))
+    O = oos_rows(a.scen)
+    w('% ---- tab:oos (arithmetic means over the days; signed)')
+    w('% days per size: ' + ', '.join(f'n={n}: {len(O[n]["day"])}' for n in SIZES)
+      + '; test scenarios: ' + ', '.join(sorted({f'{int(t)}' for n in SIZES for t in O[n]['test']})))
+
+    def tbd(n, txt):
+        return txt if len(O[n]['day']) >= DAYS else rf'\TBD{{{txt}}}'
+
+    def signed(x, d):
+        return ('$-$' if x < 0 else '') + f'{abs(x):.{d}f}'
+    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
+        w(rf'Days the budget holds, {lab} & ' + ' & '.join(
+            tbd(n, f'{int((O[n][f"d_{k}"] >= O[n][f"p_{k}"]).sum())}') for n in SIZES) + r' \\')
+    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
+        w(rf'Shift per member, {lab} [\euro] & ' + ' & '.join(
+            tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
+            for n in SIZES) + r' \\')
+    w(r'Cost of hedging [\%] & ' + ' & '.join(
+        tbd(n, f'{100 * float(np.mean(O[n]["cost"] / O[n]["vdr"])):.2f}') for n in SIZES) + r' \\')
+    for n in SIZES:
+        o = O[n]
+        D = len(o['day'])
+        if not D:
+            continue
+        cost, cse = float(o['cost'].mean()), float(np.sqrt((o['cost_se'] ** 2).sum()) / D)
+        w(f'% n={n}: promised - delivered, mean EUR: r=0 {np.mean(o["p_saa"] - o["d_saa"]):+.1f}, '
+          f'KL {np.mean(o["p_dro"] - o["d_dro"]):+.1f}; cost of hedging {cost:.2f} +- {cse:.2f} '
+          f'EUR/day ({100 * cost / float(np.mean(np.abs(o["d_saa"]))):.3f}% of the delivered value, '
+          f'{100 * float(np.mean(o["cost"] / o["vdr"])):.3f}% of v^DR(N))')
+        for lab, k in (('r=0', 'saa'), ('KL', 'dro')):
+            z = (o[f'd_{k}'] - o[f'p_{k}']) / o[f'se_{k}']
+            w(f'%   {lab}: budget holds on {int((z >= 0).sum())}/{D}; by more than 1.96 s.e. of the '
+              f'test mean on {int((z > 1.96).sum())}, fails by more than that on '
+              f'{int((z < -1.96).sum())}, within it on {int((np.abs(z) <= 1.96).sum())}; '
+              f'shortfall per member on the days it fails: mean '
+              + (f'{float(np.mean(((o[f"p_{k}"] - o[f"d_{k}"]) / n)[z < 0])):.2f}' if (z < 0).any() else '--')
+              + f', max {float(np.max((o[f"p_{k}"] - o[f"d_{k}"]) / n)):.2f} EUR')
+        cap = o['saa_gap'] > 1.0001e-4
+        w(f'%   sample-average extensive form above a gap of 1e-4 on {int(cap.sum())} days'
+          + (f' {sorted(int(d) for d in o["day"][cap])}' if cap.any() else ''))
     w('% ---- quoted in the text')
     g = {n: gm(R[n]['g']) for n in SIZES}
     e = {n: gm(R[n]['eps']) for n in SIZES}
