@@ -157,6 +157,9 @@ def watched(cmd, log, min_free_gb, kill_after=None):
     seconds. Returns (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed)."""
     os.makedirs(os.path.dirname(log), exist_ok=True)
     env = dict(os.environ, PYTHONHASHSEED='21', PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8')
+    # the dispatch model saves its plots from whatever thread builds it; with a display
+    # matplotlib picks Tk, which aborts the interpreter when a worker thread drops a figure
+    env.setdefault('MPLBACKEND', 'Agg')
     t0 = time.time()
     with open(log, 'w', encoding='utf-8') as f:
         p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, env=env)
