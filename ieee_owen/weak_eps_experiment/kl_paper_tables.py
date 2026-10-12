@@ -148,7 +148,6 @@ def main():
     row(r'$g_K^{\mathrm{LR\text{-}DR}}$', 'g', 2)
     w(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}=g_K^{\mathrm{LR\text{-}DR}}/n$ & '
       + ' & '.join(cell(R[n]['eps'], 3) for n in SIZES) + r' \\')
-    w(r'Bound of Proposition~\ref{prop:eps} & ' + ' & '.join([r'\TBD{--}'] * 4) + r' \\')
     w(r'\midrule')
     meas = []
     for n in SIZES:
