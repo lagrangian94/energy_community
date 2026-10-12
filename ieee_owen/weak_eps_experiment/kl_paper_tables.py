@@ -6,6 +6,7 @@ text quotes.
 Same rule as paper_tables.py: the tables are generated, not typed. Sources:
   stochastic/main17_xi/*_main.json   main runs (run_kl_main.py), |Omega| = 20
   stochastic/bench17_xi/bench.csv    benchmarks (run_kl_bench.py)
+  stochastic/bench17_xi_cykim/bench.csv   coalition generation, on a second machine
   stochastic/oos17_xi/oos_*.json     out-of-sample values (run_kl_oos.py)
 
 CONVENTIONS.
@@ -36,6 +37,10 @@ import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 MAIN = os.path.join(_HERE, 'stochastic', 'main17_xi')
 BENCH = os.path.join(_HERE, 'stochastic', 'bench17_xi')
+# coalition generation ran on another machine (kl_experiment_plan.md, sec. 8.14): 31 days
+# at n=6, days 1-3 at n=15, nothing beyond. Its times do not compare with the other rows
+# one to one (about 1.5 times faster on this method), which the table's note says.
+COALGEN = os.path.join(_HERE, 'stochastic', 'bench17_xi_cykim')
 OOS = os.path.join(_HERE, 'stochastic', 'oos17_xi')
 SIZES = (6, 15, 30, 60)
 DAYS = 31
@@ -78,8 +83,8 @@ def main_rows(scen):
     return out
 
 
-def bench_rows(scen):
-    path = os.path.join(BENCH, 'bench.csv')
+def bench_rows(scen, folder=BENCH):
+    path = os.path.join(folder, 'bench.csv')
     out = {}
     if not os.path.exists(path):
         return out
@@ -159,11 +164,12 @@ def main():
     w(r'Solving $\vdr{N}$ & ' + ' & '.join(cell(R[n]['t_ef'], 0) for n in SIZES) + r' \\')
     w(r'RCG, nested master & ' + ' & '.join(cell(R[n]['t_rcg'], 0) for n in SIZES) + r' \\')
     cg, conv = [], []
+    C = bench_rows(a.scen, COALGEN)
     for n in SIZES:
-        rows = B.get(('coalgen', n), [])
+        rows = C.get(('coalgen', n), [])
         ok = [float(f['alg_s']) for f in rows if f['status'] == 'converged']
-        cg.append(cell(ok, 0) if ok else (r'\TBD{$>3{,}600$}' if rows else r'\TBD{--}'))
-        conv.append(rf'\TBD{{{len(ok)}/{len(rows)}}}' if rows else r'\TBD{--}')
+        cg.append(num(gm(ok), 0) if ok else (r'$>3{,}600$' if rows else '--'))
+        conv.append(f'{len(ok)}/{len(rows)}' if rows else '--')
     # time to the bound: first moment the Lagrangian bound is within 5% of omega of the
     # RCG's final bound (run_kl_bench.py), on the days the benchmarks ran. The RCG's
     # own time by the same measure comes from the main runs' logs.
@@ -188,9 +194,10 @@ def main():
     w(r'\midrule')
     w(f'% time to the bound, days {days_run}: geometric mean over the days it is reached '
       f'(reached/run)')
-    w(r'RCG, nested master & '
-      + ' & '.join(num(gm([rcg[(n, d)] for d in days_run if (n, d) in rcg]), 0) for n in SIZES)
-      + r' \\')
+    # the RCG's own time to the bound is the reference of the ratios below, not a row
+    w('% RCG, nested master, by the same measure: '
+      + ', '.join(f'n={n}: {gm([rcg[(n, d)] for d in days_run if (n, d) in rcg]):.0f}'
+                  for n in SIZES))
     ratio = {}
     for name, m in ((r'CG, conic master', 'conic'), (r'RCG, single master', 'flat')):
         cells = []
@@ -209,7 +216,7 @@ def main():
         w(f'{name} & ' + ' & '.join(cells) + r' \\')
     os.chdir(here)
     w(r'\midrule')
-    w(r'Coalition generation & ' + ' & '.join(cg) + r' \\')
+    w(r'Coalition generation$^{b}$ & ' + ' & '.join(cg) + r' \\')
     w(r'\quad converged & ' + ' & '.join(conv) + r' \\')
     w('')
     w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
