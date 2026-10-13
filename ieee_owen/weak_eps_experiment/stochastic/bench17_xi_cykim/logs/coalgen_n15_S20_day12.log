@@ -1,0 +1,120 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+======================================================================
+Core Computation Initialized
+Players: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15']
+Number of players: 15
+Time periods: 24
+======================================================================
+
+  c^KL0.0960365(['u1']) = -779.8350  (0.2s)
+  c^KL0.0960365(['u2']) = 0.0000  (0.4s)
+  c^KL0.0960365(['u3']) = -262.0474  (0.1s)
+  c^KL0.0960365(['u4']) = 832.7299  (0.0s)
+  c^KL0.0960365(['u5']) = 505.3713  (0.1s)
+  c^KL0.0960365(['u6']) = 1173.8464  (0.0s)
+  c^KL0.0960365(['u7']) = -319.6195  (0.2s)
+  c^KL0.0960365(['u8']) = 0.0000  (0.5s)
+  c^KL0.0960365(['u9']) = -262.0474  (0.2s)
+  c^KL0.0960365(['u10']) = -456.4523  (9.9s)
+  c^KL0.0960365(['u11']) = -90.7862  (0.3s)
+  c^KL0.0960365(['u12']) = 728.5161  (0.1s)
+  c^KL0.0960365(['u13']) = 518.8636  (0.0s)
+  c^KL0.0960365(['u14']) = 967.4142  (0.2s)
+  c^KL0.0960365(['u15']) = 2004.8815  (0.1s)
+
+======================================================================
+STARTING ROW GENERATION ALGORITHM
+Time limit: 3600 seconds
+======================================================================
+
+======================================================================
+Initializing Master Problem
+======================================================================
+  c^KL0.0960365(['u1', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9']) = 2586.3967  (1042.9s)
+
+Grand coalition cost c(N): 2586.3967
+
+Adding 15 initial coalition constraints:
+  Added constraint for ['u1']: Σp[i] <= -779.8350 + v
+  Added constraint for ['u2']: Σp[i] <= 0.0000 + v
+  Added constraint for ['u3']: Σp[i] <= -262.0474 + v
+  Added constraint for ['u4']: Σp[i] <= 832.7299 + v
+  Added constraint for ['u5']: Σp[i] <= 505.3713 + v
+  Added constraint for ['u6']: Σp[i] <= 1173.8464 + v
+  Added constraint for ['u7']: Σp[i] <= -319.6195 + v
+  Added constraint for ['u8']: Σp[i] <= 0.0000 + v
+  Added constraint for ['u9']: Σp[i] <= -262.0474 + v
+  Added constraint for ['u10']: Σp[i] <= -456.4523 + v
+  Added constraint for ['u11']: Σp[i] <= -90.7862 + v
+  Added constraint for ['u12']: Σp[i] <= 728.5161 + v
+  Added constraint for ['u13']: Σp[i] <= 518.8636 + v
+  Added constraint for ['u14']: Σp[i] <= 967.4142 + v
+  Added constraint for ['u15']: Σp[i] <= 2004.8815 + v
+======================================================================
+
+Convergence tolerance: 1.0e-06 relative -> 2.587e-03 (|c(N)| = 2586.4)
+
+======================================================================
+ITERATION 1
+======================================================================
+
+============================================================
+Solving Master Problem...
+
+Master problem solved:
+  Slack v = 0.000000
+  Payoffs:
+    u1: -2754.2735
+    u2: 0.0000
+    u3: -262.0474
+    u4: 832.7299
+    u5: 505.3713
+    u6: 1173.8464
+    u7: -319.6195
+    u8: 0.0000
+    u9: -262.0474
+    u10: -456.4523
+    u11: -90.7862
+    u12: 728.5161
+    u13: 518.8636
+    u14: 967.4142
+    u15: 2004.8815
+============================================================
+
+============================================================
+Finding violated coalition via Separation Problem
+Current payoffs: {'u1': -2754.273476154109, 'u2': 0.0, 'u3': -262.04742556850607, 'u4': 832.729888875538, 'u5': 505.37134760520263, 'u6': 1173.8463547696717, 'u7': -319.6195456520863, 'u8': 0.0, 'u9': -262.04742556850607, 'u10': -456.45225217472597, 'u11': -90.78622591456684, 'u12': 728.5161457883167, 'u13': 518.8636473698929, 'u14': 967.4141840075614, 'u15': 2004.8814742795705}
+  stochastic separation: S = ['u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15']  violation 1514.7886  bound 1514.7886  (2077.3s, 14295 binaries)
+  c^KL0.0960365(['u10', 'u11', 'u12', 'u13', 'u14', 'u15', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9']) = 3825.8816  (621.0s)
+
+Verification:
+  Coalition payoff sum: 5340.6702
+  Coalition cost c(S): 3825.8816
+  Actual violation (Σ payoffs - cost): 1514.7886
+  Separation problem violation: 1514.7886
+  Found coalition: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15']
+============================================================
+
+Adding violated coalition ['u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15'] to master problem
+  Added constraint for ['u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u10', 'u11', 'u12', 'u13', 'u14', 'u15']: Σp[i] <= 3825.8816 + v
+
+======================================================================
+TIME LIMIT EXCEEDED (3742.7s > 3600s)
+Stopped after 2 iterations
+======================================================================
+
+Partial cost-of-stability LOWER BOUND v* >= 0.000000 (weak-eps >= 0.000000)
+
+coalition generation: converged False  3755.2s  1 coalitions  weak eps 0.000000
+wrote ieee_owen/weak_eps_experiment/stochastic/bench17_xi_cykim/coalgen_n15_S20_day12.json
