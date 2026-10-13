@@ -161,11 +161,18 @@ def main():
     w(r'RCG, nested master & ' + ' & '.join(cell(R[n]['t_rcg'], 0) for n in SIZES) + r' \\')
     cg, conv = [], []
     C = bench_rows(a.scen, COALGEN)
+    out_below = False               # out of budget on every day run at a smaller size
     for n in SIZES:
         rows = C.get(('coalgen', n), [])
         ok = [float(f['alg_s']) for f in rows if f['status'] == 'converged']
-        cg.append(num(gm(ok), 0) if ok else (r'$>3{,}600$' if rows else '--'))
-        conv.append(f'{len(ok)}/{len(rows)}' if rows else '--')
+        # a size that was not run prints as out of budget once a smaller size is, on every
+        # day it ran: the separation only grows with n. The comment below says which
+        # cells are measured and which are this inference.
+        cg.append(num(gm(ok), 0) if ok else
+                  (r'$>3{,}600$' if rows or out_below else '--'))
+        conv.append(f'{len(ok)}/{len(rows)}' if rows else
+                    ('not run (inferred from the smaller size)' if out_below else 'not run'))
+        out_below = out_below or (bool(rows) and not ok)
     # time to the bound: first moment the Lagrangian bound is within 5% of omega of the
     # RCG's final bound (run_kl_bench.py), on the days the benchmarks ran. The RCG's
     # own time by the same measure comes from the main runs' logs.

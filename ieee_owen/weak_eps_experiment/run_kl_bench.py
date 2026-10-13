@@ -31,7 +31,8 @@ Days 1-3 come first for every size. A method that times out on all three at a si
 is not run on the other days of that size (reported "> budget (0/3)"), and
 coalition generation and flat DW are then not run at any larger size either. Days 4-5 follow,
 then 6-31, so the table is complete on five days before the 31-day means move in.
-A run with a row in <out>/bench.csv is skipped.
+A run with a row in <out>/bench.csv is skipped. --all-days switches the early stop off
+(to see whether any of the other days converges at a size where the first three did not).
 
     python ieee_owen/weak_eps_experiment/run_kl_bench.py
     python ieee_owen/weak_eps_experiment/run_kl_bench.py --methods conic --n 6 --days 1-3
@@ -171,6 +172,8 @@ def main():
     ap.add_argument('--grace', type=float, default=600.0,
                     help='seconds over budget (model building) before a run is killed')
     ap.add_argument('--min-free', type=float, default=0.7, help='kill below this [GB]')
+    ap.add_argument('--all-days', action='store_true',
+                    help='run every day asked for, also at a size where days 1-3 all timed out')
     ap.add_argument('--out', default=OUT)
     a = ap.parse_args()
     sizes = [int(v) for v in a.n.split(',')]
@@ -188,7 +191,7 @@ def main():
         done = rows(a)
         if (m, n, a.scen, d) in done:
             continue
-        if dead(m, n, a.scen, done):
+        if not a.all_days and dead(m, n, a.scen, done):
             continue
         print(f'{time.strftime("%m-%d %H:%M")}  {m} n={n} |Omega|={a.scen} day {d}', flush=True)
         print(f'  {run_one(m, n, a.scen, d, a)}', flush=True)
