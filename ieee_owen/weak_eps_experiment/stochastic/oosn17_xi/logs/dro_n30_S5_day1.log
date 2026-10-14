@@ -1,0 +1,19 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 30p_reserve_peak_day1_S5_seed0_grb_direct-gurobi_kl0.384146_dual_ndw_rsc0.303571: n=30, |T|=24, |Omega|=5 ===
+
+[1] extensive form (DP_N^Omega)
+  (read from ieee_owen/weak_eps_experiment/stochastic/oosn17_xi/dro/n30_S5_day1.pkl)
+  obj 3646.167879  status optimal  gap 8.73e-05  118.2s  vars 43589
+  KL r=0.384146: worst case 3646.167879 vs expected 3530.079781; 1 MILP solve(s); rho* 0.462 0.293 0.054 0.008 0.183 (KL 0.3841)
+    round 1: MIPGap 1e-04  118.2s  12047 nodes  psi-bound 8.73e-05  psi-incumbent 1.22e-05
