@@ -31,8 +31,9 @@ ALPHA = 0.05
 POLL = 5
 # Linux: every job of every queue runs in one systemd user slice whose memory is capped
 # below the machine's (swap excluded), so when the jobs together run out the kernel kills
-# one of them, not the machine. On 2026-10-14 the machine went down twice, without a
-# clean shutdown, while six queues ran at once. EC_JOBS_MEM_GB sets the cap (default:
+# one of them, not the machine. (The two crashes of cykim on 2026-10-14 were not this:
+# their kernel reports show corrupted kernel memory, no out-of-memory; see the plan,
+# sec. 8.20 (4).) EC_JOBS_MEM_GB sets the cap (default:
 # installed memory less 16 GB), EC_JOBS_SLICE=0 turns the slice off. A job also waits to
 # start until START_FREE GB are available.
 SLICE = 'ecjobs.slice'
