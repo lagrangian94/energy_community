@@ -17,7 +17,7 @@ spike between two polls is in the first and not in the second.
     python ieee_owen/weak_eps_experiment/run_kl_main.py                 # whole queue
     python ieee_owen/weak_eps_experiment/run_kl_main.py --scen 20 --n 6,15 --days 1-3
 """
-import os, sys, time, argparse, subprocess
+import os, sys, time, shutil, argparse, subprocess
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_HERE))
@@ -28,7 +28,16 @@ from scipy.stats import chi2
 OUT = os.path.join('ieee_owen', 'weak_eps_experiment', 'stochastic', 'main17_xi')
 PRICE_SCALE = 17.0 / 56.0
 ALPHA = 0.05
-POLL = 30
+POLL = 5
+# Linux: every job of every queue runs in one systemd user slice whose memory is capped
+# below the machine's (swap excluded), so when the jobs together run out the kernel kills
+# one of them, not the machine. On 2026-10-14 the machine went down twice, without a
+# clean shutdown, while six queues ran at once. EC_JOBS_MEM_GB sets the cap (default:
+# installed memory less 16 GB), EC_JOBS_SLICE=0 turns the slice off. A job also waits to
+# start until START_FREE GB are available.
+SLICE = 'ecjobs.slice'
+START_FREE = 16.0
+_slice = None                                # None: not set up yet; False: unavailable
 
 if os.name == 'nt':
     import ctypes, ctypes.wintypes as wt
@@ -151,11 +160,40 @@ def command(n, scen, day, out, ef_round_limit=10800, nodefile=3.0, ef_log=None):
             '--tag', 'main', '--out', out]
 
 
+def in_slice(cmd):
+    """cmd inside the capped slice (Linux with a user systemd), else cmd unchanged."""
+    global _slice
+    if os.name == 'nt' or os.environ.get('EC_JOBS_SLICE') == '0' or _slice is False:
+        return cmd
+    if _slice is None:
+        total = next(int(ln.split()[1]) for ln in open('/proc/meminfo')
+                     if ln.startswith('MemTotal:')) / 2**20
+        cap = float(os.environ.get('EC_JOBS_MEM_GB', total - 16.0))
+        ok = shutil.which('systemd-run') and subprocess.run(
+            ['systemctl', '--user', 'set-property', '--runtime', SLICE,
+             f'MemoryMax={int(cap)}G', 'MemorySwapMax=0'], capture_output=True).returncode == 0
+        _slice = bool(ok)
+        print(f'jobs capped at {int(cap)} GB together ({SLICE})' if ok else
+              'no user systemd: jobs run without the memory cap', flush=True)
+        if not ok:
+            return cmd
+    # --scope runs cmd in this process tree, so p.pid stays the interpreter's
+    return ['systemd-run', '--user', '--scope', '--quiet', f'--slice={SLICE}', '--'] + cmd
+
+
 def watched(cmd, log, min_free_gb, kill_after=None):
     """Run cmd with its output in log, polling the interpreter's memory; kill it if
     the machine's available memory falls below min_free_gb, or after kill_after
-    seconds. Returns (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed)."""
+    seconds. Returns (exit, wall_s, peak_private_gb, peak_ws_gb, min_avail_gb, killed).
+    On Linux the job runs inside the capped slice (in_slice) and starts only once
+    START_FREE GB are available."""
     os.makedirs(os.path.dirname(log), exist_ok=True)
+    cmd = in_slice(cmd)
+    if os.name != 'nt' and avail_gb() < START_FREE:
+        print(f'  waiting for {START_FREE:.0f} GB of free memory '
+              f'({avail_gb():.1f} GB now)', flush=True)
+        while avail_gb() < START_FREE:
+            time.sleep(10)
     env = dict(os.environ, PYTHONHASHSEED='21', PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8')
     # the dispatch model saves its plots from whatever thread builds it; with a display
     # matplotlib picks Tk, which aborts the interpreter when a worker thread drops a figure
@@ -180,6 +218,9 @@ def watched(cmd, log, min_free_gb, kill_after=None):
                 break
             time.sleep(POLL if h else 2)
         rc = p.wait()
+    if rc == -9 and not killed and _slice:
+        with open(log, 'a', encoding='utf-8') as f:
+            f.write(f'\nkilled by the memory cap of {SLICE}\n')
     if h:
         priv, ws = peaks(h)
         peak_priv, peak_ws = max(peak_priv, priv), max(peak_ws, ws)
