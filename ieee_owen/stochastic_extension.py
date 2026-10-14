@@ -238,7 +238,7 @@ def _stream(seed, day, w, tag):
 def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
                    solar_sigma=0.20, load_sigma=0.10, price_sigma=0.15, rho=0.7,
                    price_carriers=('E',), load_carriers=CARRIERS, utility=False,
-                   day=None, idio=None):
+                   day=None, idio=None, first=0):
     """Forecast-error scenarios around one deterministic instance, equiprobable.
 
     The error vector is xi = (xi_0, (xi_j)_j) as in the manuscript: xi_0 common to the
@@ -260,7 +260,8 @@ def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
 
     Draws come from _stream(seed, day, scenario, entity): days are independent (day=None
     keeps one stream per seed), and the first m of n_scen scenarios are the scenarios
-    of a size-m sample.
+    of a size-m sample. first=w0 gives scenarios w0, ..., w0 + n_scen - 1 of that
+    stream instead of the first n_scen (one scenario of a larger sample on its own).
 
     utility=False (default since 2026-10-07) sets every willingness to pay
     u_{k}_{u}_{t} to 0, so the objective is the manuscript's eq:dp_obj: market revenue
@@ -288,7 +289,7 @@ def make_scenarios(base, players, T, n_scen, seed=0, wind_sigma=0.25,
     solar = [u for u in base.get('players_with_solar', []) if u in players]
     nT = len(T)
     scen = []
-    for w in range(n_scen):
+    for w in range(first, first + n_scen):
         def path(tag):
             return _ar1(_stream(seed, day, w, tag), nT, rho)
         p = dict(base)
@@ -424,18 +425,20 @@ class ScenarioStack:
             return {n: m.getVal(v) for n, v in self.vars.items()}
         return {n: m.getSolVal(sol, v) for n, v in self.vars.items()}
 
-    def release_model(self):
+    def release_model(self, collect=True):
         """Drop the SCIP model once a solver copy of it exists. At n=60, |Omega|=20 it
         holds ~3.5 GB that sat next to Gurobi's copy for the whole EF solve. Keeps the
         names, costs and scenario map (cost_split, scaled_cost, first_stage), so only
-        values() and anything reading .model or .blocks stop working."""
+        values() and anything reading .model or .blocks stop working. collect=False
+        leaves the garbage collection out (a caller releasing thousands of stacks)."""
         import gc
         self.n_vars = self.model.getNVars()
         self.objoffset = self.model.getObjoffset()
         self.model = None
         self.blocks = []
         self.vars = dict.fromkeys(self.vars)
-        gc.collect()
+        if collect:
+            gc.collect()
 
     def cost_split(self, vals, names=None):
         """(first-stage cost, [unweighted second-stage cost per scenario])."""
@@ -547,6 +550,74 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
         'worth_cost': [first + c for c in per],
         'time_build': build, 'time_solve': m.getSolvingTime(),
     }
+
+
+def plan_extensive_form(players, T, scenarios, first_stage, kl_radius=None, gap=1e-5,
+                        workers=8, threads=None):
+    """(DP_S^Omega) at a given first stage, in the shape solve_extensive_form returns.
+
+    With the commitment and r_sym fixed no variable is shared between scenarios, and
+    the KL worst case is monotone in each scenario's cost, so every scenario's recourse
+    is solved on its own (integer_lshaped.Sub, as oos_plans.py does). This is a plan of
+    the whole sample without its extensive form being solved: `obj` is the value of
+    that plan (the worst case over the KL ball with kl_radius), no bound comes with it
+    (dual_bound is -inf), and `vals` seeds the column generation as an extensive-form
+    solution would.
+    first_stage: {name: value}; a name left out is 0 (a result JSON's ef_first_stage).
+    threads: solver threads per recourse problem (default: the cores over the workers).
+    """
+    import threading
+    import gurobipy as gp
+    from concurrent.futures import ThreadPoolExecutor
+    from integer_lshaped import Sub
+    t0 = time.time()
+    st = ScenarioStack('fs', players, T, [scenarios[0]], dwr=False)
+    fs = sorted(st.first_stage)
+    unknown = set(first_stage) - set(fs)
+    if unknown:
+        raise ValueError(f'first-stage names not in the model: {sorted(unknown)[:5]}')
+    x = {n: float(first_stage.get(n, 0.0)) for n in fs}
+    first = float(sum(st.cost[n] * x[n] for n in fs))
+    del st
+    S = len(scenarios)
+    k = max(1, min(workers, S))
+    per_thread = threads or max(1, (os.cpu_count() or 1) // k)
+    local = threading.local()
+
+    def work(w):
+        if not hasattr(local, 'env'):
+            local.env = gp.Env()
+        sub = Sub(players, T, scenarios[w][1], fs, gap, 1e3, 1e-4, env=local.env,
+                  threads=per_thread)
+        out = sub.mip(x)
+        if out is None:
+            raise RuntimeError(f'recourse infeasible at the given first stage: scenario {w}')
+        # the one-scenario stack names its second stage _s0
+        own = {n[:-3] + f'_s{w}': v.X for n, v in sub.gv.items() if n not in x}
+        sub.g.dispose(); sub.lp.dispose()
+        return out, own
+
+    vals, per, bnd = dict(x), [0.0] * S, [0.0] * S
+    with ThreadPoolExecutor(k) as pool:
+        for w, ((b, c), own) in enumerate(pool.map(work, range(S))):
+            bnd[w], per[w] = float(b), float(c)
+            vals.update(own)
+    probs = np.array([p for p, _ in scenarios])
+    c = np.array(per)
+    out = {'status': 'plan', 'dual_bound': -np.inf, 'gap': float('nan'),
+           'vals': vals, 'first_cost': first, 'scen_cost': per,
+           'worth_cost': [first + v for v in per], 'recourse_bound': bnd,
+           'time_build': 0.0, 'time_solve': time.time() - t0,
+           'n_vars': len(vals), 'first_stage_names': fs}
+    if kl_radius is None:
+        out['obj'] = first + float(probs @ c)
+    else:
+        psi, rho, eta = kl_worst(c, probs, kl_radius)
+        out['obj'] = first + psi
+        out['kl'] = {'radius': kl_radius, 'rho': rho.tolist(), 'eta': eta,
+                     'kl': kl_div(rho, probs), 'expected_cost': first + float(probs @ c),
+                     'solves': 0, 'refinements': []}
+    return out
 
 
 # =============================================================================
@@ -1129,6 +1200,7 @@ class PlayerPricing:
         self._cw = [(n, self.stack.cost[n], self.stack.scen_of[n]) for n in self.names]
         self.adj = sorted({n for terms in self.rows.values() for n, _ in terms})
         self.last = None        # (duals, obj, Column) of the latest call
+        self.keep_last = True
         # the member's four trade variables per balance row (k, t, w), in the order
         # (market import, market export, community import, community export), name
         # or None where the member has no such variable, and their upper bounds
@@ -1219,9 +1291,20 @@ class PlayerPricing:
             vals = self.stack.values()
             obj, bound = m.getObjVal(), m.getDualbound()
         col = self._column(vals)
-        if not farkas:
+        if not farkas and self.keep_last:
             self.last = (dict(duals), obj, col)
         return obj, bound, col
+
+    def slim(self):
+        """Keep only what pricing through the solver copy needs: drop the SCIP model
+        the copy was made from, and stop recording the latest call (`last`, which
+        StochasticMaster reuses and DirectMaster never reads). With a unit per
+        (prosumer, scenario) both are held once per unit: about 1.5 MB of SCIP model,
+        and a copy of the whole dual vector, 0.56 MB at 100 scenarios and growing with
+        their number (measured at n=6)."""
+        self.keep_last = False
+        self.model = None
+        self.stack.release_model(collect=False)
 
     def _price_gurobi(self, duals, farkas):
         coef = self._coef(duals, farkas)
@@ -2337,12 +2420,15 @@ class DirectMaster:
             self._group[u] = c if (r % 2 == 0 or not balance_pricing) else k - 1 - c
         def unit_pricing(x):
             if isinstance(x, tuple):
-                return PlayerPricing(x[0], T, [scenarios[x[1]]], pricing_time_limit,
-                                     pricing_gap, pricing_solver,
-                                     env=self._envs[self._group[x]], scen_ids=[x[1]],
-                                     n_scen=len(scenarios), unit=x)
-            return PlayerPricing(x, T, scenarios, pricing_time_limit, pricing_gap,
-                                 pricing_solver, env=self._envs[self._group[x]])
+                p = PlayerPricing(x[0], T, [scenarios[x[1]]], pricing_time_limit,
+                                  pricing_gap, pricing_solver,
+                                  env=self._envs[self._group[x]], scen_ids=[x[1]],
+                                  n_scen=len(scenarios), unit=x)
+            else:
+                p = PlayerPricing(x, T, scenarios, pricing_time_limit, pricing_gap,
+                                  pricing_solver, env=self._envs[self._group[x]])
+            p.slim()
+            return p
         self.subs = subs or {x: unit_pricing(x) for x in self.units}
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
@@ -2373,6 +2459,10 @@ class DirectMaster:
         self.iteration, self.lb, self.L_bar = 0, -np.inf, -np.inf
         self._stall, self._stall_ref = 0, (np.inf, -np.inf)
         self.center, self.best, self.log = None, None, []
+        # every dual point priced in full: its members' pricing bounds, in the order of
+        # self.players. Each row bounds every coalition's value as the row of LB does
+        # (sigma_bound), so a coalition may be held against the lowest of them
+        self.bound_trace = []
         self._build()
 
     # --- model ---------------------------------------------------------------
@@ -2724,10 +2814,16 @@ class DirectMaster:
         if len(res) < len(self.units):
             return                              # partial pricing: no bound
         L = self._lagrangian(duals, [r[1] for r in res.values()])
+        if np.isfinite(L):
+            per = dict.fromkeys(self.players, 0.0)
+            for u, r in res.items():
+                per[self.unit_player[u]] += r[1]
+            self.bound_trace.append([per[u] for u in self.players])
         if L > self.lb:
             self.lb = L
             self.best = (dict(duals), {u: r[0] for u, r in res.items()},
-                         {u: r[2] for u, r in res.items()})
+                         {u: r[2] for u, r in res.items()},
+                         {u: r[1] for u, r in res.items()})
         if L > self.L_bar:
             self.L_bar, self.center = L, dict(duals)
 
@@ -3640,15 +3736,25 @@ class DirectMaster:
         obj = self.lp.solve()
         self._final_ub(obj)
         duals, sigma = (self.best[0], dict(self.best[1])) if self.best else self._duals()
+        # sigma is each member's pricing value at the dual point of LB as the pricing
+        # MILPs' incumbents have it; sigma_bound is the same from their dual bounds,
+        # which is what LB sums and what bounds a coalition's value from the safe side
+        bound = dict(self.best[3]) if self.best else None
         if len(self.units) != len(self.players):
             unit_sigma = sigma
             sigma = {u: 0.0 for u in self.players}
             for x, v in unit_sigma.items():
                 sigma[self.unit_player[x]] += v
+            if bound is not None:
+                unit_bound = bound
+                bound = {u: 0.0 for u in self.players}
+                for x, v in unit_bound.items():
+                    bound[self.unit_player[x]] += v
         return {'status': 'optimal' if status == 'done' else status,
                 'obj': obj, 'lb': self.lb, 'ub': self.ub,
                 'gap': (self.ub - self.lb) / (1.0 + abs(self.ub)), 'duals': duals,
-                'sigma': sigma, 'iterations': self.iteration,
+                'sigma': sigma, 'sigma_bound': bound, 'sigma_trace': self.bound_trace,
+                'iterations': self.iteration,
                 'lambda': {u: [self.lp.x(j) for j in self.col_idx[u]] for u in self.units},
                 'x0': {f'{k[0]}_{k[1]}': self.lp.x(j) for k, j in self.x0.items()},
                 'columns': {u: len(self.columns[u]) for u in self.units},
@@ -5002,19 +5108,30 @@ def run(args):
             'stall': args.ef_improve_stall, 'gain': args.ef_improve_gain,
             'polish': not args.ef_improve_no_polish,
             'bound': prev['dual_bound']}
-        # --dual-init re-solves the EF's LP from its SCIP model (duals_from_ef)
-        start = None
-        if args.ef_start:
-            import pickle
-            with open(args.ef_start, 'rb') as f:
-                start = pickle.load(f)['vals']
-            print(f'  (MIP start from {args.ef_start})')
-        ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
-                                  release_scip=args.dual_init == 'none', improve=imp,
-                                  start=start, **mip_kw)
-        st = ef['stack']
-        ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
-        ef['first_stage_names'] = sorted(ef['stack'].first_stage)
+        if args.ef_from_plan:
+            # no extensive form: the first stage of an earlier result, recourse per scenario
+            if improving or args.dual_init != 'none':
+                raise SystemExit('--ef-from-plan does not combine with --ef-improve or --dual-init')
+            with open(args.ef_from_plan, encoding='utf-8') as f:
+                plan = json.load(f)['ef_first_stage']
+            ef = plan_extensive_form(players, T, scen, plan, kl_radius=args.kl_radius,
+                                     workers=args.pricing_workers)
+            ef['plan'] = args.ef_from_plan
+            print(f'  (first stage of {args.ef_from_plan}, recourse solved per scenario)')
+        else:
+            # --dual-init re-solves the EF's LP from its SCIP model (duals_from_ef)
+            start = None
+            if args.ef_start:
+                import pickle
+                with open(args.ef_start, 'rb') as f:
+                    start = pickle.load(f)['vals']
+                print(f'  (MIP start from {args.ef_start})')
+            ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
+                                      release_scip=args.dual_init == 'none', improve=imp,
+                                      start=start, **mip_kw)
+            st = ef['stack']
+            ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
+            ef['first_stage_names'] = sorted(ef['stack'].first_stage)
         if prev is not None:
             ef = _merge_improved(prev, ef)
             ef['cached'] = True
@@ -5172,9 +5289,11 @@ def run(args):
         'm_linking_rows': len(master.row_keys),
         'ef': {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
                                      'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
-               'cached': ef.get('cached', False)},
+               'cached': ef.get('cached', False),
+               **({'plan': ef['plan']} if 'plan' in ef else {})},
         'ef_first_stage': {k: v for k, v in first.items() if abs(v) > 1e-9},
-        'dw': {k: dw.get(k) for k in ('status', 'obj', 'lb', 'ub', 'gap', 'sigma', 'x0',
+        'dw': {k: dw.get(k) for k in ('status', 'obj', 'lb', 'ub', 'gap', 'sigma',
+                                      'sigma_bound', 'sigma_trace', 'x0',
                                       'iterations', 'columns', 'time', 'doi', 'timing')},
         'cg_options': {k: getattr(args, k) for k in (
             'lp_solver', 'pricing_solver', 'mip_solver', 'cg_gap', 'pricing_gap',
@@ -5494,6 +5613,12 @@ def build_parser():
                     help='pickle of an earlier extensive-form result of the same instance '
                          '(an --ef-cache file): its plan is the MIP start of this solve. '
                          'Gurobi without --kl-radius only; with KL see --ef-improve')
+    ap.add_argument('--ef-from-plan', default=None,
+                    help='no extensive form: take the first stage (ef_first_stage) of this '
+                         'result JSON, of the same community and day, and solve each '
+                         "scenario's recourse on its own. The value of that plan stands "
+                         'where the extensive-form value does, and its solution seeds the '
+                         'column generation')
     return ap
 
 

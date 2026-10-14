@@ -1,0 +1,54 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 15p_reserve_peak_day4_S100_seed0_grb_direct-gurobi_kl0.0192073_dual_ndw_rsc0.303571_plan20: n=15, |T|=24, |Omega|=100 ===
+
+[1] extensive form (DP_N^Omega)
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Set parameter Username
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Set parameter LicenseID to value 2839433
+Set parameter Username
+Academic license - for non-commercial use only - expires 2027-06-29
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter LicenseID to value 2839433
+Set parameter Username
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter LicenseID to value 2839433
+Set parameter Username
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+Academic license - for non-commercial use only - expires 2027-06-29
+  (first stage of ieee_owen/weak_eps_experiment/stochastic/main17_xi/15p_reserve_peak_day4_S20_seed0_grb_direct-gurobi_kl0.0960365_dual_ndw_rsc0.303571_main.json, recourse solved per scenario)
+  obj 2007.992014  status plan  gap nan  17.6s  vars 446884
+  KL r=0.0192073: worst case 2007.992014 vs expected 1958.545386; 0 MILP solve(s); rho* 0.010 0.009 0.011 0.010 0.010 0.010 0.011 0.008 0.010 0.012 0.010 0.012 0.007 0.009 0.009 0.008 0.009 0.012 0.012 0.010 0.016 0.011 0.011 0.014 0.012 0.009 0.009 0.008 0.011 0.008 0.011 0.010 0.011 0.012 0.010 0.011 0.010 0.013 0.011 0.008 0.009 0.010 0.009 0.008 0.009 0.005 0.011 0.010 0.011 0.009 0.011 0.008 0.014 0.008 0.009 0.010 0.010 0.010 0.008 0.013 0.009 0.009 0.010 0.007 0.008 0.011 0.010 0.013 0.007 0.007 0.012 0.009 0.011 0.010 0.012 0.014 0.008 0.009 0.006 0.016 0.009 0.009 0.009 0.007 0.008 0.013 0.010 0.012 0.009 0.013 0.010 0.011 0.010 0.011 0.008 0.006 0.011 0.012 0.010 0.011 (KL 0.0192)
+
+[2] column generation (DWR_N^Omega)
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.51e-14 (repaired)
+  CG   15 | RMP     1523.2296 | LB     1521.4667 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 2.08s solver 2.02s 6972 it 60598 cols 842238 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 1523.2296 LB 1521.4667 UB 2007.9920 gap 2.42e-01 [round] 82s
+  CG   25 | RMP     1997.2200 | LB     1814.9483 | UB     2007.9920 | a 0.10 smooth   | min rc -1.4352e+01 | +260 | lp 3.32s solver 3.22s 7164 it 65768 cols 1200769 nz
+  CG   50 | RMP     1989.4759 | LB     1971.7603 | UB     2007.9920 | a 0.10 smooth   | min rc -9.6673e+00 | +201 | lp 5.24s solver 5.14s 9452 it 69531 cols 1471862 nz
+  CG   69 | RMP     1986.3598 | LB     1985.7106 | UB     2007.9920 | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 12.55s solver 12.36s 7944 it 73246 cols 1692677 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 1986.3598 LB 1985.7106 UB 2007.9920 gap 1.11e-02 [round] 1377s
