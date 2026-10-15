@@ -1,0 +1,1643 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.20e-14 (repaired)
+  CG   21 | RMP    12194.8734 | LB    12176.5429 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 918 cols 19741 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12194.8734 LB 12176.5429 UB inf gap nan [round] 4s
+  CG   25 | RMP    13008.5622 | LB    12470.0989 | UB           inf | a 0.10 smooth   | min rc -1.1679e+01 | +11 | lp 0.01s solver 0.00s 85 it 978 cols 22551 nz
+  CG   41 | RMP    12959.8915 | LB    12955.6872 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 164 it 1122 cols 24594 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12959.8915 LB 12955.6872 UB inf gap nan [round] 12s
+  CG   46 | RMP    12966.3231 | LB    12959.9820 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 106 it 1226 cols 28707 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12966.3231 LB 12959.9820 UB inf gap nan [round] 14s
+  CG   48 | RMP    12966.7553 | LB    12960.6648 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 81 it 1231 cols 29011 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12966.7553 LB 12960.6648 UB inf gap nan [round] 14s
+  CG   49 | RMP    12966.8875 | LB    12960.6648 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1231 cols 29011 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12966.8875 LB 12960.6648 UB inf gap nan [round] 14s
+  CG   50 | RMP    12966.9180 | LB    12960.6648 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 22 it 1231 cols 29011 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12966.9180 LB 12960.6648 UB inf gap nan [round] 14s
+  CG   51 | RMP    12966.9284 | LB    12960.6648 | UB    12966.9284 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 9 it 1231 cols 29011 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12966.9284 LB 12960.6648 UB 12966.9284 gap 4.83e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   22 | RMP     9572.7674 | LB     9577.2586 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 65 it 1045 cols 28174 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9572.7674 LB 9577.2586 UB inf gap nan [round] 3s
+  CG   25 | RMP    10303.4517 | LB     9768.9919 | UB           inf | a 0.10 smooth   | min rc -1.3310e+01 | +20 | lp 0.00s solver 0.00s 121 it 1093 cols 30740 nz
+  CG   43 | RMP    10235.4280 | LB    10212.3663 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 64 it 1228 cols 34453 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10235.4280 LB 10212.3663 UB inf gap nan [round] 7s
+  CG   47 | RMP    10243.0561 | LB    10221.1683 | UB           inf | a 0.10 misprice | min rc -4.8601e-12 | +0  [round] | lp 0.00s solver 0.00s 189 it 1265 cols 36431 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10243.0561 LB 10221.1683 UB inf gap nan [round] 8s
+  CG   48 | RMP    10243.3874 | LB    10221.1683 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 163 it 1265 cols 36431 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10243.3874 LB 10221.1683 UB inf gap nan [round] 8s
+  CG   49 | RMP    10243.4794 | LB    10221.1683 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1265 cols 36431 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10243.4794 LB 10221.1683 UB inf gap nan [round] 8s
+  CG   50 | RMP    10243.5050 | LB    10221.1683 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 12 it 1265 cols 36431 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10243.5050 LB 10221.1683 UB inf gap nan [round] 8s
+  CG   51 | RMP    10243.5137 | LB    10221.1683 | UB    10243.5137 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1265 cols 36431 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10243.5137 LB 10221.1683 UB 10243.5137 gap 2.18e-03 [done] 8s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.49e-14 (repaired)
+  CG   24 | RMP    10075.4166 | LB    10080.8416 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 155 it 1039 cols 28076 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10075.4166 LB 10080.8416 UB inf gap nan [round] 4s
+  CG   25 | RMP    10856.6894 | LB    10158.8290 | UB           inf | a 0.10 smooth   | min rc -8.2301e+00 | +15 | lp 0.00s solver 0.00s 215 it 1039 cols 28076 nz
+  CG   50 | RMP    10678.7829 | LB    10649.4122 | UB           inf | a 0.10 smooth   | min rc -6.0169e-01 | +9 | lp 0.00s solver 0.00s 152 it 1327 cols 38499 nz
+  CG   54 | RMP    10677.3067 | LB    10659.7012 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 146 it 1254 cols 33152 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10677.3067 LB 10659.7012 UB inf gap nan [round] 14s
+  CG   60 | RMP    10687.4401 | LB    10669.0669 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 178 it 1327 cols 36549 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10687.4401 LB 10669.0669 UB inf gap nan [round] 16s
+  CG   61 | RMP    10687.6324 | LB    10670.8442 | UB           inf | a 0.10 misprice | min rc -2.5011e-12 | +0  [round] | lp 0.01s solver 0.00s 228 it 1327 cols 36549 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10687.6324 LB 10670.8442 UB inf gap nan [round] 16s
+  CG   62 | RMP    10687.6890 | LB    10670.8442 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 69 it 1327 cols 36549 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10687.6890 LB 10670.8442 UB inf gap nan [round] 16s
+  CG   63 | RMP    10687.7043 | LB    10670.8442 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 38 it 1327 cols 36549 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10687.7043 LB 10670.8442 UB inf gap nan [round] 16s
+  CG   64 | RMP    10687.7100 | LB    10670.8442 | UB    10687.7100 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 4 it 1327 cols 36549 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10687.7100 LB 10670.8442 UB 10687.7100 gap 1.58e-03 [done] 16s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.60e-14 (repaired)
+  CG   22 | RMP     9102.1898 | LB     9134.9941 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 118 it 1040 cols 27608 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9102.1898 LB 9134.9941 UB inf gap nan [round] 4s
+  CG   25 | RMP     9850.0027 | LB     9317.2073 | UB           inf | a 0.10 smooth   | min rc -1.6360e+01 | +24 | lp 0.00s solver 0.00s 115 it 1072 cols 29715 nz
+  CG   48 | RMP     9810.4837 | LB     9793.0046 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 124 it 1265 cols 38316 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9810.4837 LB 9793.0046 UB inf gap nan [round] 9s
+  CG   50 | RMP     9821.1724 | LB     9794.5841 | UB           inf | a 0.10 smooth   | min rc -8.4565e-01 | +24 | lp 0.01s solver 0.01s 274 it 1289 cols 39767 nz
+  CG   55 | RMP     9820.5963 | LB     9802.7471 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1221 cols 35397 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9820.5963 LB 9802.7471 UB inf gap nan [round] 10s
+  CG   56 | RMP     9821.2474 | LB     9802.7471 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 109 it 1221 cols 35397 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9821.2474 LB 9802.7471 UB inf gap nan [round] 10s
+  CG   57 | RMP     9821.3435 | LB     9802.7471 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 19 it 1221 cols 35397 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9821.3435 LB 9802.7471 UB inf gap nan [round] 10s
+  CG   58 | RMP     9821.3692 | LB     9802.7471 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 1221 cols 35397 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9821.3692 LB 9802.7471 UB inf gap nan [round] 10s
+  CG   59 | RMP     9821.3780 | LB     9802.7471 | UB     9821.3780 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1221 cols 35397 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9821.3780 LB 9802.7471 UB 9821.3780 gap 1.90e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   23 | RMP    10982.0174 | LB    11015.0397 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 57 it 1046 cols 27240 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10982.0174 LB 11015.0397 UB inf gap nan [round] 4s
+  CG   25 | RMP    11769.0226 | LB    11159.5264 | UB           inf | a 0.10 smooth   | min rc -1.0372e+01 | +15 | lp 0.00s solver 0.00s 197 it 1077 cols 28376 nz
+  CG   47 | RMP    11703.6713 | LB    11702.0065 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 183 it 1249 cols 33162 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11703.6713 LB 11702.0065 UB inf gap nan [round] 10s
+  CG   50 | RMP    11714.4902 | LB    11703.9774 | UB           inf | a 0.10 smooth   | min rc -3.9561e+00 | +12 | lp 0.00s solver 0.00s 9 it 1293 cols 35288 nz
+  CG   55 | RMP    11713.4053 | LB    11706.2531 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 47 it 1285 cols 32897 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11713.4053 LB 11706.2531 UB inf gap nan [round] 13s
+  CG   56 | RMP    11713.6636 | LB    11706.2531 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 182 it 1285 cols 32897 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11713.6636 LB 11706.2531 UB inf gap nan [round] 13s
+  CG   57 | RMP    11713.6883 | LB    11706.2531 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 44 it 1285 cols 32897 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11713.6883 LB 11706.2531 UB inf gap nan [round] 13s
+  CG   58 | RMP    11713.6962 | LB    11706.2531 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 26 it 1285 cols 32897 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11713.6962 LB 11706.2531 UB inf gap nan [round] 13s
+  CG   59 | RMP    11713.6990 | LB    11706.2531 | UB    11713.6990 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 8 it 1285 cols 32897 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11713.6990 LB 11706.2531 UB 11713.6990 gap 6.36e-04 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.20e-14 (repaired)
+  CG   21 | RMP    11067.7873 | LB    11044.9407 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 78 it 932 cols 22585 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11067.7873 LB 11044.9407 UB inf gap nan [round] 4s
+  CG   25 | RMP    11850.2248 | LB    11297.5270 | UB           inf | a 0.10 smooth   | min rc -1.1862e+01 | +16 | lp 0.00s solver 0.00s 208 it 1025 cols 26764 nz
+  CG   50 | RMP    11788.2005 | LB    11755.8036 | UB           inf | a 0.10 smooth   | min rc -7.4367e-01 | +6 | lp 0.00s solver 0.00s 161 it 1287 cols 35483 nz
+  CG   57 | RMP    11785.1482 | LB    11773.4199 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 162 it 1316 cols 35160 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11785.1482 LB 11773.4199 UB inf gap nan [round] 14s
+  CG   60 | RMP    11789.9214 | LB    11776.7574 | UB           inf | a 0.10 misprice | min rc -4.5475e-13 | +0  [round] | lp 0.00s solver 0.00s 5 it 1344 cols 36435 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11789.9214 LB 11776.7574 UB inf gap nan [round] 16s
+  CG   61 | RMP    11789.9785 | LB    11776.7574 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 145 it 1344 cols 36435 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11789.9785 LB 11776.7574 UB inf gap nan [round] 16s
+  CG   62 | RMP    11789.9982 | LB    11776.7574 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 67 it 1344 cols 36435 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11789.9982 LB 11776.7574 UB inf gap nan [round] 16s
+  CG   63 | RMP    11790.0049 | LB    11776.7574 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 5 it 1344 cols 36435 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11790.0049 LB 11776.7574 UB inf gap nan [round] 16s
+  CG   64 | RMP    11790.0073 | LB    11776.7574 | UB    11790.0073 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 33 it 1344 cols 36435 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11790.0073 LB 11776.7574 UB 11790.0073 gap 1.12e-03 [done] 16s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.13e-14 (repaired)
+  CG   21 | RMP    10416.2683 | LB    10385.0361 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 128 it 977 cols 21753 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10416.2683 LB 10385.0361 UB inf gap nan [round] 3s
+  CG   25 | RMP    11182.3991 | LB    10640.4405 | UB           inf | a 0.10 smooth   | min rc -8.1578e+01 | +24 | lp 0.00s solver 0.00s 278 it 1058 cols 24755 nz
+  CG   46 | RMP    11101.7892 | LB    11095.9189 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 231 it 1251 cols 30416 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11101.7892 LB 11095.9189 UB inf gap nan [round] 14s
+  CG   49 | RMP    11109.7460 | LB    11098.5763 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 11 it 1277 cols 31563 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11109.7460 LB 11098.5763 UB inf gap nan [round] 15s
+  CG   50 | RMP    11110.4695 | LB    11099.9279 | UB           inf | a 0.10 misprice | min rc -6.8212e-12 | +0  [round] | lp 0.01s solver 0.00s 276 it 1277 cols 31563 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11110.4695 LB 11099.9279 UB inf gap nan [round] 15s
+  CG   51 | RMP    11110.7628 | LB    11099.9279 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 61 it 1277 cols 31563 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11110.7628 LB 11099.9279 UB inf gap nan [round] 15s
+  CG   52 | RMP    11110.8300 | LB    11099.9279 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 29 it 1277 cols 31563 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11110.8300 LB 11099.9279 UB inf gap nan [round] 15s
+  CG   53 | RMP    11110.8526 | LB    11099.9279 | UB    11110.8526 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1277 cols 31563 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11110.8526 LB 11099.9279 UB 11110.8526 gap 9.83e-04 [done] 15s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   21 | RMP     9767.3634 | LB     9752.0130 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 117 it 1018 cols 27518 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9767.3634 LB 9752.0130 UB inf gap nan [round] 3s
+  CG   25 | RMP    10526.2557 | LB    10014.6358 | UB           inf | a 0.10 smooth   | min rc -7.8944e+00 | +13 | lp 0.00s solver 0.00s 140 it 1080 cols 30965 nz
+  CG   50 | RMP    10480.3175 | LB    10450.5679 | UB           inf | a 0.10 smooth   | min rc -4.4256e-02 | +3 | lp 0.00s solver 0.00s 43 it 1154 cols 31324 nz
+  CG   54 | RMP    10479.6970 | LB    10459.3694 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 108 it 1033 cols 25940 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10479.6970 LB 10459.3694 UB inf gap nan [round] 9s
+  CG   59 | RMP    10488.4763 | LB    10469.0133 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 248 it 1137 cols 30977 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10488.4763 LB 10469.0133 UB inf gap nan [round] 10s
+  CG   60 | RMP    10489.5135 | LB    10469.0133 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 149 it 1137 cols 30977 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10489.5135 LB 10469.0133 UB inf gap nan [round] 10s
+  CG   61 | RMP    10489.6790 | LB    10469.0133 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 113 it 1137 cols 30977 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10489.6790 LB 10469.0133 UB inf gap nan [round] 10s
+  CG   62 | RMP    10489.7353 | LB    10469.0133 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 62 it 1137 cols 30977 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10489.7353 LB 10469.0133 UB inf gap nan [round] 10s
+  CG   63 | RMP    10489.7546 | LB    10469.0133 | UB    10489.7546 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1137 cols 30977 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10489.7546 LB 10469.0133 UB 10489.7546 gap 1.98e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   24 | RMP    11548.8595 | LB    11570.5118 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 85 it 1064 cols 31035 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11548.8595 LB 11570.5118 UB inf gap nan [round] 3s
+  CG   25 | RMP    12366.2257 | LB    11648.7467 | UB           inf | a 0.10 smooth   | min rc -1.1343e+01 | +13 | lp 0.00s solver 0.00s 244 it 1064 cols 31035 nz
+  CG   50 | RMP    12236.3703 | LB    12195.1838 | UB           inf | a 0.10 smooth   | min rc -3.5249e+00 | +10 | lp 0.00s solver 0.00s 128 it 1317 cols 40641 nz
+  CG   56 | RMP    12232.9961 | LB    12235.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 198 it 1298 cols 37587 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12232.9961 LB 12235.1985 UB inf gap nan [round] 9s
+  CG   57 | RMP    12240.6379 | LB    12235.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 404 it 1298 cols 37587 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12240.6379 LB 12235.1985 UB inf gap nan [round] 9s
+  CG   58 | RMP    12240.9859 | LB    12235.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 187 it 1298 cols 37587 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12240.9859 LB 12235.1985 UB inf gap nan [round] 9s
+  CG   59 | RMP    12241.0979 | LB    12235.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 82 it 1298 cols 37587 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12241.0979 LB 12235.1985 UB inf gap nan [round] 9s
+  CG   60 | RMP    12241.1284 | LB    12235.1985 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 106 it 1298 cols 37587 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12241.1284 LB 12235.1985 UB inf gap nan [round] 9s
+  CG   61 | RMP    12241.1389 | LB    12235.1985 | UB    12241.1389 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1298 cols 37587 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12241.1389 LB 12235.1985 UB 12241.1389 gap 4.85e-04 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   24 | RMP    11083.3875 | LB    11114.4020 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 199 it 1107 cols 34408 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11083.3875 LB 11114.4020 UB inf gap nan [round] 3s
+  CG   25 | RMP    11853.5511 | LB    11183.8021 | UB           inf | a 0.10 smooth   | min rc -8.2551e+00 | +7 | lp 0.00s solver 0.00s 163 it 1107 cols 34408 nz
+  CG   50 | RMP    11758.5218 | LB    11720.9227 | UB           inf | a 0.10 smooth   | min rc -6.0410e-01 | +5 | lp 0.00s solver 0.00s 232 it 1224 cols 36738 nz
+  CG   53 | RMP    11757.7010 | LB    11726.8419 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 158 it 1154 cols 32456 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11757.7010 LB 11726.8419 UB inf gap nan [round] 10s
+  CG   57 | RMP    11765.0664 | LB    11734.6681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 115 it 1183 cols 34315 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11765.0664 LB 11734.6681 UB inf gap nan [round] 11s
+  CG   58 | RMP    11765.3020 | LB    11734.6681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 74 it 1183 cols 34315 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11765.3020 LB 11734.6681 UB inf gap nan [round] 11s
+  CG   59 | RMP    11765.3636 | LB    11734.6681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1183 cols 34315 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11765.3636 LB 11734.6681 UB inf gap nan [round] 11s
+  CG   60 | RMP    11765.3825 | LB    11734.6681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 5 it 1183 cols 34315 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11765.3825 LB 11734.6681 UB inf gap nan [round] 11s
+  CG   61 | RMP    11765.3894 | LB    11734.6681 | UB    11765.3894 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 10 it 1183 cols 34315 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11765.3894 LB 11734.6681 UB 11765.3894 gap 2.61e-03 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   21 | RMP    11503.2513 | LB    11547.9075 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 170 it 995 cols 23938 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11503.2513 LB 11547.9075 UB inf gap nan [round] 3s
+  CG   25 | RMP    12331.9230 | LB    11821.3868 | UB           inf | a 0.10 smooth   | min rc -3.9451e+00 | +7 | lp 0.00s solver 0.00s 135 it 1025 cols 25608 nz
+  CG   47 | RMP    12297.7063 | LB    12297.1367 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 75 it 1136 cols 28531 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12297.7063 LB 12297.1367 UB inf gap nan [round] 8s
+  CG   48 | RMP    12308.7820 | LB    12297.1367 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 202 it 1136 cols 28531 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12308.7820 LB 12297.1367 UB inf gap nan [round] 8s
+  CG   49 | RMP    12308.8649 | LB    12297.1367 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 63 it 1136 cols 28531 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12308.8649 LB 12297.1367 UB inf gap nan [round] 8s
+  CG   50 | RMP    12308.8977 | LB    12297.1367 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 18 it 1136 cols 28531 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12308.8977 LB 12297.1367 UB inf gap nan [round] 8s
+  CG   51 | RMP    12308.9080 | LB    12297.1367 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 20 it 1136 cols 28531 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12308.9080 LB 12297.1367 UB inf gap nan [round] 8s
+  CG   52 | RMP    12308.9141 | LB    12297.1367 | UB    12308.9141 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 6 it 1136 cols 28531 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12308.9141 LB 12297.1367 UB 12308.9141 gap 9.57e-04 [done] 8s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.31e-14 (repaired)
+  CG   23 | RMP    11348.8110 | LB    11390.9446 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 79 it 1071 cols 27752 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11348.8110 LB 11390.9446 UB inf gap nan [round] 4s
+  CG   25 | RMP    12154.6696 | LB    11530.8515 | UB           inf | a 0.10 smooth   | min rc -1.6381e+01 | +17 | lp 0.00s solver 0.00s 206 it 1099 cols 29175 nz
+  CG   50 | RMP    12087.7590 | LB    12058.2856 | UB           inf | a 0.10 smooth   | min rc -1.2565e+00 | +9 | lp 0.00s solver 0.00s 38 it 1299 cols 35230 nz
+  CG   56 | RMP    12085.8888 | LB    12089.4210 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 172 it 1311 cols 34019 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12085.8888 LB 12089.4210 UB inf gap nan [round] 16s
+  CG   58 | RMP    12096.9894 | LB    12089.8180 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 49 it 1322 cols 34422 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12096.9894 LB 12089.8180 UB inf gap nan [round] 17s
+  CG   60 | RMP    12097.0070 | LB    12090.2064 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 104 it 1330 cols 34823 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12097.0070 LB 12090.2064 UB inf gap nan [round] 17s
+  CG   61 | RMP    12097.1090 | LB    12090.2064 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 27 it 1330 cols 34823 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12097.1090 LB 12090.2064 UB inf gap nan [round] 17s
+  CG   62 | RMP    12097.1331 | LB    12090.2064 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 14 it 1330 cols 34823 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12097.1331 LB 12090.2064 UB inf gap nan [round] 17s
+  CG   63 | RMP    12097.1414 | LB    12090.2064 | UB    12097.1414 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 15 it 1330 cols 34823 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12097.1414 LB 12090.2064 UB 12097.1414 gap 5.73e-04 [done] 17s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.11e-14 (repaired)
+  CG   23 | RMP    11849.4339 | LB    11828.4865 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 58 it 983 cols 24817 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11849.4339 LB 11828.4865 UB inf gap nan [round] 6s
+  CG   25 | RMP    12675.1412 | LB    11981.8133 | UB           inf | a 0.10 smooth   | min rc -2.4338e+01 | +20 | lp 0.01s solver 0.00s 105 it 998 cols 25602 nz
+  CG   50 | RMP    12552.1287 | LB    12518.6798 | UB           inf | a 0.10 smooth   | min rc -1.3556e+00 | +11 | lp 0.00s solver 0.00s 99 it 1308 cols 37636 nz
+  CG   56 | RMP    12550.6408 | LB    12556.8488 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 103 it 1297 cols 35581 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12550.6408 LB 12556.8488 UB inf gap nan [round] 17s
+  CG   57 | RMP    12559.0282 | LB    12556.8488 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 544 it 1297 cols 35581 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12559.0282 LB 12556.8488 UB inf gap nan [round] 17s
+  CG   58 | RMP    12559.1117 | LB    12556.8488 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 154 it 1297 cols 35581 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12559.1117 LB 12556.8488 UB inf gap nan [round] 17s
+  CG   59 | RMP    12559.1468 | LB    12556.8488 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 155 it 1297 cols 35581 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12559.1468 LB 12556.8488 UB inf gap nan [round] 17s
+  CG   60 | RMP    12559.1581 | LB    12556.8488 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1297 cols 35581 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12559.1581 LB 12556.8488 UB inf gap nan [round] 17s
+  CG   61 | RMP    12559.1623 | LB    12556.8488 | UB    12559.1623 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 13 it 1297 cols 35581 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12559.1623 LB 12556.8488 UB 12559.1623 gap 1.84e-04 [done] 17s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 4.44e-14 (repaired)
+  CG   25 | RMP    10269.4707 | LB    10282.0155 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 124 it 1099 cols 30043 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10269.4707 LB 10282.0155 UB inf gap nan [round] 4s
+  CG   50 | RMP    10924.8847 | LB    10884.5400 | UB           inf | a 0.10 smooth   | min rc -3.3714e+00 | +9 | lp 0.01s solver 0.00s 179 it 1346 cols 39085 nz
+  CG   59 | RMP    10917.5878 | LB    10904.7788 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 52 it 1339 cols 38333 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10917.5878 LB 10904.7788 UB inf gap nan [round] 12s
+  CG   65 | RMP    10927.2888 | LB    10914.6246 | UB           inf | a 0.10 misprice | min rc -2.3306e-11 | +0  [round] | lp 0.01s solver 0.00s 72 it 1236 cols 33108 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10927.2888 LB 10914.6246 UB inf gap nan [round] 13s
+  CG   66 | RMP    10927.4165 | LB    10914.6246 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 171 it 1236 cols 33108 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10927.4165 LB 10914.6246 UB inf gap nan [round] 13s
+  CG   67 | RMP    10927.4648 | LB    10914.6246 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 91 it 1236 cols 33108 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10927.4648 LB 10914.6246 UB inf gap nan [round] 13s
+  CG   68 | RMP    10927.4800 | LB    10914.6246 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 53 it 1236 cols 33108 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10927.4800 LB 10914.6246 UB inf gap nan [round] 13s
+  CG   69 | RMP    10927.4859 | LB    10914.6246 | UB    10927.4859 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 13 it 1236 cols 33108 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10927.4859 LB 10914.6246 UB 10927.4859 gap 1.18e-03 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.38e-14 (repaired)
+  CG   12 | RMP    10524.1013 | LB    10496.9622 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 37 it 793 cols 11628 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10524.1013 LB 10496.9622 UB inf gap nan [round] 3s
+  CG   25 | RMP    11277.7196 | LB    11089.8541 | UB           inf | a 0.10 smooth   | min rc -2.7626e+01 | +21 | lp 0.00s solver 0.00s 136 it 1066 cols 22463 nz
+  CG   41 | RMP    11160.6071 | LB    11152.0403 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 194 it 1279 cols 30870 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11160.6071 LB 11152.0403 UB inf gap nan [round] 16s
+  CG   50 | RMP    11175.6160 | LB    11166.1575 | UB           inf | a 0.10 smooth   | min rc -8.9968e-01 | +11 | lp 0.00s solver 0.00s 177 it 1365 cols 33973 nz
+  CG   51 | RMP    11174.9358 | LB    11166.1575 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 180 it 1273 cols 28695 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11174.9358 LB 11166.1575 UB inf gap nan [round] 19s
+  CG   53 | RMP    11175.5631 | LB    11167.2298 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 158 it 1289 cols 29628 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11175.5631 LB 11167.2298 UB inf gap nan [round] 19s
+  CG   54 | RMP    11175.6246 | LB    11167.2298 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 55 it 1289 cols 29628 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11175.6246 LB 11167.2298 UB inf gap nan [round] 19s
+  CG   55 | RMP    11175.6402 | LB    11167.2298 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 34 it 1289 cols 29628 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11175.6402 LB 11167.2298 UB inf gap nan [round] 19s
+  CG   56 | RMP    11175.6456 | LB    11167.2298 | UB    11175.6456 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1289 cols 29628 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11175.6456 LB 11167.2298 UB 11175.6456 gap 7.53e-04 [done] 19s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.24e-14 (repaired)
+  CG   20 | RMP    10354.9101 | LB    10322.7432 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 150 it 964 cols 20948 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10354.9101 LB 10322.7432 UB inf gap nan [round] 4s
+  CG   25 | RMP    11128.0394 | LB    10656.3795 | UB           inf | a 0.10 smooth   | min rc -5.7811e+00 | +15 | lp 0.00s solver 0.00s 131 it 1060 cols 24741 nz
+  CG   50 | RMP    11079.3441 | LB    11054.1367 | UB           inf | a 0.10 smooth   | min rc -2.3705e-01 | +30 | lp 0.00s solver 0.00s 26 it 1267 cols 30684 nz
+  CG   56 | RMP    11078.2042 | LB    11066.3109 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 62 it 1259 cols 30040 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11078.2042 LB 11066.3109 UB inf gap nan [round] 20s
+  CG   60 | RMP    11086.3991 | LB    11073.0318 | UB           inf | a 0.10 misprice | min rc -7.9133e-06 | +0  [round] | lp 0.01s solver 0.00s 201 it 1286 cols 31362 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11086.3991 LB 11073.0318 UB inf gap nan [round] 22s
+  CG   62 | RMP    11086.8915 | LB    11074.3870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 19 it 1296 cols 31812 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11086.8915 LB 11074.3870 UB inf gap nan [round] 23s
+  CG   63 | RMP    11086.9726 | LB    11074.3870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1296 cols 31812 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11086.9726 LB 11074.3870 UB inf gap nan [round] 23s
+  CG   64 | RMP    11086.9922 | LB    11074.3870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 74 it 1296 cols 31812 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11086.9922 LB 11074.3870 UB inf gap nan [round] 23s
+  CG   65 | RMP    11086.9995 | LB    11074.3870 | UB    11086.9995 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1296 cols 31812 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11086.9995 LB 11074.3870 UB 11086.9995 gap 1.14e-03 [done] 23s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.04e-14 (repaired)
+  CG   13 | RMP    11588.8975 | LB    11558.0638 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 85 it 906 cols 17828 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11588.8975 LB 11558.0638 UB inf gap nan [round] 2s
+  CG   25 | RMP    12221.3546 | LB    12034.7114 | UB           inf | a 0.10 smooth   | min rc -2.1762e+01 | +7 | lp 0.00s solver 0.00s 127 it 1206 cols 33714 nz
+  CG   40 | RMP    12150.1855 | LB    12132.9526 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 153 it 1401 cols 42287 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12150.1855 LB 12132.9526 UB inf gap nan [round] 10s
+  CG   48 | RMP    12161.7339 | LB    12146.2255 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 59 it 1502 cols 47202 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12161.7339 LB 12146.2255 UB inf gap nan [round] 13s
+  CG   49 | RMP    12162.2939 | LB    12146.2255 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 113 it 1502 cols 47202 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12162.2939 LB 12146.2255 UB inf gap nan [round] 13s
+  CG   50 | RMP    12162.4001 | LB    12146.2255 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 80 it 1502 cols 47202 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12162.4001 LB 12146.2255 UB inf gap nan [round] 13s
+  CG   51 | RMP    12162.4295 | LB    12146.2255 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 9 it 1502 cols 47202 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12162.4295 LB 12146.2255 UB inf gap nan [round] 13s
+  CG   52 | RMP    12162.4396 | LB    12146.2255 | UB    12162.4396 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 18 it 1502 cols 47202 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12162.4396 LB 12146.2255 UB 12162.4396 gap 1.33e-03 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 8.60e-14 (repaired)
+  CG   13 | RMP    10837.5794 | LB    10806.2977 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 67 it 845 cols 15967 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10837.5794 LB 10806.2977 UB inf gap nan [round] 2s
+  CG   25 | RMP    11499.4931 | LB    11317.2499 | UB           inf | a 0.10 smooth   | min rc -1.1767e+01 | +17 | lp 0.01s solver 0.00s 227 it 1123 cols 31076 nz
+  CG   38 | RMP    11443.2557 | LB    11431.5681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 144 it 1278 cols 39540 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11443.2557 LB 11431.5681 UB inf gap nan [round] 8s
+  CG   44 | RMP    11454.6556 | LB    11443.3211 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 43 it 1286 cols 37811 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11454.6556 LB 11443.3211 UB inf gap nan [round] 10s
+  CG   46 | RMP    11454.9863 | LB    11443.5583 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 147 it 1302 cols 38284 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11454.9863 LB 11443.5583 UB inf gap nan [round] 10s
+  CG   47 | RMP    11455.0280 | LB    11443.5583 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 53 it 1302 cols 38284 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11455.0280 LB 11443.5583 UB inf gap nan [round] 10s
+  CG   48 | RMP    11455.0408 | LB    11443.5583 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 24 it 1302 cols 38284 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11455.0408 LB 11443.5583 UB inf gap nan [round] 10s
+  CG   49 | RMP    11455.0453 | LB    11443.5583 | UB    11455.0453 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1302 cols 38284 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11455.0453 LB 11443.5583 UB 11455.0453 gap 1.00e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 6.22e-15 (repaired)
+  CG   22 | RMP    12284.5050 | LB    12255.2565 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 154 it 1109 cols 29566 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12284.5050 LB 12255.2565 UB inf gap nan [round] 4s
+  CG   25 | RMP    13002.2891 | LB    12444.9538 | UB           inf | a 0.10 smooth   | min rc -6.4893e+00 | +15 | lp 0.01s solver 0.01s 306 it 1171 cols 32404 nz
+  CG   47 | RMP    12973.2946 | LB    12976.3898 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 97 it 1152 cols 27545 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12973.2946 LB 12976.3898 UB inf gap nan [round] 14s
+  CG   48 | RMP    12980.7406 | LB    12976.3898 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 265 it 1152 cols 27545 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12980.7406 LB 12976.3898 UB inf gap nan [round] 14s
+  CG   49 | RMP    12981.0371 | LB    12976.3898 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 103 it 1152 cols 27545 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12981.0371 LB 12976.3898 UB inf gap nan [round] 14s
+  CG   50 | RMP    12981.1453 | LB    12976.3898 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 14 it 1152 cols 27545 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12981.1453 LB 12976.3898 UB inf gap nan [round] 14s
+  CG   51 | RMP    12981.1746 | LB    12976.3898 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 1152 cols 27545 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12981.1746 LB 12976.3898 UB inf gap nan [round] 14s
+  CG   52 | RMP    12981.1845 | LB    12976.3898 | UB    12981.1845 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1152 cols 27545 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12981.1845 LB 12976.3898 UB 12981.1845 gap 3.69e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.42e-14 (repaired)
+  CG   24 | RMP    11053.9650 | LB    11072.6734 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 76 it 1045 cols 26210 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11053.9650 LB 11072.6734 UB inf gap nan [round] 4s
+  CG   25 | RMP    11858.2495 | LB    11153.0444 | UB           inf | a 0.10 smooth   | min rc -4.4450e+00 | +18 | lp 0.00s solver 0.00s 285 it 1045 cols 26210 nz
+  CG   50 | RMP    11743.6573 | LB    11743.1336 | UB           inf | a 0.10 misprice | min rc -1.2190e+00 | +21 | lp 0.00s solver 0.00s 105 it 1260 cols 33254 nz
+  CG   51 | RMP    11743.5196 | LB    11743.1336 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 73 it 1211 cols 30217 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11743.5196 LB 11743.1336 UB inf gap nan [round] 9s
+  CG   52 | RMP    11753.9886 | LB    11743.1336 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 248 it 1211 cols 30217 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11753.9886 LB 11743.1336 UB inf gap nan [round] 9s
+  CG   53 | RMP    11754.1833 | LB    11743.1336 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 147 it 1211 cols 30217 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11754.1833 LB 11743.1336 UB inf gap nan [round] 9s
+  CG   54 | RMP    11754.2623 | LB    11743.1336 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 32 it 1211 cols 30217 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11754.2623 LB 11743.1336 UB inf gap nan [round] 9s
+  CG   55 | RMP    11754.2840 | LB    11743.1336 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1211 cols 30217 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11754.2840 LB 11743.1336 UB inf gap nan [round] 9s
+  CG   56 | RMP    11754.2914 | LB    11743.1336 | UB    11754.2914 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1211 cols 30217 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11754.2914 LB 11743.1336 UB 11754.2914 gap 9.49e-04 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   25 | RMP    10539.6150 | LB    10525.6202 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 119 it 1100 cols 29742 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10539.6150 LB 10525.6202 UB inf gap nan [round] 4s
+  CG   50 | RMP    11180.4354 | LB    11137.4751 | UB           inf | a 0.10 smooth   | min rc -3.0589e+00 | +18 | lp 0.00s solver 0.00s 108 it 1401 cols 37772 nz
+  CG   59 | RMP    11174.9446 | LB    11164.1942 | UB           inf | a 0.10 misprice | min rc -9.0594e-13 | +0  [round] | lp 0.00s solver 0.00s 165 it 1449 cols 37169 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11174.9446 LB 11164.1942 UB inf gap nan [round] 10s
+  CG   66 | RMP    11186.2339 | LB    11176.1930 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 160 it 1457 cols 36623 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11186.2339 LB 11176.1930 UB inf gap nan [round] 12s
+  CG   67 | RMP    11186.7703 | LB    11177.3405 | UB           inf | a 0.10 misprice | min rc -2.9416e-12 | +0  [round] | lp 0.01s solver 0.01s 392 it 1457 cols 36623 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11186.7703 LB 11177.3405 UB inf gap nan [round] 12s
+  CG   68 | RMP    11186.8140 | LB    11177.3405 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 180 it 1457 cols 36623 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11186.8140 LB 11177.3405 UB inf gap nan [round] 12s
+  CG   69 | RMP    11186.8496 | LB    11177.3405 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 131 it 1457 cols 36623 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11186.8496 LB 11177.3405 UB inf gap nan [round] 12s
+  CG   70 | RMP    11186.8658 | LB    11177.3405 | UB    11186.8658 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 35 it 1457 cols 36623 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11186.8658 LB 11177.3405 UB 11186.8658 gap 8.51e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   22 | RMP    12639.1568 | LB    12654.2583 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 128 it 986 cols 23729 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12639.1568 LB 12654.2583 UB inf gap nan [round] 3s
+  CG   25 | RMP    13446.0854 | LB    12858.3798 | UB           inf | a 0.10 smooth   | min rc -2.4438e+00 | +13 | lp 0.00s solver 0.00s 163 it 1042 cols 26194 nz
+  CG   50 | RMP    13397.3634 | LB    13361.3811 | UB           inf | a 0.10 smooth   | min rc -7.6368e-01 | +16 | lp 0.00s solver 0.00s 69 it 1256 cols 34808 nz
+  CG   52 | RMP    13396.8476 | LB    13393.0073 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 199 it 1185 cols 30064 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 13396.8476 LB 13393.0073 UB inf gap nan [round] 8s
+  CG   55 | RMP    13404.9470 | LB    13395.0882 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1223 cols 32228 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 13404.9470 LB 13395.0882 UB inf gap nan [round] 8s
+  CG   57 | RMP    13405.7481 | LB    13395.9479 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 183 it 1233 cols 32825 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 13405.7481 LB 13395.9479 UB inf gap nan [round] 8s
+  CG   59 | RMP    13405.7637 | LB    13396.6272 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 179 it 1249 cols 33686 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 13405.7637 LB 13396.6272 UB inf gap nan [round] 9s
+  CG   60 | RMP    13405.8124 | LB    13396.6272 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 2 it 1249 cols 33686 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 13405.8124 LB 13396.6272 UB inf gap nan [round] 9s
+  CG   61 | RMP    13405.8269 | LB    13396.6272 | UB    13405.8269 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1249 cols 33686 nz
+  -- penalty round 7: eps 0 delta 0 RMP 13405.8269 LB 13396.6272 UB 13405.8269 gap 6.86e-04 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.20e-14 (repaired)
+  CG   22 | RMP    12638.8553 | LB    12626.3157 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 983 cols 22504 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12638.8553 LB 12626.3157 UB inf gap nan [round] 4s
+  CG   25 | RMP    13443.0870 | LB    12832.7481 | UB           inf | a 0.10 smooth   | min rc -1.0680e+01 | +21 | lp 0.00s solver 0.00s 170 it 1049 cols 25329 nz
+  CG   50 | RMP    13359.3419 | LB    13332.5114 | UB           inf | a 0.10 smooth   | min rc -4.8722e-01 | +11 | lp 0.00s solver 0.00s 164 it 1283 cols 33597 nz
+  CG   56 | RMP    13358.7236 | LB    13349.1902 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 20 it 1193 cols 28767 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 13358.7236 LB 13349.1902 UB inf gap nan [round] 16s
+  CG   60 | RMP    13373.0879 | LB    13372.8207 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 20 it 1233 cols 30380 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 13373.0879 LB 13372.8207 UB inf gap nan [round] 18s
+  CG   61 | RMP    13373.4497 | LB    13372.8207 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 177 it 1233 cols 30380 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 13373.4497 LB 13372.8207 UB inf gap nan [round] 18s
+  CG   62 | RMP    13373.4577 | LB    13372.8207 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1233 cols 30380 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 13373.4577 LB 13372.8207 UB inf gap nan [round] 18s
+  CG   63 | RMP    13373.4620 | LB    13372.8207 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 22 it 1233 cols 30380 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 13373.4620 LB 13372.8207 UB inf gap nan [round] 18s
+  CG   64 | RMP    13373.4635 | LB    13372.8207 | UB    13373.4635 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 14 it 1233 cols 30380 nz
+  -- penalty round 7: eps 0 delta 0 RMP 13373.4635 LB 13372.8207 UB 13373.4635 gap 4.81e-05 [done] 18s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.31e-14 (repaired)
+  CG   24 | RMP    10479.4390 | LB    10460.9345 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 84 it 1071 cols 33361 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10479.4390 LB 10460.9345 UB inf gap nan [round] 3s
+  CG   25 | RMP    11281.1038 | LB    10543.0670 | UB           inf | a 0.10 smooth   | min rc -3.8263e+00 | +6 | lp 0.00s solver 0.00s 217 it 1071 cols 33361 nz
+  CG   50 | RMP    11121.0090 | LB    11088.1518 | UB           inf | a 0.10 smooth   | min rc -9.1404e-01 | +9 | lp 0.01s solver 0.00s 217 it 1376 cols 42548 nz
+  CG   56 | RMP    11118.0398 | LB    11103.5330 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 256 it 1315 cols 37047 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11118.0398 LB 11103.5330 UB inf gap nan [round] 12s
+  CG   62 | RMP    11128.5456 | LB    11112.3302 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 145 it 1270 cols 35478 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11128.5456 LB 11112.3302 UB inf gap nan [round] 14s
+  CG   64 | RMP    11129.1037 | LB    11114.1389 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 128 it 1284 cols 36469 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11129.1037 LB 11114.1389 UB inf gap nan [round] 14s
+  CG   65 | RMP    11129.2499 | LB    11114.1389 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 64 it 1284 cols 36469 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11129.2499 LB 11114.1389 UB inf gap nan [round] 14s
+  CG   66 | RMP    11129.2845 | LB    11114.1389 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 27 it 1284 cols 36469 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11129.2845 LB 11114.1389 UB inf gap nan [round] 14s
+  CG   67 | RMP    11129.2966 | LB    11114.1389 | UB    11129.2966 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1284 cols 36469 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11129.2966 LB 11114.1389 UB 11129.2966 gap 1.36e-03 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   22 | RMP    10923.3031 | LB    10893.1496 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 96 it 985 cols 26176 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10923.3031 LB 10893.1496 UB inf gap nan [round] 3s
+  CG   25 | RMP    11669.8810 | LB    11084.2316 | UB           inf | a 0.10 smooth   | min rc -8.9857e+00 | +11 | lp 0.00s solver 0.00s 205 it 1041 cols 28901 nz
+  CG   46 | RMP    11618.9686 | LB    11605.0942 | UB           inf | a 0.10 misprice | min rc -8.8107e-12 | +0  [round] | lp 0.00s solver 0.00s 44 it 1124 cols 27549 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11618.9686 LB 11605.0942 UB inf gap nan [round] 8s
+  CG   50 | RMP    11627.0545 | LB    11611.9273 | UB           inf | a 0.10 smooth   | min rc -2.3424e-01 | +5 | lp 0.00s solver 0.00s 141 it 1189 cols 30227 nz
+  CG   51 | RMP    11627.0208 | LB    11613.7394 | UB           inf | a 0.10 misprice | min rc -3.3879e-11 | +0  [round] | lp 0.00s solver 0.00s 29 it 1110 cols 26216 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11627.0208 LB 11613.7394 UB inf gap nan [round] 9s
+  CG   53 | RMP    11627.6048 | LB    11615.0182 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 46 it 1112 cols 26340 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11627.6048 LB 11615.0182 UB inf gap nan [round] 9s
+  CG   54 | RMP    11627.7143 | LB    11615.0182 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 15 it 1112 cols 26340 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11627.7143 LB 11615.0182 UB inf gap nan [round] 9s
+  CG   55 | RMP    11627.7400 | LB    11615.0182 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 1 it 1112 cols 26340 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11627.7400 LB 11615.0182 UB inf gap nan [round] 9s
+  CG   56 | RMP    11627.7488 | LB    11615.0182 | UB    11627.7488 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1112 cols 26340 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11627.7488 LB 11615.0182 UB 11627.7488 gap 1.09e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   24 | RMP     9260.1653 | LB     9312.7072 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 84 it 1071 cols 28857 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9260.1653 LB 9312.7072 UB inf gap nan [round] 3s
+  CG   25 | RMP    10034.8360 | LB     9367.6433 | UB           inf | a 0.10 smooth   | min rc -2.2189e+01 | +24 | lp 0.00s solver 0.00s 173 it 1071 cols 28857 nz
+  CG   50 | RMP     9903.5498 | LB     9909.9074 | UB           inf | a 0.10 misprice | min rc -5.7468e-01 | +28 | lp 0.00s solver 0.00s 45 it 1347 cols 40308 nz
+  CG   51 | RMP     9903.5050 | LB     9909.9074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 39 it 1248 cols 34065 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9903.5050 LB 9909.9074 UB inf gap nan [round] 9s
+  CG   52 | RMP     9915.7227 | LB     9909.9074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 367 it 1248 cols 34065 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9915.7227 LB 9909.9074 UB inf gap nan [round] 9s
+  CG   53 | RMP     9916.0139 | LB     9909.9074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 132 it 1248 cols 34065 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9916.0139 LB 9909.9074 UB inf gap nan [round] 9s
+  CG   54 | RMP     9916.1653 | LB     9909.9074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 29 it 1248 cols 34065 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9916.1653 LB 9909.9074 UB inf gap nan [round] 9s
+  CG   55 | RMP     9916.2055 | LB     9909.9074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 0 it 1248 cols 34065 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9916.2055 LB 9909.9074 UB inf gap nan [round] 9s
+  CG   56 | RMP     9916.2191 | LB     9909.9074 | UB     9916.2191 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1248 cols 34065 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9916.2191 LB 9909.9074 UB 9916.2191 gap 6.36e-04 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.02e-14 (repaired)
+  CG   22 | RMP    10673.1316 | LB    10714.3502 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 997 cols 26529 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10673.1316 LB 10714.3502 UB inf gap nan [round] 4s
+  CG   25 | RMP    11439.6152 | LB    10887.6254 | UB           inf | a 0.10 smooth   | min rc -2.3403e+01 | +24 | lp 0.00s solver 0.00s 189 it 1053 cols 29014 nz
+  CG   50 | RMP    11360.3365 | LB    11342.2266 | UB           inf | a 0.10 misprice | min rc -3.0973e+00 | +24 | lp 0.00s solver 0.00s 136 it 1335 cols 36802 nz
+  CG   52 | RMP    11359.4536 | LB    11344.6556 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 142 it 1277 cols 32952 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11359.4536 LB 11344.6556 UB inf gap nan [round] 15s
+  CG   58 | RMP    11367.8317 | LB    11353.5554 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1345 cols 36202 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11367.8317 LB 11353.5554 UB inf gap nan [round] 17s
+  CG   59 | RMP    11368.0071 | LB    11353.5554 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 92 it 1345 cols 36202 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11368.0071 LB 11353.5554 UB inf gap nan [round] 17s
+  CG   60 | RMP    11368.0431 | LB    11353.5554 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 39 it 1345 cols 36202 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11368.0431 LB 11353.5554 UB inf gap nan [round] 17s
+  CG   61 | RMP    11368.0540 | LB    11353.5554 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 7 it 1345 cols 36202 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11368.0540 LB 11353.5554 UB inf gap nan [round] 17s
+  CG   62 | RMP    11368.0579 | LB    11353.5554 | UB    11368.0579 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 8 it 1345 cols 36202 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11368.0579 LB 11353.5554 UB 11368.0579 gap 1.28e-03 [done] 17s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.02e-14 (repaired)
+  CG   23 | RMP    11964.0586 | LB    11943.9451 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 80 it 984 cols 25752 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11964.0586 LB 11943.9451 UB inf gap nan [round] 3s
+  CG   25 | RMP    12731.8076 | LB    12075.1934 | UB           inf | a 0.10 smooth   | min rc -2.2684e+01 | +20 | lp 0.00s solver 0.00s 153 it 1021 cols 27483 nz
+  CG   50 | RMP    12644.0797 | LB    12635.8379 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 170 it 1188 cols 34012 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12644.0797 LB 12635.8379 UB inf gap nan [round] 9s
+  CG   58 | RMP    12650.4938 | LB    12642.4845 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1291 cols 39852 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12650.4938 LB 12642.4845 UB inf gap nan [round] 11s
+  CG   59 | RMP    12650.6272 | LB    12642.4845 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 106 it 1291 cols 39852 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12650.6272 LB 12642.4845 UB inf gap nan [round] 11s
+  CG   60 | RMP    12650.6572 | LB    12642.4845 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 115 it 1291 cols 39852 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12650.6572 LB 12642.4845 UB inf gap nan [round] 11s
+  CG   61 | RMP    12650.6670 | LB    12642.4845 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 33 it 1291 cols 39852 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12650.6670 LB 12642.4845 UB inf gap nan [round] 11s
+  CG   62 | RMP    12650.6706 | LB    12642.4845 | UB    12650.6706 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 7 it 1291 cols 39852 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12650.6706 LB 12642.4845 UB 12650.6706 gap 6.47e-04 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   24 | RMP    11797.6551 | LB    11811.7409 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 65 it 1038 cols 25977 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11797.6551 LB 11811.7409 UB inf gap nan [round] 4s
+  CG   25 | RMP    12622.2053 | LB    11886.1958 | UB           inf | a 0.10 smooth   | min rc -2.0132e+01 | +21 | lp 0.00s solver 0.00s 268 it 1038 cols 25977 nz
+  CG   50 | RMP    12470.9111 | LB    12473.9888 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 259 it 1415 cols 41111 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12470.9111 LB 12473.9888 UB inf gap nan [round] 12s
+  CG   51 | RMP    12480.9957 | LB    12473.9888 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 286 it 1415 cols 41111 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12480.9957 LB 12473.9888 UB inf gap nan [round] 12s
+  CG   52 | RMP    12481.0196 | LB    12473.9888 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1415 cols 41111 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12481.0196 LB 12473.9888 UB inf gap nan [round] 12s
+  CG   53 | RMP    12481.0340 | LB    12473.9888 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 61 it 1415 cols 41111 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12481.0340 LB 12473.9888 UB inf gap nan [round] 12s
+  CG   54 | RMP    12481.0390 | LB    12473.9888 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 42 it 1415 cols 41111 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12481.0390 LB 12473.9888 UB inf gap nan [round] 12s
+  CG   55 | RMP    12481.0408 | LB    12473.9888 | UB    12481.0408 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1415 cols 41111 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12481.0408 LB 12473.9888 UB 12481.0408 gap 5.65e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 4.44e-14 (repaired)
+  CG   23 | RMP    11731.3899 | LB    11726.3695 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 103 it 982 cols 22892 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11731.3899 LB 11726.3695 UB inf gap nan [round] 4s
+  CG   25 | RMP    12554.2180 | LB    11869.5572 | UB           inf | a 0.10 smooth   | min rc -2.9322e+01 | +23 | lp 0.00s solver 0.00s 245 it 1006 cols 24137 nz
+  CG   50 | RMP    12384.2879 | LB    12355.4930 | UB           inf | a 0.10 smooth   | min rc -7.7586e-01 | +8 | lp 0.01s solver 0.00s 230 it 1322 cols 34736 nz
+  CG   56 | RMP    12381.8696 | LB    12369.0203 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 148 it 1315 cols 33675 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12381.8696 LB 12369.0203 UB inf gap nan [round] 13s
+  CG   59 | RMP    12391.7974 | LB    12386.6204 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 180 it 1353 cols 35360 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12391.7974 LB 12386.6204 UB inf gap nan [round] 14s
+  CG   60 | RMP    12391.8828 | LB    12386.6204 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 315 it 1353 cols 35360 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12391.8828 LB 12386.6204 UB inf gap nan [round] 14s
+  CG   61 | RMP    12391.9915 | LB    12386.6204 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 36 it 1353 cols 35360 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12391.9915 LB 12386.6204 UB inf gap nan [round] 14s
+  CG   62 | RMP    12392.0460 | LB    12386.6204 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 32 it 1353 cols 35360 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12392.0460 LB 12386.6204 UB inf gap nan [round] 14s
+  CG   63 | RMP    12392.0643 | LB    12386.6204 | UB    12392.0643 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 17 it 1353 cols 35360 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12392.0643 LB 12386.6204 UB 12392.0643 gap 4.39e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   22 | RMP    10149.1000 | LB    10192.2572 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 132 it 997 cols 28246 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10149.1000 LB 10192.2572 UB inf gap nan [round] 3s
+  CG   25 | RMP    10918.5898 | LB    10365.1369 | UB           inf | a 0.10 smooth   | min rc -3.1285e+01 | +22 | lp 0.00s solver 0.00s 156 it 1050 cols 31086 nz
+  CG   50 | RMP    10849.3187 | LB    10818.4420 | UB           inf | a 0.10 smooth   | min rc -7.8811e-01 | +11 | lp 0.01s solver 0.00s 228 it 1273 cols 37571 nz
+  CG   55 | RMP    10848.6950 | LB    10832.0994 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 66 it 1166 cols 30089 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10848.6950 LB 10832.0994 UB inf gap nan [round] 8s
+  CG   61 | RMP    10858.5030 | LB    10842.5592 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 224 it 1079 cols 25175 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10858.5030 LB 10842.5592 UB inf gap nan [round] 9s
+  CG   62 | RMP    10858.7453 | LB    10842.5592 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 132 it 1079 cols 25175 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10858.7453 LB 10842.5592 UB inf gap nan [round] 9s
+  CG   64 | RMP    10858.7654 | LB    10842.6653 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 91 it 1106 cols 26632 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10858.7654 LB 10842.6653 UB inf gap nan [round] 9s
+  CG   65 | RMP    10858.7894 | LB    10842.6653 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 29 it 1106 cols 26632 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10858.7894 LB 10842.6653 UB inf gap nan [round] 9s
+  CG   66 | RMP    10858.7977 | LB    10842.6653 | UB    10858.7977 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1106 cols 26632 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10858.7977 LB 10842.6653 UB 10858.7977 gap 1.49e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   22 | RMP     9942.2683 | LB     9945.3569 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 156 it 1038 cols 26977 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9942.2683 LB 9945.3569 UB inf gap nan [round] 4s
+  CG   25 | RMP    10719.6265 | LB    10140.0380 | UB           inf | a 0.10 smooth   | min rc -3.1009e+01 | +21 | lp 0.00s solver 0.00s 155 it 1087 cols 29226 nz
+  CG   50 | RMP    10605.2608 | LB    10601.6710 | UB           inf | a 0.10 misprice | min rc -1.4974e+00 | +24 | lp 0.00s solver 0.00s 39 it 1274 cols 33017 nz
+  CG   51 | RMP    10604.2025 | LB    10601.6710 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 188 it 1201 cols 28355 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10604.2025 LB 10601.6710 UB inf gap nan [round] 10s
+  CG   54 | RMP    10613.9069 | LB    10603.3342 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 208 it 1238 cols 30446 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10613.9069 LB 10603.3342 UB inf gap nan [round] 10s
+  CG   55 | RMP    10613.9899 | LB    10603.3342 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 100 it 1238 cols 30446 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10613.9899 LB 10603.3342 UB inf gap nan [round] 10s
+  CG   56 | RMP    10614.0458 | LB    10603.3342 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 50 it 1238 cols 30446 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10614.0458 LB 10603.3342 UB inf gap nan [round] 10s
+  CG   57 | RMP    10614.0622 | LB    10603.3342 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 17 it 1238 cols 30446 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10614.0622 LB 10603.3342 UB inf gap nan [round] 10s
+  CG   58 | RMP    10614.0679 | LB    10603.3342 | UB    10614.0679 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 6 it 1238 cols 30446 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10614.0679 LB 10603.3342 UB 10614.0679 gap 1.01e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.69e-14 (repaired)
+  CG   22 | RMP    10246.0643 | LB    10230.5074 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 4 it 992 cols 25666 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10246.0643 LB 10230.5074 UB inf gap nan [round] 4s
+  CG   25 | RMP    11019.0467 | LB    10424.1143 | UB           inf | a 0.10 smooth   | min rc -1.4443e+01 | +13 | lp 0.00s solver 0.00s 266 it 1063 cols 28752 nz
+  CG   50 | RMP    10936.7171 | LB    10939.3005 | UB           inf | a 0.10 misprice | min rc -7.8216e-01 | +24 | lp 0.00s solver 0.00s 115 it 1283 cols 34759 nz
+  CG   51 | RMP    10936.5996 | LB    10939.3005 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 68 it 1216 cols 29993 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10936.5996 LB 10939.3005 UB inf gap nan [round] 9s
+  CG   52 | RMP    10946.7814 | LB    10939.3005 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 226 it 1216 cols 29993 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10946.7814 LB 10939.3005 UB inf gap nan [round] 9s
+  CG   53 | RMP    10946.8781 | LB    10939.3005 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 109 it 1216 cols 29993 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10946.8781 LB 10939.3005 UB inf gap nan [round] 9s
+  CG   54 | RMP    10946.9359 | LB    10939.3005 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 9 it 1216 cols 29993 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10946.9359 LB 10939.3005 UB inf gap nan [round] 9s
+  CG   55 | RMP    10946.9548 | LB    10939.3005 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 13 it 1216 cols 29993 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10946.9548 LB 10939.3005 UB inf gap nan [round] 9s
+  CG   56 | RMP    10946.9618 | LB    10939.3005 | UB    10946.9618 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1216 cols 29993 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10946.9618 LB 10939.3005 UB 10946.9618 gap 7.00e-04 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.13e-14 (repaired)
+  CG   21 | RMP     9017.6695 | LB     9005.8449 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 127 it 1022 cols 26379 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9017.6695 LB 9005.8449 UB inf gap nan [round] 3s
+  CG   25 | RMP     9791.8639 | LB     9270.3408 | UB           inf | a 0.10 smooth   | min rc -1.2317e+01 | +19 | lp 0.00s solver 0.00s 159 it 1089 cols 30359 nz
+  CG   50 | RMP     9711.0314 | LB     9682.3972 | UB           inf | a 0.10 smooth   | min rc -5.1402e-01 | +3 | lp 0.00s solver 0.00s 97 it 1348 cols 38772 nz
+  CG   56 | RMP     9708.3710 | LB     9694.3237 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 81 it 1320 cols 36391 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9708.3710 LB 9694.3237 UB inf gap nan [round] 9s
+  CG   58 | RMP     9716.4128 | LB     9710.6499 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 149 it 1354 cols 37684 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9716.4128 LB 9710.6499 UB inf gap nan [round] 10s
+  CG   59 | RMP     9716.4780 | LB     9710.6499 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 169 it 1354 cols 37684 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9716.4780 LB 9710.6499 UB inf gap nan [round] 10s
+  CG   60 | RMP     9716.5104 | LB     9710.6499 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 90 it 1354 cols 37684 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9716.5104 LB 9710.6499 UB inf gap nan [round] 10s
+  CG   61 | RMP     9716.5219 | LB     9710.6499 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 47 it 1354 cols 37684 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9716.5219 LB 9710.6499 UB inf gap nan [round] 10s
+  CG   62 | RMP     9716.5259 | LB     9710.6499 | UB     9716.5259 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 4 it 1354 cols 37684 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9716.5259 LB 9710.6499 UB 9716.5259 gap 6.05e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.31e-14 (repaired)
+  CG   22 | RMP    10288.5489 | LB    10295.8050 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 1050 cols 27469 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10288.5489 LB 10295.8050 UB inf gap nan [round] 4s
+  CG   25 | RMP    11071.2285 | LB    10501.2472 | UB           inf | a 0.10 smooth   | min rc -2.3005e+01 | +20 | lp 0.00s solver 0.00s 229 it 1097 cols 30062 nz
+  CG   50 | RMP    10975.2255 | LB    10947.1509 | UB           inf | a 0.10 smooth   | min rc -3.1612e-01 | +6 | lp 0.01s solver 0.01s 184 it 1271 cols 35622 nz
+  CG   56 | RMP    10974.2890 | LB    10960.7277 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 97 it 1244 cols 34643 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10974.2890 LB 10960.7277 UB inf gap nan [round] 19s
+  CG   59 | RMP    10982.3478 | LB    10976.6099 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 95 it 1276 cols 36080 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10982.3478 LB 10976.6099 UB inf gap nan [round] 20s
+  CG   60 | RMP    10982.4405 | LB    10976.6099 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 228 it 1276 cols 36080 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10982.4405 LB 10976.6099 UB inf gap nan [round] 20s
+  CG   61 | RMP    10982.4820 | LB    10976.6099 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 82 it 1276 cols 36080 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10982.4820 LB 10976.6099 UB inf gap nan [round] 20s
+  CG   62 | RMP    10982.4942 | LB    10976.6099 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 17 it 1276 cols 36080 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10982.4942 LB 10976.6099 UB inf gap nan [round] 20s
+  CG   63 | RMP    10982.4985 | LB    10976.6099 | UB    10982.4985 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1276 cols 36080 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10982.4985 LB 10976.6099 UB 10982.4985 gap 5.36e-04 [done] 20s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   22 | RMP    10104.7586 | LB    10096.6887 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 127 it 1053 cols 27384 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10104.7586 LB 10096.6887 UB inf gap nan [round] 3s
+  CG   25 | RMP    10877.6697 | LB    10300.9006 | UB           inf | a 0.10 smooth   | min rc -1.6486e+01 | +21 | lp 0.00s solver 0.00s 206 it 1092 cols 29741 nz
+  CG   50 | RMP    10799.7639 | LB    10763.2989 | UB           inf | a 0.10 smooth   | min rc -2.8552e+00 | +16 | lp 0.00s solver 0.00s 10 it 1392 cols 39987 nz
+  CG   58 | RMP    10795.0528 | LB    10784.7538 | UB           inf | a 0.10 misprice | min rc -6.1959e-12 | +0  [round] | lp 0.00s solver 0.00s 53 it 1442 cols 39297 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10795.0528 LB 10784.7538 UB inf gap nan [round] 10s
+  CG   60 | RMP    10804.2284 | LB    10794.6600 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 124 it 1473 cols 40352 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10804.2284 LB 10794.6600 UB inf gap nan [round] 10s
+  CG   61 | RMP    10804.3721 | LB    10794.6600 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 246 it 1473 cols 40352 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10804.3721 LB 10794.6600 UB inf gap nan [round] 10s
+  CG   62 | RMP    10804.3891 | LB    10794.6600 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 38 it 1473 cols 40352 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10804.3891 LB 10794.6600 UB inf gap nan [round] 10s
+  CG   63 | RMP    10804.3947 | LB    10794.6600 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 42 it 1473 cols 40352 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10804.3947 LB 10794.6600 UB inf gap nan [round] 10s
+  CG   64 | RMP    10804.3968 | LB    10794.6600 | UB    10804.3968 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1473 cols 40352 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10804.3968 LB 10794.6600 UB 10804.3968 gap 9.01e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   23 | RMP     9259.1181 | LB     9241.3803 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 1022 cols 28513 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9259.1181 LB 9241.3803 UB inf gap nan [round] 3s
+  CG   25 | RMP    10001.4113 | LB     9378.7801 | UB           inf | a 0.10 smooth   | min rc -6.4527e+00 | +16 | lp 0.00s solver 0.00s 114 it 1048 cols 29749 nz
+  CG   50 | RMP     9935.8670 | LB     9895.4076 | UB           inf | a 0.10 smooth   | min rc -9.6273e-01 | +6 | lp 0.01s solver 0.00s 277 it 1350 cols 40376 nz
+  CG   59 | RMP     9928.0529 | LB     9914.6307 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 13 it 1446 cols 44135 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9928.0529 LB 9914.6307 UB inf gap nan [round] 9s
+  CG   64 | RMP     9936.6544 | LB     9924.4581 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 40 it 1381 cols 39060 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9936.6544 LB 9924.4581 UB inf gap nan [round] 10s
+  CG   65 | RMP     9937.0902 | LB     9924.4581 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 346 it 1381 cols 39060 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9937.0902 LB 9924.4581 UB inf gap nan [round] 10s
+  CG   66 | RMP     9937.1447 | LB     9924.4581 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 250 it 1381 cols 39060 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9937.1447 LB 9924.4581 UB inf gap nan [round] 10s
+  CG   67 | RMP     9937.1607 | LB     9924.4581 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 16 it 1381 cols 39060 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9937.1607 LB 9924.4581 UB inf gap nan [round] 10s
+  CG   68 | RMP     9937.1663 | LB     9924.4581 | UB     9937.1663 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1381 cols 39060 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9937.1663 LB 9924.4581 UB 9937.1663 gap 1.28e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   22 | RMP     9859.0721 | LB     9861.7018 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1085 cols 30047 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9859.0721 LB 9861.7018 UB inf gap nan [round] 3s
+  CG   25 | RMP    10631.9651 | LB    10055.4422 | UB           inf | a 0.10 smooth   | min rc -2.3167e+01 | +23 | lp 0.01s solver 0.00s 241 it 1153 cols 32848 nz
+  CG   50 | RMP    10541.9881 | LB    10535.5681 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 109 it 1382 cols 40274 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10541.9881 LB 10535.5681 UB inf gap nan [round] 7s
+  CG   58 | RMP    10553.9199 | LB    10543.1692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 157 it 1493 cols 46059 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10553.9199 LB 10543.1692 UB inf gap nan [round] 9s
+  CG   59 | RMP    10554.4457 | LB    10543.1692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 232 it 1493 cols 46059 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10554.4457 LB 10543.1692 UB inf gap nan [round] 9s
+  CG   60 | RMP    10554.6002 | LB    10543.1692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1493 cols 46059 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10554.6002 LB 10543.1692 UB inf gap nan [round] 9s
+  CG   61 | RMP    10554.6606 | LB    10543.1692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 19 it 1493 cols 46059 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10554.6606 LB 10543.1692 UB inf gap nan [round] 9s
+  CG   62 | RMP    10554.6817 | LB    10543.1692 | UB    10554.6817 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 4 it 1493 cols 46059 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10554.6817 LB 10543.1692 UB 10554.6817 gap 1.09e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.13e-14 (repaired)
+  CG   10 | RMP    13135.5579 | LB    13149.4387 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 70 it 797 cols 12048 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 13135.5579 LB 13149.4387 UB inf gap nan [round] 2s
+  CG   25 | RMP    13861.7984 | LB    13733.3765 | UB           inf | a 0.10 smooth   | min rc -1.5361e+01 | +27 | lp 0.00s solver 0.00s 104 it 1140 cols 26833 nz
+  CG   36 | RMP    13802.3047 | LB    13789.8661 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 182 it 1287 cols 33895 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 13802.3047 LB 13789.8661 UB inf gap nan [round] 10s
+  CG   43 | RMP    13819.4168 | LB    13807.1398 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 171 it 1288 cols 31883 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 13819.4168 LB 13807.1398 UB inf gap nan [round] 14s
+  CG   45 | RMP    13820.3444 | LB    13809.1100 | UB           inf | a 0.10 misprice | min rc -3.1832e-12 | +0  [round] | lp 0.00s solver 0.00s 38 it 1291 cols 32032 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 13820.3444 LB 13809.1100 UB inf gap nan [round] 14s
+  CG   46 | RMP    13820.3930 | LB    13809.1100 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1291 cols 32032 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 13820.3930 LB 13809.1100 UB inf gap nan [round] 14s
+  CG   47 | RMP    13820.4038 | LB    13809.1100 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 9 it 1291 cols 32032 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 13820.4038 LB 13809.1100 UB inf gap nan [round] 14s
+  CG   48 | RMP    13820.4076 | LB    13809.1100 | UB    13820.4076 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 6 it 1291 cols 32032 nz
+  -- penalty round 7: eps 0 delta 0 RMP 13820.4076 LB 13809.1100 UB 13820.4076 gap 8.17e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.22e-14 (repaired)
+  CG   13 | RMP    13309.7447 | LB    13372.8931 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 763 cols 10201 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 13309.7447 LB 13372.8931 UB inf gap nan [round] 2s
+  CG   25 | RMP    14114.3942 | LB    13914.4174 | UB           inf | a 0.10 smooth   | min rc -1.3407e+01 | +28 | lp 0.00s solver 0.00s 184 it 1014 cols 21920 nz
+  CG   42 | RMP    14046.5773 | LB    14040.5931 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 115 it 1265 cols 34113 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 14046.5773 LB 14040.5931 UB inf gap nan [round] 12s
+  CG   50 | RMP    14062.5217 | LB    14058.0565 | UB           inf | a 0.10 misprice | min rc -5.4027e-01 | +23 | lp 0.01s solver 0.00s 181 it 1405 cols 41223 nz
+  CG   51 | RMP    14062.3111 | LB    14058.0565 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 82 it 1335 cols 36960 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 14062.3111 LB 14058.0565 UB inf gap nan [round] 15s
+  CG   52 | RMP    14063.0180 | LB    14058.0565 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 122 it 1335 cols 36960 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 14063.0180 LB 14058.0565 UB inf gap nan [round] 15s
+  CG   53 | RMP    14063.0224 | LB    14058.0565 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1335 cols 36960 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 14063.0224 LB 14058.0565 UB inf gap nan [round] 15s
+  CG   54 | RMP    14063.0244 | LB    14058.0565 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 18 it 1335 cols 36960 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 14063.0244 LB 14058.0565 UB inf gap nan [round] 15s
+  CG   55 | RMP    14063.0253 | LB    14058.0565 | UB    14063.0253 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1335 cols 36960 nz
+  -- penalty round 7: eps 0 delta 0 RMP 14063.0253 LB 14058.0565 UB 14063.0253 gap 3.53e-04 [done] 15s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.02e-14 (repaired)
+  CG   25 | RMP    10488.3691 | LB    10519.3389 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 162 it 1008 cols 25510 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10488.3691 LB 10519.3389 UB inf gap nan [round] 4s
+  CG   44 | RMP    11098.5695 | LB    11084.0640 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 1112 cols 25340 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11098.5695 LB 11084.0640 UB inf gap nan [round] 11s
+  CG   49 | RMP    11104.3779 | LB    11089.1392 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 85 it 1221 cols 30960 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11104.3779 LB 11089.1392 UB inf gap nan [round] 13s
+  CG   50 | RMP    11104.5000 | LB    11089.1392 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 81 it 1221 cols 30960 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11104.5000 LB 11089.1392 UB inf gap nan [round] 13s
+  CG   51 | RMP    11104.5810 | LB    11089.1392 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 80 it 1221 cols 30960 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11104.5810 LB 11089.1392 UB inf gap nan [round] 13s
+  CG   52 | RMP    11104.6177 | LB    11089.1392 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1221 cols 30960 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11104.6177 LB 11089.1392 UB inf gap nan [round] 13s
+  CG   53 | RMP    11104.6307 | LB    11089.1392 | UB    11104.6307 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1221 cols 30960 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11104.6307 LB 11089.1392 UB 11104.6307 gap 1.39e-03 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 9.77e-15 (repaired)
+  CG   23 | RMP    11208.1085 | LB    11218.4722 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 131 it 976 cols 23459 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11208.1085 LB 11218.4722 UB inf gap nan [round] 3s
+  CG   25 | RMP    12032.7607 | LB    11375.6356 | UB           inf | a 0.10 smooth   | min rc -1.4610e+01 | +14 | lp 0.00s solver 0.00s 59 it 983 cols 23826 nz
+  CG   50 | RMP    11954.9348 | LB    11921.7833 | UB           inf | a 0.10 smooth   | min rc -1.6095e-01 | +9 | lp 0.00s solver 0.00s 119 it 1206 cols 31939 nz
+  CG   59 | RMP    11953.5896 | LB    11946.1219 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 133 it 1195 cols 31520 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11953.5896 LB 11946.1219 UB inf gap nan [round] 10s
+  CG   62 | RMP    11965.7379 | LB    11964.5227 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 38 it 1131 cols 27441 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11965.7379 LB 11964.5227 UB inf gap nan [round] 11s
+  CG   63 | RMP    11966.3065 | LB    11964.5227 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 241 it 1131 cols 27441 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11966.3065 LB 11964.5227 UB inf gap nan [round] 11s
+  CG   64 | RMP    11966.3081 | LB    11964.5227 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 44 it 1131 cols 27441 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11966.3081 LB 11964.5227 UB inf gap nan [round] 11s
+  CG   65 | RMP    11966.3166 | LB    11964.5227 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 40 it 1131 cols 27441 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11966.3166 LB 11964.5227 UB inf gap nan [round] 11s
+  CG   66 | RMP    11966.3196 | LB    11964.5227 | UB    11966.3196 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1131 cols 27441 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11966.3196 LB 11964.5227 UB 11966.3196 gap 1.50e-04 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   24 | RMP    11636.5920 | LB    11669.8461 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 97 it 1017 cols 27225 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11636.5920 LB 11669.8461 UB inf gap nan [round] 3s
+  CG   25 | RMP    12463.6079 | LB    11738.6831 | UB           inf | a 0.10 smooth   | min rc -3.9908e+01 | +23 | lp 0.00s solver 0.00s 222 it 1017 cols 27225 nz
+  CG   50 | RMP    12327.6211 | LB    12294.7056 | UB           inf | a 0.10 smooth   | min rc -9.4685e-02 | +5 | lp 0.00s solver 0.00s 13 it 1313 cols 33830 nz
+  CG   58 | RMP    12327.0691 | LB    12332.8675 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 88 it 1310 cols 34035 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12327.0691 LB 12332.8675 UB inf gap nan [round] 11s
+  CG   59 | RMP    12335.2068 | LB    12332.8675 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 300 it 1310 cols 34035 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12335.2068 LB 12332.8675 UB inf gap nan [round] 11s
+  CG   60 | RMP    12335.5460 | LB    12332.8675 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 206 it 1310 cols 34035 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12335.5460 LB 12332.8675 UB inf gap nan [round] 11s
+  CG   61 | RMP    12335.7274 | LB    12332.8675 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 109 it 1310 cols 34035 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12335.7274 LB 12332.8675 UB inf gap nan [round] 11s
+  CG   62 | RMP    12335.7746 | LB    12332.8675 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 14 it 1310 cols 34035 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12335.7746 LB 12332.8675 UB inf gap nan [round] 11s
+  CG   63 | RMP    12335.7905 | LB    12332.8675 | UB    12335.7905 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1310 cols 34035 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12335.7905 LB 12332.8675 UB 12335.7905 gap 2.37e-04 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.31e-14 (repaired)
+  CG   22 | RMP     8964.4894 | LB     8985.0443 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 68 it 1035 cols 26412 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 8964.4894 LB 8985.0443 UB inf gap nan [round] 3s
+  CG   25 | RMP     9741.5466 | LB     9181.0655 | UB           inf | a 0.10 smooth   | min rc -1.4063e+01 | +21 | lp 0.00s solver 0.00s 149 it 1095 cols 28878 nz
+  CG   49 | RMP     9665.9029 | LB     9660.9100 | UB           inf | a 0.10 misprice | min rc -4.1496e-12 | +0  [round] | lp 0.00s solver 0.00s 61 it 1355 cols 35384 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9665.9029 LB 9660.9100 UB inf gap nan [round] 9s
+  CG   50 | RMP     9677.3440 | LB     9660.9100 | UB           inf | a 0.10 smooth   | min rc -4.2592e+00 | +24 | lp 0.01s solver 0.01s 396 it 1355 cols 35384 nz
+  CG   63 | RMP     9672.5832 | LB     9666.6707 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 266 it 1447 cols 38417 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9672.5832 LB 9666.6707 UB inf gap nan [round] 11s
+  CG   64 | RMP     9672.9021 | LB     9666.6707 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 365 it 1447 cols 38417 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9672.9021 LB 9666.6707 UB inf gap nan [round] 11s
+  CG   65 | RMP     9672.9960 | LB     9666.6707 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1447 cols 38417 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9672.9960 LB 9666.6707 UB inf gap nan [round] 11s
+  CG   66 | RMP     9673.0225 | LB     9666.6707 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 52 it 1447 cols 38417 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9673.0225 LB 9666.6707 UB inf gap nan [round] 11s
+  CG   67 | RMP     9673.0316 | LB     9666.6707 | UB     9673.0316 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1447 cols 38417 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9673.0316 LB 9666.6707 UB 9673.0316 gap 6.58e-04 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   22 | RMP    10357.5889 | LB    10366.9794 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 158 it 1052 cols 27040 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10357.5889 LB 10366.9794 UB inf gap nan [round] 3s
+  CG   25 | RMP    11158.8269 | LB    10571.5531 | UB           inf | a 0.10 smooth   | min rc -2.2573e+01 | +16 | lp 0.00s solver 0.00s 213 it 1106 cols 30090 nz
+  CG   50 | RMP    11093.7149 | LB    11063.9581 | UB           inf | a 0.10 smooth   | min rc -1.0191e-01 | +1 | lp 0.00s solver 0.00s 198 it 1245 cols 35428 nz
+  CG   52 | RMP    11093.6305 | LB    11099.1447 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 123 it 1190 cols 32218 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11093.6305 LB 11099.1447 UB inf gap nan [round] 10s
+  CG   53 | RMP    11103.1134 | LB    11099.1447 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 345 it 1190 cols 32218 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11103.1134 LB 11099.1447 UB inf gap nan [round] 10s
+  CG   54 | RMP    11103.1587 | LB    11099.1447 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 65 it 1190 cols 32218 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11103.1587 LB 11099.1447 UB inf gap nan [round] 10s
+  CG   55 | RMP    11103.1809 | LB    11099.1447 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1190 cols 32218 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11103.1809 LB 11099.1447 UB inf gap nan [round] 10s
+  CG   56 | RMP    11103.1878 | LB    11099.1447 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 2 it 1190 cols 32218 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11103.1878 LB 11099.1447 UB inf gap nan [round] 10s
+  CG   57 | RMP    11103.1902 | LB    11099.1447 | UB    11103.1902 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 3 it 1190 cols 32218 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11103.1902 LB 11099.1447 UB 11103.1902 gap 3.64e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.49e-14 (repaired)
+  CG   12 | RMP    11111.1742 | LB    11153.2109 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 28 it 799 cols 14067 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11111.1742 LB 11153.2109 UB inf gap nan [round] 2s
+  CG   25 | RMP    11870.7521 | LB    11714.0604 | UB           inf | a 0.10 smooth   | min rc -2.8817e+01 | +27 | lp 0.00s solver 0.00s 202 it 1054 cols 26496 nz
+  CG   42 | RMP    11780.5249 | LB    11771.0877 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 63 it 1264 cols 33315 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11780.5249 LB 11771.0877 UB inf gap nan [round] 10s
+  CG   50 | RMP    11794.8108 | LB    11788.6928 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1377 cols 38376 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11794.8108 LB 11788.6928 UB inf gap nan [round] 12s
+  CG   51 | RMP    11795.1057 | LB    11788.6928 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 89 it 1377 cols 38376 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11795.1057 LB 11788.6928 UB inf gap nan [round] 12s
+  CG   52 | RMP    11795.1234 | LB    11788.6928 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 59 it 1377 cols 38376 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11795.1234 LB 11788.6928 UB inf gap nan [round] 12s
+  CG   53 | RMP    11795.1392 | LB    11788.6928 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 22 it 1377 cols 38376 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11795.1392 LB 11788.6928 UB inf gap nan [round] 12s
+  CG   54 | RMP    11795.1458 | LB    11788.6928 | UB    11795.1458 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 9 it 1377 cols 38376 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11795.1458 LB 11788.6928 UB 11795.1458 gap 5.47e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   22 | RMP    11770.0033 | LB    11743.9243 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 127 it 1063 cols 26217 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11770.0033 LB 11743.9243 UB inf gap nan [round] 4s
+  CG   25 | RMP    12545.8097 | LB    11952.3905 | UB           inf | a 0.10 smooth   | min rc -1.6960e+01 | +18 | lp 0.00s solver 0.00s 255 it 1114 cols 28175 nz
+  CG   46 | RMP    12430.4458 | LB    12425.1225 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 141 it 1287 cols 32985 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12430.4458 LB 12425.1225 UB inf gap nan [round] 12s
+  CG   47 | RMP    12440.4865 | LB    12425.1225 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 321 it 1287 cols 32985 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12440.4865 LB 12425.1225 UB inf gap nan [round] 12s
+  CG   48 | RMP    12441.4172 | LB    12425.1225 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 70 it 1287 cols 32985 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12441.4172 LB 12425.1225 UB inf gap nan [round] 12s
+  CG   49 | RMP    12441.7005 | LB    12425.1225 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 16 it 1287 cols 32985 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12441.7005 LB 12425.1225 UB inf gap nan [round] 12s
+  CG   50 | RMP    12441.7752 | LB    12425.1225 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 2 it 1287 cols 32985 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12441.7752 LB 12425.1225 UB inf gap nan [round] 12s
+  CG   51 | RMP    12441.8003 | LB    12425.1225 | UB    12441.8003 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1287 cols 32985 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12441.8003 LB 12425.1225 UB 12441.8003 gap 1.34e-03 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.38e-14 (repaired)
+  CG   24 | RMP    10046.7371 | LB    10053.0483 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 46 it 1031 cols 25756 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10046.7371 LB 10053.0483 UB inf gap nan [round] 4s
+  CG   25 | RMP    10858.8102 | LB    10136.2424 | UB           inf | a 0.10 smooth   | min rc -1.0949e+01 | +11 | lp 0.00s solver 0.00s 289 it 1031 cols 25756 nz
+  CG   50 | RMP    10770.7910 | LB    10737.9549 | UB           inf | a 0.10 smooth   | min rc -5.8186e+00 | +21 | lp 0.01s solver 0.00s 169 it 1371 cols 34285 nz
+  CG   54 | RMP    10766.7592 | LB    10761.8714 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 109 it 1353 cols 32723 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10766.7592 LB 10761.8714 UB inf gap nan [round] 12s
+  CG   60 | RMP    10777.0865 | LB    10772.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 159 it 1431 cols 35857 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10777.0865 LB 10772.2529 UB inf gap nan [round] 13s
+  CG   61 | RMP    10777.2516 | LB    10772.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1431 cols 35857 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10777.2516 LB 10772.2529 UB inf gap nan [round] 13s
+  CG   62 | RMP    10777.2744 | LB    10772.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 60 it 1431 cols 35857 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10777.2744 LB 10772.2529 UB inf gap nan [round] 13s
+  CG   63 | RMP    10777.2845 | LB    10772.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 30 it 1431 cols 35857 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10777.2845 LB 10772.2529 UB inf gap nan [round] 13s
+  CG   64 | RMP    10777.2881 | LB    10772.2529 | UB    10777.2881 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1431 cols 35857 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10777.2881 LB 10772.2529 UB 10777.2881 gap 4.67e-04 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.13e-14 (repaired)
+  CG   23 | RMP     9947.4321 | LB     9982.5359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 129 it 1029 cols 26035 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9947.4321 LB 9982.5359 UB inf gap nan [round] 5s
+  CG   25 | RMP    10714.1433 | LB    10112.0020 | UB           inf | a 0.10 smooth   | min rc -2.1408e+01 | +23 | lp 0.00s solver 0.00s 155 it 1046 cols 26673 nz
+  CG   46 | RMP    10630.0856 | LB    10620.7136 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 162 it 1217 cols 32526 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10630.0856 LB 10620.7136 UB inf gap nan [round] 13s
+  CG   50 | RMP    10641.1947 | LB    10626.2585 | UB           inf | a 0.10 smooth   | min rc -3.0590e+00 | +23 | lp 0.00s solver 0.00s 17 it 1252 cols 34737 nz
+  CG   53 | RMP    10640.0829 | LB    10629.4918 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 65 it 1200 cols 30975 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10640.0829 LB 10629.4918 UB inf gap nan [round] 14s
+  CG   56 | RMP    10640.9827 | LB    10630.9229 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 171 it 1227 cols 32255 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10640.9827 LB 10630.9229 UB inf gap nan [round] 15s
+  CG   57 | RMP    10641.3136 | LB    10630.9229 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 32 it 1227 cols 32255 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10641.3136 LB 10630.9229 UB inf gap nan [round] 15s
+  CG   58 | RMP    10641.3787 | LB    10630.9229 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 1 it 1227 cols 32255 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10641.3787 LB 10630.9229 UB inf gap nan [round] 15s
+  CG   59 | RMP    10641.4007 | LB    10630.9229 | UB    10641.4007 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1227 cols 32255 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10641.4007 LB 10630.9229 UB 10641.4007 gap 9.85e-04 [done] 15s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.60e-14 (repaired)
+  CG   22 | RMP     8252.3941 | LB     8248.7022 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 63 it 1019 cols 29517 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 8252.3941 LB 8248.7022 UB inf gap nan [round] 6s
+  CG   25 | RMP     8970.8425 | LB     8438.6174 | UB           inf | a 0.10 smooth   | min rc -9.0023e+00 | +11 | lp 0.00s solver 0.00s 99 it 1062 cols 31631 nz
+  CG   50 | RMP     8910.4688 | LB     8877.6626 | UB           inf | a 0.10 smooth   | min rc -5.3080e-01 | +14 | lp 0.00s solver 0.00s 161 it 1252 cols 39925 nz
+  CG   53 | RMP     8910.1664 | LB     8884.6472 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 60 it 1148 cols 33592 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 8910.1664 LB 8884.6472 UB inf gap nan [round] 14s
+  CG   58 | RMP     8917.9162 | LB     8894.9466 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 165 it 1196 cols 36678 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 8917.9162 LB 8894.9466 UB inf gap nan [round] 14s
+  CG   59 | RMP     8918.1872 | LB     8894.9466 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 1196 cols 36678 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 8918.1872 LB 8894.9466 UB inf gap nan [round] 14s
+  CG   60 | RMP     8918.2480 | LB     8894.9466 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 73 it 1196 cols 36678 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 8918.2480 LB 8894.9466 UB inf gap nan [round] 14s
+  CG   61 | RMP     8918.2664 | LB     8894.9466 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 14 it 1196 cols 36678 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 8918.2664 LB 8894.9466 UB inf gap nan [round] 14s
+  CG   62 | RMP     8918.2731 | LB     8894.9466 | UB     8918.2731 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 7 it 1196 cols 36678 nz
+  -- penalty round 7: eps 0 delta 0 RMP 8918.2731 LB 8894.9466 UB 8918.2731 gap 2.62e-03 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   21 | RMP    10342.2615 | LB    10334.0947 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 76 it 989 cols 23973 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10342.2615 LB 10334.0947 UB inf gap nan [round] 3s
+  CG   25 | RMP    11150.2019 | LB    10612.2677 | UB           inf | a 0.10 smooth   | min rc -1.2511e+01 | +16 | lp 0.00s solver 0.00s 247 it 1060 cols 26700 nz
+  CG   47 | RMP    11073.5739 | LB    11073.9359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 80 it 1238 cols 31615 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11073.5739 LB 11073.9359 UB inf gap nan [round] 11s
+  CG   48 | RMP    11085.3105 | LB    11073.9359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 397 it 1238 cols 31615 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11085.3105 LB 11073.9359 UB inf gap nan [round] 11s
+  CG   50 | RMP    11085.6271 | LB    11073.9359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 264 it 1260 cols 32733 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11085.6271 LB 11073.9359 UB inf gap nan [round] 11s
+  CG   51 | RMP    11085.7817 | LB    11073.9359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1260 cols 32733 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11085.7817 LB 11073.9359 UB inf gap nan [round] 11s
+  CG   52 | RMP    11085.8221 | LB    11073.9359 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 10 it 1260 cols 32733 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11085.8221 LB 11073.9359 UB inf gap nan [round] 11s
+  CG   53 | RMP    11085.8357 | LB    11073.9359 | UB    11085.8357 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1260 cols 32733 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11085.8357 LB 11073.9359 UB 11085.8357 gap 1.07e-03 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   23 | RMP    10730.8825 | LB    10756.4790 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 171 it 1084 cols 29481 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10730.8825 LB 10756.4790 UB inf gap nan [round] 4s
+  CG   25 | RMP    11527.9294 | LB    10892.0640 | UB           inf | a 0.10 smooth   | min rc -4.4259e+00 | +14 | lp 0.01s solver 0.00s 173 it 1109 cols 30961 nz
+  CG   50 | RMP    11440.3409 | LB    11409.1546 | UB           inf | a 0.10 smooth   | min rc -1.6860e-01 | +9 | lp 0.00s solver 0.00s 90 it 1349 cols 40473 nz
+  CG   52 | RMP    11440.0056 | LB    11442.6388 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 135 it 1264 cols 35209 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11440.0056 LB 11442.6388 UB inf gap nan [round] 10s
+  CG   53 | RMP    11449.7622 | LB    11442.6388 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 346 it 1264 cols 35209 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11449.7622 LB 11442.6388 UB inf gap nan [round] 10s
+  CG   54 | RMP    11449.8925 | LB    11442.6388 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 178 it 1264 cols 35209 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11449.8925 LB 11442.6388 UB inf gap nan [round] 10s
+  CG   55 | RMP    11449.9493 | LB    11442.6388 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 29 it 1264 cols 35209 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11449.9493 LB 11442.6388 UB inf gap nan [round] 10s
+  CG   56 | RMP    11449.9659 | LB    11442.6388 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 1 it 1264 cols 35209 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11449.9659 LB 11442.6388 UB inf gap nan [round] 10s
+  CG   57 | RMP    11449.9717 | LB    11442.6388 | UB    11449.9717 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1264 cols 35209 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11449.9717 LB 11442.6388 UB 11449.9717 gap 6.40e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.38e-14 (repaired)
+  CG   22 | RMP    11222.4285 | LB    11188.3939 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1046 cols 30008 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11222.4285 LB 11188.3939 UB inf gap nan [round] 3s
+  CG   25 | RMP    11959.6958 | LB    11382.7478 | UB           inf | a 0.10 smooth   | min rc -1.6273e+01 | +18 | lp 0.00s solver 0.00s 146 it 1090 cols 31781 nz
+  CG   38 | RMP    11888.4128 | LB    11867.3912 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 206 it 1170 cols 33873 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11888.4128 LB 11867.3912 UB inf gap nan [round] 7s
+  CG   44 | RMP    11894.3202 | LB    11873.9814 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 203 it 1088 cols 26444 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11894.3202 LB 11873.9814 UB inf gap nan [round] 8s
+  CG   45 | RMP    11895.0232 | LB    11873.9814 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 116 it 1088 cols 26444 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11895.0232 LB 11873.9814 UB inf gap nan [round] 8s
+  CG   46 | RMP    11895.2164 | LB    11873.9814 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 20 it 1088 cols 26444 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11895.2164 LB 11873.9814 UB inf gap nan [round] 8s
+  CG   47 | RMP    11895.2668 | LB    11873.9814 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 0 it 1088 cols 26444 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11895.2668 LB 11873.9814 UB inf gap nan [round] 8s
+  CG   48 | RMP    11895.2837 | LB    11873.9814 | UB    11895.2837 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1088 cols 26444 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11895.2837 LB 11873.9814 UB 11895.2837 gap 1.79e-03 [done] 8s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.13e-14 (repaired)
+  CG   24 | RMP    10405.1147 | LB    10442.0998 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 93 it 1088 cols 34607 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10405.1147 LB 10442.0998 UB inf gap nan [round] 4s
+  CG   25 | RMP    11210.9437 | LB    10505.0128 | UB           inf | a 0.10 smooth   | min rc -3.2347e+01 | +21 | lp 0.00s solver 0.00s 190 it 1088 cols 34607 nz
+  CG   50 | RMP    11057.2794 | LB    11042.0967 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 102 it 1279 cols 40383 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11057.2794 LB 11042.0967 UB inf gap nan [round] 9s
+  CG   55 | RMP    11063.5018 | LB    11048.9995 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1360 cols 43892 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11063.5018 LB 11048.9995 UB inf gap nan [round] 10s
+  CG   56 | RMP    11063.7723 | LB    11048.9995 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 157 it 1360 cols 43892 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11063.7723 LB 11048.9995 UB inf gap nan [round] 10s
+  CG   57 | RMP    11063.8337 | LB    11048.9995 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 57 it 1360 cols 43892 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11063.8337 LB 11048.9995 UB inf gap nan [round] 10s
+  CG   58 | RMP    11063.8657 | LB    11048.9995 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 21 it 1360 cols 43892 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11063.8657 LB 11048.9995 UB inf gap nan [round] 10s
+  CG   59 | RMP    11063.8766 | LB    11048.9995 | UB    11063.8766 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1360 cols 43892 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11063.8766 LB 11048.9995 UB 11063.8766 gap 1.34e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.02e-14 (repaired)
+  CG   22 | RMP    11420.2341 | LB    11381.8021 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 121 it 982 cols 23299 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11420.2341 LB 11381.8021 UB inf gap nan [round] 3s
+  CG   25 | RMP    12218.2314 | LB    11596.1648 | UB           inf | a 0.10 smooth   | min rc -1.6556e+01 | +22 | lp 0.00s solver 0.00s 115 it 1034 cols 25745 nz
+  CG   46 | RMP    12124.5271 | LB    12120.0546 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 117 it 1284 cols 37467 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12124.5271 LB 12120.0546 UB inf gap nan [round] 9s
+  CG   50 | RMP    12132.5152 | LB    12124.2169 | UB           inf | a 0.10 smooth   | min rc -1.8774e-01 | +26 | lp 0.00s solver 0.00s 53 it 1330 cols 38912 nz
+  CG   51 | RMP    12132.5003 | LB    12124.2169 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 55 it 1214 cols 32195 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12132.5003 LB 12124.2169 UB inf gap nan [round] 10s
+  CG   52 | RMP    12132.6333 | LB    12125.0210 | UB           inf | a 0.10 misprice | min rc -3.8654e-12 | +0  [round] | lp 0.00s solver 0.00s 100 it 1214 cols 32195 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12132.6333 LB 12125.0210 UB inf gap nan [round] 10s
+  CG   53 | RMP    12132.6784 | LB    12125.0210 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 26 it 1214 cols 32195 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12132.6784 LB 12125.0210 UB inf gap nan [round] 10s
+  CG   54 | RMP    12132.6907 | LB    12125.0210 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 15 it 1214 cols 32195 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12132.6907 LB 12125.0210 UB inf gap nan [round] 10s
+  CG   55 | RMP    12132.6950 | LB    12125.0210 | UB    12132.6950 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1214 cols 32195 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12132.6950 LB 12125.0210 UB 12132.6950 gap 6.32e-04 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   22 | RMP    10625.4819 | LB    10588.3942 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 115 it 982 cols 24715 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10625.4819 LB 10588.3942 UB inf gap nan [round] 3s
+  CG   25 | RMP    11407.3868 | LB    10823.4109 | UB           inf | a 0.10 smooth   | min rc -3.9020e+00 | +10 | lp 0.00s solver 0.00s 81 it 999 cols 25366 nz
+  CG   50 | RMP    11359.2361 | LB    11329.2665 | UB           inf | a 0.10 smooth   | min rc -9.6657e-01 | +18 | lp 0.00s solver 0.00s 151 it 1283 cols 35509 nz
+  CG   58 | RMP    11357.1758 | LB    11346.3087 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 100 it 1359 cols 37419 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11357.1758 LB 11346.3087 UB inf gap nan [round] 15s
+  CG   60 | RMP    11365.1607 | LB    11354.6141 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 112 it 1389 cols 38365 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11365.1607 LB 11354.6141 UB inf gap nan [round] 16s
+  CG   62 | RMP    11365.6674 | LB    11355.0879 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 133 it 1407 cols 39096 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11365.6674 LB 11355.0879 UB inf gap nan [round] 16s
+  CG   63 | RMP    11365.7056 | LB    11355.0879 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1407 cols 39096 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11365.7056 LB 11355.0879 UB inf gap nan [round] 16s
+  CG   64 | RMP    11365.7160 | LB    11355.0879 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 47 it 1407 cols 39096 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11365.7160 LB 11355.0879 UB inf gap nan [round] 16s
+  CG   65 | RMP    11365.7197 | LB    11355.0879 | UB    11365.7197 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 3 it 1407 cols 39096 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11365.7197 LB 11355.0879 UB 11365.7197 gap 9.35e-04 [done] 16s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.35e-14 (repaired)
+  CG   21 | RMP     9941.3612 | LB     9954.7456 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 97 it 1041 cols 25272 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9941.3612 LB 9954.7456 UB inf gap nan [round] 3s
+  CG   25 | RMP    10730.2893 | LB    10223.3393 | UB           inf | a 0.10 smooth   | min rc -1.6255e+01 | +22 | lp 0.00s solver 0.00s 158 it 1106 cols 28572 nz
+  CG   41 | RMP    10671.3439 | LB    10662.0690 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 136 it 1199 cols 29539 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10671.3439 LB 10662.0690 UB inf gap nan [round] 10s
+  CG   45 | RMP    10680.2769 | LB    10665.8438 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 96 it 1271 cols 33286 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10680.2769 LB 10665.8438 UB inf gap nan [round] 11s
+  CG   46 | RMP    10680.4730 | LB    10665.8438 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1271 cols 33286 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10680.4730 LB 10665.8438 UB inf gap nan [round] 11s
+  CG   47 | RMP    10680.5252 | LB    10665.8438 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 12 it 1271 cols 33286 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10680.5252 LB 10665.8438 UB inf gap nan [round] 11s
+  CG   48 | RMP    10680.5406 | LB    10665.8438 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 0 it 1271 cols 33286 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10680.5406 LB 10665.8438 UB inf gap nan [round] 11s
+  CG   49 | RMP    10680.5460 | LB    10665.8438 | UB    10680.5460 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 9 it 1271 cols 33286 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10680.5460 LB 10665.8438 UB 10680.5460 gap 1.38e-03 [done] 11s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   22 | RMP    10536.8586 | LB    10493.9597 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 113 it 993 cols 22822 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10536.8586 LB 10493.9597 UB inf gap nan [round] 3s
+  CG   25 | RMP    11336.5460 | LB    10723.1964 | UB           inf | a 0.10 smooth   | min rc -2.3666e+01 | +20 | lp 0.00s solver 0.00s 149 it 1041 cols 25138 nz
+  CG   50 | RMP    11181.3837 | LB    11151.0792 | UB           inf | a 0.10 smooth   | min rc -7.8350e-01 | +10 | lp 0.00s solver 0.00s 33 it 1400 cols 39308 nz
+  CG   59 | RMP    11178.1552 | LB    11169.5588 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 98 it 1385 cols 36866 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11178.1552 LB 11169.5588 UB inf gap nan [round] 13s
+  CG   65 | RMP    11186.8533 | LB    11184.8312 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 218 it 1339 cols 33338 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11186.8533 LB 11184.8312 UB inf gap nan [round] 14s
+  CG   66 | RMP    11187.1422 | LB    11184.8312 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 248 it 1339 cols 33338 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11187.1422 LB 11184.8312 UB inf gap nan [round] 14s
+  CG   67 | RMP    11187.1451 | LB    11184.8312 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1339 cols 33338 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11187.1451 LB 11184.8312 UB inf gap nan [round] 14s
+  CG   68 | RMP    11187.1465 | LB    11184.8312 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 33 it 1339 cols 33338 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11187.1465 LB 11184.8312 UB inf gap nan [round] 14s
+  CG   69 | RMP    11187.1471 | LB    11184.8312 | UB    11187.1471 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1339 cols 33338 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11187.1471 LB 11184.8312 UB 11187.1471 gap 2.07e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.42e-14 (repaired)
+  CG   23 | RMP    11936.9852 | LB    11983.5140 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 20 it 1045 cols 28603 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11936.9852 LB 11983.5140 UB inf gap nan [round] 3s
+  CG   25 | RMP    12749.2118 | LB    12136.1393 | UB           inf | a 0.10 smooth   | min rc -8.3685e+00 | +13 | lp 0.00s solver 0.00s 186 it 1068 cols 29759 nz
+  CG   50 | RMP    12673.9785 | LB    12665.2718 | UB           inf | a 0.10 smooth   | min rc -2.1590e-01 | +12 | lp 0.00s solver 0.00s 135 it 1304 cols 33841 nz
+  CG   51 | RMP    12673.8627 | LB    12665.2718 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 97 it 1228 cols 28760 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12673.8627 LB 12665.2718 UB inf gap nan [round] 10s
+  CG   57 | RMP    12681.1713 | LB    12673.1472 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 186 it 1300 cols 31674 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12681.1713 LB 12673.1472 UB inf gap nan [round] 13s
+  CG   58 | RMP    12681.3577 | LB    12673.1472 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 143 it 1300 cols 31674 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12681.3577 LB 12673.1472 UB inf gap nan [round] 13s
+  CG   59 | RMP    12681.4328 | LB    12673.1472 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 138 it 1300 cols 31674 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12681.4328 LB 12673.1472 UB inf gap nan [round] 13s
+  CG   60 | RMP    12681.4635 | LB    12673.1472 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 1 it 1300 cols 31674 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12681.4635 LB 12673.1472 UB inf gap nan [round] 13s
+  CG   61 | RMP    12681.4739 | LB    12673.1472 | UB    12681.4739 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1300 cols 31674 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12681.4739 LB 12673.1472 UB 12681.4739 gap 6.57e-04 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.07e-14 (repaired)
+  CG   23 | RMP    12394.1108 | LB    12428.3772 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 183 it 1036 cols 26605 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12394.1108 LB 12428.3772 UB inf gap nan [round] 3s
+  CG   25 | RMP    13176.1056 | LB    12560.9818 | UB           inf | a 0.10 smooth   | min rc -2.1746e+01 | +32 | lp 0.00s solver 0.00s 180 it 1065 cols 27952 nz
+  CG   50 | RMP    13090.7816 | LB    13089.8566 | UB           inf | a 0.10 misprice | min rc -9.9345e-01 | +11 | lp 0.00s solver 0.00s 108 it 1308 cols 34807 nz
+  CG   51 | RMP    13090.3437 | LB    13089.8566 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 144 it 1245 cols 30951 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 13090.3437 LB 13089.8566 UB inf gap nan [round] 17s
+  CG   52 | RMP    13096.2921 | LB    13089.8566 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 281 it 1245 cols 30951 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 13096.2921 LB 13089.8566 UB inf gap nan [round] 17s
+  CG   53 | RMP    13096.6200 | LB    13089.8566 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 247 it 1245 cols 30951 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 13096.6200 LB 13089.8566 UB inf gap nan [round] 17s
+  CG   54 | RMP    13096.7361 | LB    13089.8566 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 25 it 1245 cols 30951 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 13096.7361 LB 13089.8566 UB inf gap nan [round] 17s
+  CG   55 | RMP    13096.7669 | LB    13089.8566 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 8 it 1245 cols 30951 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 13096.7669 LB 13089.8566 UB inf gap nan [round] 17s
+  CG   56 | RMP    13096.7774 | LB    13089.8566 | UB    13096.7774 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1245 cols 30951 nz
+  -- penalty round 7: eps 0 delta 0 RMP 13096.7774 LB 13089.8566 UB 13096.7774 gap 5.28e-04 [done] 17s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   17 | RMP    11572.1378 | LB    11607.4142 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 122 it 863 cols 15289 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11572.1378 LB 11607.4142 UB inf gap nan [round] 3s
+  CG   25 | RMP    12384.6157 | LB    12060.8001 | UB           inf | a 0.10 smooth   | min rc -3.0661e+01 | +15 | lp 0.00s solver 0.00s 124 it 1022 cols 22246 nz
+  CG   44 | RMP    12227.6695 | LB    12217.3766 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 96 it 1223 cols 28986 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12227.6695 LB 12217.3766 UB inf gap nan [round] 13s
+  CG   47 | RMP    12246.2613 | LB    12242.9966 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 175 it 1278 cols 31710 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12246.2613 LB 12242.9966 UB inf gap nan [round] 14s
+  CG   48 | RMP    12246.7858 | LB    12242.9966 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 126 it 1278 cols 31710 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12246.7858 LB 12242.9966 UB inf gap nan [round] 14s
+  CG   49 | RMP    12246.8283 | LB    12242.9966 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 60 it 1278 cols 31710 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12246.8283 LB 12242.9966 UB inf gap nan [round] 14s
+  CG   50 | RMP    12246.8400 | LB    12242.9966 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 11 it 1278 cols 31710 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12246.8400 LB 12242.9966 UB inf gap nan [round] 14s
+  CG   51 | RMP    12246.8441 | LB    12242.9966 | UB    12246.8441 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1278 cols 31710 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12246.8441 LB 12242.9966 UB 12246.8441 gap 3.14e-04 [done] 14s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   21 | RMP    11003.2132 | LB    10997.0652 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 140 it 1026 cols 24922 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11003.2132 LB 10997.0652 UB inf gap nan [round] 3s
+  CG   25 | RMP    11787.2746 | LB    11258.9180 | UB           inf | a 0.10 smooth   | min rc -5.2500e+00 | +20 | lp 0.00s solver 0.00s 199 it 1100 cols 29065 nz
+  CG   46 | RMP    11735.2375 | LB    11730.1743 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 256 it 1309 cols 36107 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11735.2375 LB 11730.1743 UB inf gap nan [round] 8s
+  CG   49 | RMP    11745.1049 | LB    11733.1687 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 140 it 1313 cols 36282 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11745.1049 LB 11733.1687 UB inf gap nan [round] 8s
+  CG   50 | RMP    11745.8211 | LB    11733.1687 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 201 it 1313 cols 36282 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11745.8211 LB 11733.1687 UB inf gap nan [round] 8s
+  CG   52 | RMP    11745.6561 | LB    11733.5043 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 238 it 1329 cols 36886 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11745.6561 LB 11733.5043 UB inf gap nan [round] 9s
+  CG   53 | RMP    11745.7290 | LB    11733.5043 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 35 it 1329 cols 36886 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11745.7290 LB 11733.5043 UB inf gap nan [round] 9s
+  CG   54 | RMP    11745.7515 | LB    11733.5043 | UB    11745.7515 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 15 it 1329 cols 36886 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11745.7515 LB 11733.5043 UB 11745.7515 gap 1.04e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.60e-14 (repaired)
+  CG   24 | RMP    11454.7104 | LB    11436.1935 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 125 it 1173 cols 33986 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11454.7104 LB 11436.1935 UB inf gap nan [round] 5s
+  CG   25 | RMP    12245.0946 | LB    11517.2314 | UB           inf | a 0.10 smooth   | min rc -7.8796e+00 | +13 | lp 0.00s solver 0.00s 265 it 1173 cols 33986 nz
+  CG   46 | RMP    12088.3937 | LB    12067.7693 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 77 it 1253 cols 33362 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12088.3937 LB 12067.7693 UB inf gap nan [round] 10s
+  CG   50 | RMP    12095.4397 | LB    12073.1537 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 160 it 1284 cols 34648 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12095.4397 LB 12073.1537 UB inf gap nan [round] 11s
+  CG   52 | RMP    12096.1105 | LB    12076.6836 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 74 it 1295 cols 35151 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12096.1105 LB 12076.6836 UB inf gap nan [round] 12s
+  CG   53 | RMP    12096.2788 | LB    12076.6836 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 90 it 1295 cols 35151 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12096.2788 LB 12076.6836 UB inf gap nan [round] 12s
+  CG   54 | RMP    12096.3188 | LB    12076.6836 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 31 it 1295 cols 35151 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12096.3188 LB 12076.6836 UB inf gap nan [round] 12s
+  CG   55 | RMP    12096.3325 | LB    12076.6836 | UB    12096.3325 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1295 cols 35151 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12096.3325 LB 12076.6836 UB 12096.3325 gap 1.62e-03 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 9.06e-14 (repaired)
+  CG   22 | RMP    10151.9049 | LB    10172.5139 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 130 it 1052 cols 27738 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10151.9049 LB 10172.5139 UB inf gap nan [round] 3s
+  CG   25 | RMP    10934.0734 | LB    10387.0072 | UB           inf | a 0.10 smooth   | min rc -9.1483e+00 | +11 | lp 0.00s solver 0.00s 169 it 1091 cols 29657 nz
+  CG   50 | RMP    10872.1388 | LB    10857.4785 | UB           inf | a 0.10 smooth   | min rc -2.3706e+00 | +9 | lp 0.00s solver 0.00s 9 it 1208 cols 30768 nz
+  CG   53 | RMP    10871.1001 | LB    10861.8757 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 1149 cols 26303 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10871.1001 LB 10861.8757 UB inf gap nan [round] 9s
+  CG   58 | RMP    10881.7882 | LB    10877.7811 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 69 it 1197 cols 27703 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10881.7882 LB 10877.7811 UB inf gap nan [round] 10s
+  CG   59 | RMP    10881.9354 | LB    10877.7811 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 98 it 1197 cols 27703 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10881.9354 LB 10877.7811 UB inf gap nan [round] 10s
+  CG   60 | RMP    10882.0450 | LB    10877.7811 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 145 it 1197 cols 27703 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10882.0450 LB 10877.7811 UB inf gap nan [round] 10s
+  CG   61 | RMP    10882.0803 | LB    10877.7811 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 59 it 1197 cols 27703 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10882.0803 LB 10877.7811 UB inf gap nan [round] 10s
+  CG   62 | RMP    10882.0923 | LB    10877.7811 | UB    10882.0923 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 8 it 1197 cols 27703 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10882.0923 LB 10877.7811 UB 10882.0923 gap 3.96e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   22 | RMP     9178.9887 | LB     9182.8933 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 206 it 1024 cols 29954 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9178.9887 LB 9182.8933 UB inf gap nan [round] 3s
+  CG   25 | RMP     9943.1430 | LB     9388.1870 | UB           inf | a 0.10 smooth   | min rc -5.9800e+00 | +20 | lp 0.00s solver 0.00s 207 it 1065 cols 32736 nz
+  CG   46 | RMP     9858.5160 | LB     9853.1759 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 140 it 1301 cols 37715 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9858.5160 LB 9853.1759 UB inf gap nan [round] 8s
+  CG   50 | RMP     9867.4832 | LB     9857.2529 | UB           inf | a 0.10 smooth   | min rc -5.7243e-02 | +4 | lp 0.00s solver 0.00s 170 it 1348 cols 40024 nz
+  CG   51 | RMP     9867.4812 | LB     9857.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 31 it 1227 cols 32306 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9867.4812 LB 9857.2529 UB inf gap nan [round] 9s
+  CG   52 | RMP     9867.5777 | LB     9857.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 74 it 1227 cols 32306 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9867.5777 LB 9857.2529 UB inf gap nan [round] 9s
+  CG   53 | RMP     9867.6035 | LB     9857.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1227 cols 32306 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9867.6035 LB 9857.2529 UB inf gap nan [round] 9s
+  CG   54 | RMP     9867.6113 | LB     9857.2529 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 33 it 1227 cols 32306 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9867.6113 LB 9857.2529 UB inf gap nan [round] 9s
+  CG   55 | RMP     9867.6142 | LB     9857.2529 | UB     9867.6142 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1227 cols 32306 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9867.6142 LB 9857.2529 UB 9867.6142 gap 1.05e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.38e-07 (repaired)
+  CG   25 | RMP    11156.8475 | LB    11173.6450 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 83 it 1054 cols 30183 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11156.8475 LB 11173.6450 UB inf gap nan [round] 4s
+  CG   50 | RMP    11852.1605 | LB    11818.9479 | UB           inf | a 0.10 smooth   | min rc -2.2312e+00 | +14 | lp 0.00s solver 0.00s 94 it 1338 cols 39744 nz
+  CG   53 | RMP    11850.8153 | LB    11850.3954 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 214 it 1314 cols 36296 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11850.8153 LB 11850.3954 UB inf gap nan [round] 10s
+  CG   56 | RMP    11862.7645 | LB    11853.2128 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1349 cols 38544 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11862.7645 LB 11853.2128 UB inf gap nan [round] 10s
+  CG   57 | RMP    11862.9559 | LB    11853.2128 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 115 it 1349 cols 38544 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11862.9559 LB 11853.2128 UB inf gap nan [round] 10s
+  CG   58 | RMP    11863.0177 | LB    11853.2128 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 2 it 1349 cols 38544 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11863.0177 LB 11853.2128 UB inf gap nan [round] 10s
+  CG   59 | RMP    11863.0352 | LB    11853.2128 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 64 it 1349 cols 38544 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11863.0352 LB 11853.2128 UB inf gap nan [round] 10s
+  CG   60 | RMP    11863.0412 | LB    11853.2128 | UB    11863.0412 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1349 cols 38544 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11863.0412 LB 11853.2128 UB 11863.0412 gap 8.28e-04 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 3.91e-14 (repaired)
+  CG   22 | RMP    11259.9601 | LB    11260.1489 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 78 it 928 cols 20891 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11259.9601 LB 11260.1489 UB inf gap nan [round] 3s
+  CG   25 | RMP    12048.5068 | LB    11464.9417 | UB           inf | a 0.10 smooth   | min rc -2.1319e+01 | +18 | lp 0.00s solver 0.00s 134 it 986 cols 23130 nz
+  CG   50 | RMP    11951.2553 | LB    11928.6043 | UB           inf | a 0.10 smooth   | min rc -1.4802e-01 | +14 | lp 0.00s solver 0.00s 89 it 1255 cols 32268 nz
+  CG   57 | RMP    11950.8223 | LB    11944.2785 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 57 it 1223 cols 29635 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11950.8223 LB 11944.2785 UB inf gap nan [round] 18s
+  CG   63 | RMP    11963.6559 | LB    11963.6713 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1182 cols 26048 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11963.6559 LB 11963.6713 UB inf gap nan [round] 22s
+  CG   64 | RMP    11963.9771 | LB    11963.6713 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 148 it 1182 cols 26048 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11963.9771 LB 11963.6713 UB inf gap nan [round] 22s
+  CG   65 | RMP    11963.9771 | LB    11963.6713 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 7 it 1182 cols 26048 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11963.9771 LB 11963.6713 UB inf gap nan [round] 22s
+  CG   66 | RMP    11963.9771 | LB    11963.6713 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 7 it 1182 cols 26048 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11963.9771 LB 11963.6713 UB inf gap nan [round] 22s
+  CG   67 | RMP    11963.9771 | LB    11963.6713 | UB    11963.9771 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 9 it 1182 cols 26048 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11963.9771 LB 11963.6713 UB 11963.9771 gap 2.56e-05 [done] 22s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.04e-14 (repaired)
+  CG   23 | RMP     9554.1898 | LB     9517.4558 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 160 it 1062 cols 28451 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9554.1898 LB 9517.4558 UB inf gap nan [round] 3s
+  CG   25 | RMP    10280.7800 | LB     9651.1886 | UB           inf | a 0.10 smooth   | min rc -1.9816e+01 | +17 | lp 0.00s solver 0.00s 224 it 1099 cols 30296 nz
+  CG   42 | RMP    10232.4480 | LB    10212.0477 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 114 it 1184 cols 33829 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10232.4480 LB 10212.0477 UB inf gap nan [round] 6s
+  CG   47 | RMP    10240.5639 | LB    10219.0431 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 207 it 1257 cols 37711 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10240.5639 LB 10219.0431 UB inf gap nan [round] 7s
+  CG   49 | RMP    10239.7093 | LB    10219.6872 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 354 it 1283 cols 39146 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10239.7093 LB 10219.6872 UB inf gap nan [round] 7s
+  CG   50 | RMP    10239.8517 | LB    10219.6872 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 66 it 1283 cols 39146 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10239.8517 LB 10219.6872 UB inf gap nan [round] 7s
+  CG   51 | RMP    10239.8867 | LB    10219.6872 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 15 it 1283 cols 39146 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10239.8867 LB 10219.6872 UB inf gap nan [round] 7s
+  CG   52 | RMP    10239.8985 | LB    10219.6872 | UB    10239.8985 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1283 cols 39146 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10239.8985 LB 10219.6872 UB 10239.8985 gap 1.97e-03 [done] 7s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   23 | RMP    12357.0838 | LB    12371.6029 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 89 it 993 cols 24718 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 12357.0838 LB 12371.6029 UB inf gap nan [round] 3s
+  CG   25 | RMP    13143.2683 | LB    12507.7587 | UB           inf | a 0.10 smooth   | min rc -2.4234e+01 | +21 | lp 0.00s solver 0.00s 222 it 1026 cols 26360 nz
+  CG   46 | RMP    13065.9390 | LB    13049.2497 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 145 it 1226 cols 32285 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 13065.9390 LB 13049.2497 UB inf gap nan [round] 8s
+  CG   50 | RMP    13073.0247 | LB    13055.1875 | UB           inf | a 0.10 smooth   | min rc -8.1236e-02 | +13 | lp 0.00s solver 0.00s 130 it 1282 cols 35656 nz
+  CG   52 | RMP    13072.9870 | LB    13056.7616 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 68 it 1171 cols 29214 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 13072.9870 LB 13056.7616 UB inf gap nan [round] 9s
+  CG   53 | RMP    13073.3067 | LB    13056.7616 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 247 it 1171 cols 29214 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 13073.3067 LB 13056.7616 UB inf gap nan [round] 9s
+  CG   54 | RMP    13073.3662 | LB    13056.7616 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 85 it 1171 cols 29214 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 13073.3662 LB 13056.7616 UB inf gap nan [round] 9s
+  CG   55 | RMP    13073.3831 | LB    13056.7616 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 27 it 1171 cols 29214 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 13073.3831 LB 13056.7616 UB inf gap nan [round] 9s
+  CG   56 | RMP    13073.3890 | LB    13056.7616 | UB    13073.3890 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 5 it 1171 cols 29214 nz
+  -- penalty round 7: eps 0 delta 0 RMP 13073.3890 LB 13056.7616 UB 13073.3890 gap 1.27e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   22 | RMP     9988.8162 | LB     9988.7088 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 127 it 1055 cols 27890 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9988.8162 LB 9988.7088 UB inf gap nan [round] 3s
+  CG   25 | RMP    10766.2055 | LB    10183.5218 | UB           inf | a 0.10 smooth   | min rc -1.4387e+01 | +21 | lp 0.01s solver 0.00s 199 it 1119 cols 30950 nz
+  CG   50 | RMP    10709.3458 | LB    10693.1483 | UB           inf | a 0.10 smooth   | min rc -4.5943e+00 | +11 | lp 0.00s solver 0.00s 114 it 1361 cols 39179 nz
+  CG   53 | RMP    10704.9098 | LB    10695.3448 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 137 it 1311 cols 36303 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10704.9098 LB 10695.3448 UB inf gap nan [round] 10s
+  CG   62 | RMP    10713.1880 | LB    10702.6196 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 258 it 1326 cols 37225 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10713.1880 LB 10702.6196 UB inf gap nan [round] 11s
+  CG   63 | RMP    10713.7561 | LB    10702.6196 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 306 it 1326 cols 37225 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10713.7561 LB 10702.6196 UB inf gap nan [round] 11s
+  CG   65 | RMP    10713.5511 | LB    10703.2325 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 304 it 1350 cols 38509 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10713.5511 LB 10703.2325 UB inf gap nan [round] 12s
+  CG   66 | RMP    10713.6179 | LB    10703.2325 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 86 it 1350 cols 38509 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10713.6179 LB 10703.2325 UB inf gap nan [round] 12s
+  CG   67 | RMP    10713.6395 | LB    10703.2325 | UB    10713.6395 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 37 it 1350 cols 38509 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10713.6395 LB 10703.2325 UB 10713.6395 gap 9.71e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   23 | RMP    10965.2098 | LB    10928.4880 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 60 it 1027 cols 27448 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10965.2098 LB 10928.4880 UB inf gap nan [round] 4s
+  CG   25 | RMP    11743.1993 | LB    11077.3880 | UB           inf | a 0.10 smooth   | min rc -1.7024e+01 | +22 | lp 0.00s solver 0.00s 145 it 1053 cols 28706 nz
+  CG   50 | RMP    11614.9667 | LB    11583.6317 | UB           inf | a 0.10 smooth   | min rc -5.9660e-01 | +9 | lp 0.00s solver 0.00s 39 it 1366 cols 40432 nz
+  CG   56 | RMP    11614.1773 | LB    11599.8276 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 81 it 1265 cols 33080 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11614.1773 LB 11599.8276 UB inf gap nan [round] 15s
+  CG   63 | RMP    11623.5684 | LB    11610.1870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 13 it 1206 cols 29795 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11623.5684 LB 11610.1870 UB inf gap nan [round] 17s
+  CG   64 | RMP    11623.6863 | LB    11610.1870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 153 it 1206 cols 29795 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11623.6863 LB 11610.1870 UB inf gap nan [round] 17s
+  CG   65 | RMP    11623.7076 | LB    11610.1870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 22 it 1206 cols 29795 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11623.7076 LB 11610.1870 UB inf gap nan [round] 17s
+  CG   66 | RMP    11623.7146 | LB    11610.1870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 62 it 1206 cols 29795 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11623.7146 LB 11610.1870 UB inf gap nan [round] 17s
+  CG   67 | RMP    11623.7175 | LB    11610.1870 | UB    11623.7175 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1206 cols 29795 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11623.7175 LB 11610.1870 UB 11623.7175 gap 1.16e-03 [done] 17s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   16 | RMP    11652.2462 | LB    11631.8610 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 48 it 815 cols 14774 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11652.2462 LB 11631.8610 UB inf gap nan [round] 3s
+  CG   25 | RMP    12324.8088 | LB    12029.4449 | UB           inf | a 0.10 smooth   | min rc -3.1917e+01 | +28 | lp 0.00s solver 0.00s 110 it 1046 cols 26993 nz
+  CG   45 | RMP    12149.6498 | LB    12133.7396 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 89 it 1296 cols 36457 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12149.6498 LB 12133.7396 UB inf gap nan [round] 9s
+  CG   50 | RMP    12162.6738 | LB    12145.4865 | UB           inf | a 0.10 smooth   | min rc -4.8981e-01 | +6 | lp 0.00s solver 0.00s 166 it 1324 cols 38261 nz
+  CG   51 | RMP    12162.5181 | LB    12147.6040 | UB           inf | a 0.10 misprice | min rc -6.5938e-12 | +0  [round] | lp 0.00s solver 0.00s 106 it 1169 cols 29436 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12162.5181 LB 12147.6040 UB inf gap nan [round] 10s
+  CG   52 | RMP    12163.0035 | LB    12147.6040 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 135 it 1169 cols 29436 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12163.0035 LB 12147.6040 UB inf gap nan [round] 10s
+  CG   53 | RMP    12163.1084 | LB    12147.6040 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 23 it 1169 cols 29436 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12163.1084 LB 12147.6040 UB inf gap nan [round] 10s
+  CG   54 | RMP    12163.1413 | LB    12147.6040 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 16 it 1169 cols 29436 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12163.1413 LB 12147.6040 UB inf gap nan [round] 10s
+  CG   55 | RMP    12163.1526 | LB    12147.6040 | UB    12163.1526 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1169 cols 29436 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12163.1526 LB 12147.6040 UB 12163.1526 gap 1.28e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   23 | RMP    11413.0478 | LB    11435.0177 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1023 cols 28676 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11413.0478 LB 11435.0177 UB inf gap nan [round] 3s
+  CG   25 | RMP    12196.7267 | LB    11573.5242 | UB           inf | a 0.10 smooth   | min rc -2.1592e+01 | +23 | lp 0.00s solver 0.00s 243 it 1053 cols 30007 nz
+  CG   50 | RMP    12124.0852 | LB    12090.0434 | UB           inf | a 0.10 smooth   | min rc -2.5488e-01 | +3 | lp 0.01s solver 0.00s 194 it 1324 cols 39520 nz
+  CG   59 | RMP    12121.8578 | LB    12112.8300 | UB           inf | a 0.10 misprice | min rc -2.7285e-12 | +0  [round] | lp 0.01s solver 0.00s 206 it 1330 cols 39821 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12121.8578 LB 12112.8300 UB inf gap nan [round] 10s
+  CG   62 | RMP    12128.7531 | LB    12128.4758 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 164 it 1238 cols 34804 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12128.7531 LB 12128.4758 UB inf gap nan [round] 10s
+  CG   63 | RMP    12128.8002 | LB    12128.4758 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 217 it 1238 cols 34804 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12128.8002 LB 12128.4758 UB inf gap nan [round] 10s
+  CG   64 | RMP    12128.8003 | LB    12128.4758 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 53 it 1238 cols 34804 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12128.8003 LB 12128.4758 UB inf gap nan [round] 10s
+  CG   65 | RMP    12128.8003 | LB    12128.4758 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 47 it 1238 cols 34804 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12128.8003 LB 12128.4758 UB inf gap nan [round] 10s
+  CG   66 | RMP    12128.8005 | LB    12128.4758 | UB    12128.8005 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 8 it 1238 cols 34804 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12128.8005 LB 12128.4758 UB 12128.8005 gap 2.68e-05 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   22 | RMP    10847.9739 | LB    10823.4870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 48 it 1010 cols 26247 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10847.9739 LB 10823.4870 UB inf gap nan [round] 3s
+  CG   25 | RMP    11648.6676 | LB    11054.8366 | UB           inf | a 0.10 smooth   | min rc -9.0202e+00 | +13 | lp 0.00s solver 0.00s 55 it 1036 cols 27974 nz
+  CG   46 | RMP    11582.1857 | LB    11573.7870 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 136 it 1170 cols 28985 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11582.1857 LB 11573.7870 UB inf gap nan [round] 11s
+  CG   50 | RMP    11588.4656 | LB    11579.0345 | UB           inf | a 0.10 smooth   | min rc -2.7059e-01 | +17 | lp 0.00s solver 0.00s 144 it 1219 cols 31371 nz
+  CG   52 | RMP    11588.0867 | LB    11579.2917 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 198 it 1175 cols 28007 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11588.0867 LB 11579.2917 UB inf gap nan [round] 13s
+  CG   54 | RMP    11588.8477 | LB    11580.2002 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 140 it 1188 cols 28407 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11588.8477 LB 11580.2002 UB inf gap nan [round] 13s
+  CG   55 | RMP    11589.3419 | LB    11580.2002 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 112 it 1188 cols 28407 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11589.3419 LB 11580.2002 UB inf gap nan [round] 13s
+  CG   56 | RMP    11589.4519 | LB    11580.2002 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 30 it 1188 cols 28407 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11589.4519 LB 11580.2002 UB inf gap nan [round] 13s
+  CG   57 | RMP    11589.4888 | LB    11580.2002 | UB    11589.4888 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 16 it 1188 cols 28407 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11589.4888 LB 11580.2002 UB 11589.4888 gap 8.01e-04 [done] 13s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.66e-14 (repaired)
+  CG   21 | RMP    11022.5409 | LB    10987.4523 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 91 it 951 cols 22223 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11022.5409 LB 10987.4523 UB inf gap nan [round] 3s
+  CG   25 | RMP    11810.2717 | LB    11273.6520 | UB           inf | a 0.10 smooth   | min rc -2.1702e+01 | +18 | lp 0.00s solver 0.00s 224 it 1024 cols 25715 nz
+  CG   43 | RMP    11736.1940 | LB    11730.3125 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 78 it 1221 cols 29988 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11736.1940 LB 11730.3125 UB inf gap nan [round] 9s
+  CG   50 | RMP    11741.5995 | LB    11739.5063 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 196 it 1348 cols 35767 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11741.5995 LB 11739.5063 UB inf gap nan [round] 12s
+  CG   51 | RMP    11741.6831 | LB    11739.5063 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 66 it 1348 cols 35767 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11741.6831 LB 11739.5063 UB inf gap nan [round] 12s
+  CG   52 | RMP    11741.6838 | LB    11739.5063 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 64 it 1348 cols 35767 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11741.6838 LB 11739.5063 UB inf gap nan [round] 12s
+  CG   53 | RMP    11741.6844 | LB    11739.5063 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 16 it 1348 cols 35767 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11741.6844 LB 11739.5063 UB inf gap nan [round] 12s
+  CG   54 | RMP    11741.6848 | LB    11739.5063 | UB    11741.6848 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1348 cols 35767 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11741.6848 LB 11739.5063 UB 11741.6848 gap 1.86e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 9.77e-15 (repaired)
+  CG   21 | RMP     8844.6356 | LB     8841.5740 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 77 it 997 cols 24741 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 8844.6356 LB 8841.5740 UB inf gap nan [round] 4s
+  CG   25 | RMP     9597.9553 | LB     9101.0019 | UB           inf | a 0.10 smooth   | min rc -1.0327e+01 | +21 | lp 0.00s solver 0.00s 102 it 1063 cols 28218 nz
+  CG   45 | RMP     9515.9637 | LB     9521.4462 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 155 it 1194 cols 31118 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 9515.9637 LB 9521.4462 UB inf gap nan [round] 11s
+  CG   46 | RMP     9525.2001 | LB     9521.4462 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 300 it 1194 cols 31118 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 9525.2001 LB 9521.4462 UB inf gap nan [round] 11s
+  CG   47 | RMP     9526.2931 | LB     9521.4462 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 167 it 1194 cols 31118 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 9526.2931 LB 9521.4462 UB inf gap nan [round] 12s
+  CG   48 | RMP     9526.6653 | LB     9521.4462 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 52 it 1194 cols 31118 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 9526.6653 LB 9521.4462 UB inf gap nan [round] 12s
+  CG   49 | RMP     9526.7609 | LB     9521.4462 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 0 it 1194 cols 31118 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 9526.7609 LB 9521.4462 UB inf gap nan [round] 12s
+  CG   50 | RMP     9526.7930 | LB     9521.4462 | UB     9526.7930 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 2 it 1194 cols 31118 nz
+  -- penalty round 7: eps 0 delta 0 RMP 9526.7930 LB 9521.4462 UB 9526.7930 gap 5.61e-04 [done] 12s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG    9 | RMP    11228.2346 | LB    11230.8792 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 122 it 831 cols 14138 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11228.2346 LB 11230.8792 UB inf gap nan [round] 2s
+  CG   25 | RMP    11871.2721 | LB    11765.2808 | UB           inf | a 0.10 smooth   | min rc -1.1403e+01 | +21 | lp 0.01s solver 0.00s 272 it 1233 cols 32048 nz
+  CG   38 | RMP    11826.5562 | LB    11816.1262 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 153 it 1347 cols 36767 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11826.5562 LB 11816.1262 UB inf gap nan [round] 8s
+  CG   46 | RMP    11838.1114 | LB    11826.8906 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 89 it 1381 cols 37655 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11838.1114 LB 11826.8906 UB inf gap nan [round] 10s
+  CG   47 | RMP    11838.7337 | LB    11826.8906 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 280 it 1381 cols 37655 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11838.7337 LB 11826.8906 UB inf gap nan [round] 10s
+  CG   48 | RMP    11838.8286 | LB    11826.8906 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 45 it 1381 cols 37655 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11838.8286 LB 11826.8906 UB inf gap nan [round] 10s
+  CG   49 | RMP    11838.8551 | LB    11826.8906 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 3 it 1381 cols 37655 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11838.8551 LB 11826.8906 UB inf gap nan [round] 10s
+  CG   50 | RMP    11838.8642 | LB    11826.8906 | UB    11838.8642 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 51 it 1381 cols 37655 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11838.8642 LB 11826.8906 UB 11838.8642 gap 1.01e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 4.09e-14 (repaired)
+  CG   13 | RMP    11315.2840 | LB    11321.8684 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 86 it 898 cols 17187 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11315.2840 LB 11321.8684 UB inf gap nan [round] 2s
+  CG   25 | RMP    11961.1112 | LB    11793.1418 | UB           inf | a 0.10 smooth   | min rc -1.4191e+01 | +17 | lp 0.00s solver 0.00s 236 it 1212 cols 33715 nz
+  CG   40 | RMP    11898.5083 | LB    11888.4173 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 247 it 1390 cols 41814 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11898.5083 LB 11888.4173 UB inf gap nan [round] 8s
+  CG   48 | RMP    11912.0521 | LB    11898.1193 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 287 it 1510 cols 48325 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11912.0521 LB 11898.1193 UB inf gap nan [round] 9s
+  CG   50 | RMP    11912.1723 | LB    11898.8887 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 264 it 1522 cols 48677 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11912.1723 LB 11898.8887 UB inf gap nan [round] 9s
+  CG   51 | RMP    11912.4289 | LB    11898.8887 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 144 it 1522 cols 48677 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11912.4289 LB 11898.8887 UB inf gap nan [round] 10s
+  CG   52 | RMP    11912.5041 | LB    11898.8887 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 26 it 1522 cols 48677 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11912.5041 LB 11898.8887 UB inf gap nan [round] 10s
+  CG   53 | RMP    11912.5296 | LB    11898.8887 | UB    11912.5296 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1522 cols 48677 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11912.5296 LB 11898.8887 UB 11912.5296 gap 1.14e-03 [done] 10s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.95e-14 (repaired)
+  CG   22 | RMP    10429.9839 | LB    10418.6510 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 112 it 1115 cols 31228 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10429.9839 LB 10418.6510 UB inf gap nan [round] 3s
+  CG   25 | RMP    11184.5921 | LB    10617.3534 | UB           inf | a 0.10 smooth   | min rc -1.3113e+01 | +12 | lp 0.00s solver 0.00s 181 it 1158 cols 34001 nz
+  CG   50 | RMP    11124.0914 | LB    11091.2566 | UB           inf | a 0.10 smooth   | min rc -1.4221e+00 | +9 | lp 0.00s solver 0.00s 157 it 1260 cols 37911 nz
+  CG   53 | RMP    11121.4291 | LB    11095.8126 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 47 it 1187 cols 34403 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 11121.4291 LB 11095.8126 UB inf gap nan [round] 8s
+  CG   59 | RMP    11131.6367 | LB    11107.8922 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 61 it 1251 cols 38044 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 11131.6367 LB 11107.8922 UB inf gap nan [round] 8s
+  CG   60 | RMP    11131.9984 | LB    11107.8922 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 243 it 1251 cols 38044 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 11131.9984 LB 11107.8922 UB inf gap nan [round] 8s
+  CG   61 | RMP    11132.0691 | LB    11107.8922 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 32 it 1251 cols 38044 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 11132.0691 LB 11107.8922 UB inf gap nan [round] 8s
+  CG   62 | RMP    11132.0898 | LB    11107.8922 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 21 it 1251 cols 38044 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 11132.0898 LB 11107.8922 UB inf gap nan [round] 8s
+  CG   63 | RMP    11132.0972 | LB    11107.8922 | UB    11132.0972 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 7 it 1251 cols 38044 nz
+  -- penalty round 7: eps 0 delta 0 RMP 11132.0972 LB 11107.8922 UB 11132.0972 gap 2.17e-03 [done] 8s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.31e-14 (repaired)
+  CG   21 | RMP     9918.8663 | LB     9876.9692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 129 it 1005 cols 25112 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9918.8663 LB 9876.9692 UB inf gap nan [round] 3s
+  CG   25 | RMP    10713.0543 | LB    10154.0928 | UB           inf | a 0.10 smooth   | min rc -8.3944e+00 | +19 | lp 0.00s solver 0.00s 124 it 1085 cols 29766 nz
+  CG   48 | RMP    10658.0456 | LB    10657.7048 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 159 it 1274 cols 37546 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10658.0456 LB 10657.7048 UB inf gap nan [round] 7s
+  CG   49 | RMP    10668.6632 | LB    10657.7048 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.00s 340 it 1274 cols 37546 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10668.6632 LB 10657.7048 UB inf gap nan [round] 8s
+  CG   50 | RMP    10669.1684 | LB    10657.7048 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 209 it 1274 cols 37546 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10669.1684 LB 10657.7048 UB inf gap nan [round] 8s
+  CG   51 | RMP    10669.3302 | LB    10657.7048 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 142 it 1274 cols 37546 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10669.3302 LB 10657.7048 UB inf gap nan [round] 8s
+  CG   52 | RMP    10669.3749 | LB    10657.7048 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 41 it 1274 cols 37546 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10669.3749 LB 10657.7048 UB inf gap nan [round] 8s
+  CG   53 | RMP    10669.3902 | LB    10657.7048 | UB    10669.3902 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 1 it 1274 cols 37546 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10669.3902 LB 10657.7048 UB 10669.3902 gap 1.10e-03 [done] 8s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 2.84e-14 (repaired)
+  CG   22 | RMP     9844.2979 | LB     9858.0104 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 107 it 1020 cols 28238 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 9844.2979 LB 9858.0104 UB inf gap nan [round] 3s
+  CG   25 | RMP    10604.4566 | LB    10050.4197 | UB           inf | a 0.10 smooth   | min rc -1.3794e+01 | +9 | lp 0.00s solver 0.00s 162 it 1074 cols 31054 nz
+  CG   45 | RMP    10544.4085 | LB    10530.4076 | UB           inf | a 0.10 misprice | min rc -4.8885e-12 | +0  [round] | lp 0.00s solver 0.00s 78 it 1227 cols 35203 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10544.4085 LB 10530.4076 UB inf gap nan [round] 7s
+  CG   50 | RMP    10554.2631 | LB    10537.5693 | UB           inf | a 0.10 smooth   | min rc -7.3538e-01 | +18 | lp 0.01s solver 0.00s 265 it 1319 cols 39542 nz
+  CG   52 | RMP    10553.8580 | LB    10538.8916 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 150 it 1269 cols 37044 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10553.8580 LB 10538.8916 UB inf gap nan [round] 9s
+  CG   53 | RMP    10554.0100 | LB    10538.8916 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 167 it 1269 cols 37044 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10554.0100 LB 10538.8916 UB inf gap nan [round] 9s
+  CG   54 | RMP    10554.0475 | LB    10538.8916 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1269 cols 37044 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10554.0475 LB 10538.8916 UB inf gap nan [round] 9s
+  CG   55 | RMP    10554.0605 | LB    10538.8916 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 38 it 1269 cols 37044 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10554.0605 LB 10538.8916 UB inf gap nan [round] 9s
+  CG   56 | RMP    10554.0651 | LB    10538.8916 | UB    10554.0651 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 21 it 1269 cols 37044 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10554.0651 LB 10538.8916 UB 10554.0651 gap 1.44e-03 [done] 9s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   23 | RMP    11399.6586 | LB    11456.6035 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 142 it 967 cols 23930 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 11399.6586 LB 11456.6035 UB inf gap nan [round] 3s
+  CG   25 | RMP    12197.8114 | LB    11595.9658 | UB           inf | a 0.10 smooth   | min rc -2.3544e+01 | +16 | lp 0.00s solver 0.00s 135 it 993 cols 25220 nz
+  CG   50 | RMP    12107.6848 | LB    12078.9666 | UB           inf | a 0.10 smooth   | min rc -1.7641e-01 | +14 | lp 0.00s solver 0.00s 97 it 1327 cols 36329 nz
+  CG   58 | RMP    12107.1906 | LB    12098.5567 | UB           inf | a 0.10 misprice | min rc -1.8474e-11 | +0  [round] | lp 0.00s solver 0.00s 38 it 1292 cols 33650 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 12107.1906 LB 12098.5567 UB inf gap nan [round] 16s
+  CG   65 | RMP    12114.2994 | LB    12105.6955 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 164 it 1236 cols 30299 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 12114.2994 LB 12105.6955 UB inf gap nan [round] 19s
+  CG   66 | RMP    12114.6195 | LB    12106.6753 | UB           inf | a 0.10 misprice | min rc -1.8787e-11 | +0  [round] | lp 0.00s solver 0.00s 92 it 1236 cols 30299 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 12114.6195 LB 12106.6753 UB inf gap nan [round] 19s
+  CG   67 | RMP    12114.7080 | LB    12106.6753 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 92 it 1236 cols 30299 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 12114.7080 LB 12106.6753 UB inf gap nan [round] 19s
+  CG   68 | RMP    12114.7293 | LB    12106.6753 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 77 it 1236 cols 30299 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 12114.7293 LB 12106.6753 UB inf gap nan [round] 19s
+  CG   69 | RMP    12114.7368 | LB    12106.6753 | UB    12114.7368 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 19 it 1236 cols 30299 nz
+  -- penalty round 7: eps 0 delta 0 RMP 12114.7368 LB 12106.6753 UB 12114.7368 gap 6.65e-04 [done] 19s
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+  seed columns: largest carrier-row residual 1.78e-14 (repaired)
+  CG   22 | RMP    10156.0331 | LB    10115.5692 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 99 it 1020 cols 24803 nz
+  -- penalty round 1: eps 0.2 delta 0.2 RMP 10156.0331 LB 10115.5692 UB inf gap nan [round] 3s
+  CG   25 | RMP    10948.7581 | LB    10339.9813 | UB           inf | a 0.10 smooth   | min rc -3.5648e+00 | +16 | lp 0.00s solver 0.00s 129 it 1050 cols 26624 nz
+  CG   50 | RMP    10869.8793 | LB    10838.2540 | UB           inf | a 0.10 smooth   | min rc -2.1472e-01 | +2 | lp 0.00s solver 0.00s 19 it 1296 cols 35747 nz
+  CG   58 | RMP    10868.6426 | LB    10867.8571 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 95 it 1326 cols 35328 nz
+  -- penalty round 2: eps 0.05 delta 0.05 RMP 10868.6426 LB 10867.8571 UB inf gap nan [round] 14s
+  CG   59 | RMP    10875.5123 | LB    10867.8571 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 533 it 1326 cols 35328 nz
+  -- penalty round 3: eps 0.0125 delta 0.0125 RMP 10875.5123 LB 10867.8571 UB inf gap nan [round] 14s
+  CG   60 | RMP    10876.0408 | LB    10867.8571 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.01s solver 0.01s 307 it 1326 cols 35328 nz
+  -- penalty round 4: eps 0.00313 delta 0.00313 RMP 10876.0408 LB 10867.8571 UB inf gap nan [round] 14s
+  CG   61 | RMP    10876.3065 | LB    10867.8571 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 87 it 1326 cols 35328 nz
+  -- penalty round 5: eps 0.000781 delta 0.000781 RMP 10876.3065 LB 10867.8571 UB inf gap nan [round] 14s
+  CG   62 | RMP    10876.3918 | LB    10867.8571 | UB           inf | a 1.00 std      | min rc  0.0000e+00 | +0  [round] | lp 0.00s solver 0.00s 29 it 1326 cols 35328 nz
+  -- penalty round 6: eps 0.000195 delta 0.000195 RMP 10876.3918 LB 10867.8571 UB inf gap nan [round] 14s
+  CG   63 | RMP    10876.4213 | LB    10867.8571 | UB    10876.4213 | a 1.00 std      | min rc  0.0000e+00 | +0  [done] | lp 0.00s solver 0.00s 0 it 1326 cols 35328 nz
+  -- penalty round 7: eps 0 delta 0 RMP 10876.4213 LB 10867.8571 UB 10876.4213 gap 7.87e-04 [done] 14s
