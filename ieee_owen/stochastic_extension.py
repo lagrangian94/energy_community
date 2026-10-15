@@ -117,6 +117,15 @@ TABLE_EF_GAP = 1e-5
 # forms, so B&B nodes beyond it go to disk instead of RAM (None: Gurobi's default).
 # The search is unchanged; it caps memory on a 16 GB machine at |Omega|=20, n=60.
 EF_NODEFILE_START = None
+# EF_MEM_LIMIT (--ef-mem-limit): Gurobi SoftMemLimit [GB] for the extensive forms. Past
+# it Gurobi stops at its next safe point with status MEM_LIMIT and keeps its incumbent,
+# which is then used like a time-limited one (None: off). The check is not continuous,
+# so a spike can overshoot it; the queue's watchdog still guards the machine.
+EF_MEM_LIMIT = None
+# EF_NOREL (--ef-norel): Gurobi NoRelHeurTime [s] for the grand coalition's extensive
+# form: a heuristic that looks for plans before the root LP, at little memory, so a
+# solve that EF_MEM_LIMIT stops in the root still has an incumbent (None: off).
+EF_NOREL = None
 # EF_KL_GRID / EF_KL_SINGLE (--ef-kl-grid, --ef-kl-single): the KL extensive form's
 # tangent grid and its refinement. 'coarse' is the original 0.25 grid on
 # [-8, ln(1/q_w)]; 'fine' (_kl_grid_fine) covers only the ratios the ball can reach,
@@ -424,18 +433,20 @@ class ScenarioStack:
             return {n: m.getVal(v) for n, v in self.vars.items()}
         return {n: m.getSolVal(sol, v) for n, v in self.vars.items()}
 
-    def release_model(self):
+    def release_model(self, collect=True):
         """Drop the SCIP model once a solver copy of it exists. At n=60, |Omega|=20 it
         holds ~3.5 GB that sat next to Gurobi's copy for the whole EF solve. Keeps the
         names, costs and scenario map (cost_split, scaled_cost, first_stage), so only
-        values() and anything reading .model or .blocks stop working."""
+        values() and anything reading .model or .blocks stop working. collect=False
+        leaves the garbage collection to the caller (one pass for many stacks)."""
         import gc
         self.n_vars = self.model.getNVars()
         self.objoffset = self.model.getObjoffset()
         self.model = None
         self.blocks = []
         self.vars = dict.fromkeys(self.vars)
-        gc.collect()
+        if collect:
+            gc.collect()
 
     def cost_split(self, vals, names=None):
         """(first-stage cost, [unweighted second-stage cost per scenario])."""
@@ -547,6 +558,46 @@ def solve_extensive_form(players, T, scenarios, time_limit=None, gap=None, quiet
         'worth_cost': [first + c for c in per],
         'time_build': build, 'time_solve': m.getSolvingTime(),
     }
+
+
+def _private_gb():
+    """This process's private memory [GB] now and at its peak (commit charge on
+    Windows; anonymous + swapped resident and VmHWM on Linux), or None."""
+    try:
+        if os.name == 'nt':
+            import ctypes, ctypes.wintypes as wt
+
+            class PMC(ctypes.Structure):
+                _fields_ = [('cb', wt.DWORD), ('PageFaultCount', wt.DWORD)] + \
+                           [(f'f{i}', ctypes.c_size_t) for i in range(8)] + \
+                           [('PrivateUsage', ctypes.c_size_t)]
+            c = PMC()
+            c.cb = ctypes.sizeof(c)
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentProcess.restype = wt.HANDLE
+            psapi = ctypes.windll.psapi
+            psapi.GetProcessMemoryInfo.argtypes = [wt.HANDLE, ctypes.c_void_p, wt.DWORD]
+            psapi.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+            # f7 = PeakPagefileUsage (peak commit)
+            return c.PrivateUsage / 2**30, c.f7 / 2**30
+        kb = {}
+        for ln in open('/proc/self/status'):
+            k, _, v = ln.partition(':')
+            if k in ('RssAnon', 'VmSwap', 'VmHWM'):
+                kb[k] = int(v.split()[0])
+        return (kb.get('RssAnon', 0) + kb.get('VmSwap', 0)) / 2**20, kb.get('VmHWM', 0) / 2**20
+    except Exception:
+        return None
+
+
+MEM_REPORT = False          # --mem-report: print _private_gb() at the phase boundaries
+
+
+def _mem_report(what):
+    if MEM_REPORT or PlayerPricing.lean:
+        m = _private_gb()
+        if m:
+            print(f'  [mem] {what}: private {m[0]:.2f} GB, peak {m[1]:.2f} GB', flush=True)
 
 
 # =============================================================================
@@ -746,6 +797,10 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
     _gurobi_log(g, quiet, log_file)
     if EF_NODEFILE_START is not None:
         g.Params.NodefileStart = EF_NODEFILE_START
+    if EF_MEM_LIMIT is not None:
+        g.Params.SoftMemLimit = EF_MEM_LIMIT
+    if EF_NOREL and len(st.players) > 1:
+        g.Params.NoRelHeurTime = EF_NOREL
     names = list(gv)
     by_name = {v.name: v for v in m.getVars()}
     gvars = [gv[n] for n in names]
@@ -769,7 +824,7 @@ def _solve_extensive_gurobi(st, build, time_limit, gap, quiet, log_file=None,
     bound = g.ObjBound if is_mip else obj
     first, per = st.cost_split(vals)
     return {
-        'stack': st, 'status': {2: 'optimal', 9: 'timelimit'}.get(g.Status, str(g.Status)),
+        'stack': st, 'status': {2: 'optimal', 9: 'timelimit', 17: 'memlimit'}.get(g.Status, str(g.Status)),
         'obj': obj, 'dual_bound': min(bound, obj),
         'gap': g.MIPGap if is_mip else 0.0,
         'vals': vals, 'first_cost': first, 'scen_cost': per,
@@ -904,6 +959,10 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
     _gurobi_log(g, quiet, log_file)
     if EF_NODEFILE_START is not None:
         g.Params.NodefileStart = EF_NODEFILE_START
+    if EF_MEM_LIMIT is not None:
+        g.Params.SoftMemLimit = EF_MEM_LIMIT
+    if EF_NOREL and len(st.players) > 1:
+        g.Params.NoRelHeurTime = EF_NOREL
     gap = g.Params.MIPGap
     q = np.array(st.probs)
     S = len(q)
@@ -987,7 +1046,7 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         tol = gap * max(1.0, abs(psi))
         if psi - bound <= tol or EF_KL_SINGLE or improve:
             break
-        if g.Status == GRB.TIME_LIMIT:
+        if g.Status in (GRB.TIME_LIMIT, GRB.MEM_LIMIT):
             break
         # tangents exact at the incumbent: what is left is the MIP gap, so close it
         if psi - g.ObjVal <= tol:
@@ -1013,7 +1072,8 @@ def _solve_extensive_kl(st, build, time_limit, gap, quiet, radius, max_rounds=30
         for v, val in start.items():
             v.Start = val
     allv = [n for n in gv]
-    status = {2: 'optimal', 9: 'timelimit', 11: 'stall', 15: 'objstop'}.get(g.Status, str(g.Status))
+    status = {2: 'optimal', 9: 'timelimit', 11: 'stall', 15: 'objstop',
+              17: 'memlimit'}.get(g.Status, str(g.Status))
     imp = None
     if improve:
         if rounds:
@@ -1085,7 +1145,15 @@ class PlayerPricing:
     solver='scip' solves the stacked SCIP model directly; 'gurobi' and 'highs'
     solve a copy of it (same variables, same rows) built through gurobipy or
     highspy, changing only the objective between calls.
+
+    lean (--cg-lean, class-level, off by default): the SCIP model is dropped once
+    the solver copy and the row maps exist, and nothing of a call is kept but what
+    the direct engine reads (no copy of the duals in .last, no primal vector unless
+    --mip-start uses it). Same columns, same numbers: at n=60 there is one unit per
+    prosumer and scenario, ~4,800 at |Omega|=100, and each held a SCIP model and a
+    copy of every dual of the master.
     """
+    lean = False
     def __init__(self, player, T, scenarios, time_limit=None, gap=None, solver='highs',
                  env=None, scen_ids=None, n_scen=None, unit=None):
         if solver not in ('highs', 'gurobi'):
@@ -1146,6 +1214,9 @@ class PlayerPricing:
                             0.0 if v is None else
                             (np.inf if v.getUbOriginal() >= 1e19 else v.getUbOriginal())
                             for v in vs)
+        if PlayerPricing.lean:
+            self.stack.release_model(collect=False)      # DirectMaster collects once
+            self.model = None
 
     def _coef(self, duals, farkas):
         if farkas:
@@ -1219,7 +1290,7 @@ class PlayerPricing:
             vals = self.stack.values()
             obj, bound = m.getObjVal(), m.getDualbound()
         col = self._column(vals)
-        if not farkas:
+        if not farkas and not PlayerPricing.lean:
             self.last = (dict(duals), obj, col)
         return obj, bound, col
 
@@ -1245,7 +1316,8 @@ class PlayerPricing:
         if g.SolCount == 0:
             raise RuntimeError(f'pricing {self.player} (gurobi): no solution, status {g.Status}')
         x = g.getAttr('X', self.g_vars)
-        self._last_x = x
+        if self.mip_start or not PlayerPricing.lean:
+            self._last_x = x
         vals = dict(zip(self.g_names, x))
         # the objective is recomputed from the solution, so it and the column cost
         # agree to the last digit whatever Gurobi reports internally
@@ -2303,7 +2375,7 @@ class DirectMaster:
         # that have been out of the RMP solution for purge_age iterations and price
         # out at the current duals (0: keep every column)
         self.purge_every, self.purge_age, self.purge_cap = purge_every, purge_age, purge_cap
-        self.last_used, self.purged = {}, 0
+        self.last_used, self.purged, self.capped = {}, 0, 0
         self.protected = set()      # the seed columns: they keep every penalty feasible
         self.probs = [p for p, _ in scenarios]
         self.params, self.verbose, self.gap_tol = params, verbose, gap_tol
@@ -2344,6 +2416,10 @@ class DirectMaster:
             return PlayerPricing(x, T, scenarios, pricing_time_limit, pricing_gap,
                                  pricing_solver, env=self._envs[self._group[x]])
         self.subs = subs or {x: unit_pricing(x) for x in self.units}
+        if PlayerPricing.lean:
+            import gc
+            gc.collect()
+            _mem_report(f'pricing units built ({len(self.units)})')
         self.enable_reserve = bool(params.get('enable_reserve', False))
         self.enable_peak = bool(params.get('enable_peak', False))
         self.row_keys = [(k, t, w) for w in range(len(scenarios)) for t in self.T
@@ -2661,7 +2737,7 @@ class DirectMaster:
         tol = 1e-9 * (1.0 + abs(ref))
         ncol = sum(len(v) for v in self.col_idx.values())
         cap = self.purge_cap * len(self.units)
-        if ncol <= cap:
+        if ncol <= (min(cap, self.col_cap * len(self.units)) if self.col_cap else cap):
             return 0
         # candidates: unused for purge_age iterations and pricing out now, the
         # longest-unused first, until the column count is back under the cap. The
@@ -2672,8 +2748,20 @@ class DirectMaster:
                        and self.iteration - self.last_used[h] >= self.purge_age
                        and self.lp.rc(h) > tol))
         drop = set(h for _, h in cand[:ncol - cap])
+        mem_cap = self.col_cap * len(self.units) if self.col_cap else None
+        if mem_cap is not None and ncol - len(drop) > mem_cap:
+            # --cg-col-cap: a hard ceiling on the master's prosumer columns, for memory.
+            # Past it, columns that price out now go regardless of purge_age, the
+            # longest-unused first; the RMP solution and the seeds stay.
+            more = sorted(((self.last_used[h], h) for u in self.units
+                           for h in self.col_idx[u]
+                           if h not in self.protected and h not in drop
+                           and self.iteration - self.last_used[h] >= 1
+                           and self.lp.rc(h) > tol))
+            drop |= set(h for _, h in more[:ncol - len(drop) - mem_cap])
+            self.capped += 1
         self._dropped_cols = [c for u in self.units
-                              for h, c in zip(self.col_idx[u], self.columns[u]) if h in drop]
+                              for h, c in zip(self.col_idx[u], self.columns[u]) if h in drop]             if self.pool_on or not PlayerPricing.lean else []
         for u in self.units:
             keep = [(h, c) for h, c in zip(self.col_idx[u], self.columns[u]) if h not in drop]
             self.col_idx[u] = [h for h, _ in keep]
@@ -2909,6 +2997,9 @@ class DirectMaster:
     # the no-DOI master asks ~48 new plans a pass and is back at 6,200 columns. The
     # cost is the degeneracy, not the size.
     fallback_purge_age = 0
+    # col_cap (--cg-col-cap): hard ceiling of prosumer columns per pricing unit, for
+    # memory; past it _purge ignores purge_age. None: off (the default).
+    col_cap = None
 
     # DOI taper: when the master settles with grid trade y > 0, cap the total with a
     # budget row sum(y) <= B and shrink B = Y0 * factor^k over a few column
@@ -4714,6 +4805,264 @@ def standalone_values(players, T, scenarios, **kw):
     return {u: -solve_extensive_form([u], T, scenarios, **kw)['obj'] for u in players}
 
 
+# =============================================================================
+# a grand-coalition plan from the column generation (--cg-heuristic)
+# =============================================================================
+def _solve_fixed_scenario(players, T, scenario, fixed, time_limit, gap, free=()):
+    """One scenario of the grand coalition with the first stage fixed at `fixed`
+    (name -> value; first-stage names not in it are fixed at 0) except the names in
+    `free`. Returns (status, cost, offset, values of the free names): cost is the
+    plan's unscaled variable cost (first-stage costs included), offset the model's
+    constant; cost is None when the scenario has no plan."""
+    from gurobipy import GRB
+    st = ScenarioStack('fix', players, T, [(1.0, scenario)], dwr=False)
+    m = st.model
+    g, gv = _to_gurobi(m, 'fix', time_limit, gap)
+    names = list(gv)
+    by_name = {v.name: v for v in m.getVars()}
+    g.setAttr('Obj', [gv[n] for n in names], [by_name[n].getObj() for n in names])
+    off = m.getObjoffset()
+    for n in st.first_stage:
+        if n in free:
+            continue
+        v = fixed.get(n, 0.0)
+        if gv[n].VType != GRB.CONTINUOUS:
+            v = float(round(v))
+        gv[n].LB = gv[n].UB = v
+    del by_name, m
+    st.release_model(collect=False)
+    g.optimize()
+    status = g.Status
+    if g.SolCount == 0:
+        g.dispose()
+        return status, None, None, {}
+    cost = g.ObjVal                      # ObjCon is 0: the offset is kept apart
+    fv = {n: gv[n].X for n in free if n in gv}
+    g.dispose()
+    return status, cost, off, fv
+
+
+def _weighted_quantile(x, w, theta):
+    o = np.argsort(x)
+    cw = np.cumsum(np.asarray(w)[o])
+    return float(np.asarray(x)[o][min(np.searchsorted(cw, theta * cw[-1]), len(x) - 1)])
+
+
+def fixed_first_stage_plan(players, T, scenarios, fixed, kl_radius, gap=None,
+                           time_limit=None, rsym_choices=None):
+    """The grand coalition's plan with the first stage (commitment, r_sym) fixed: the
+    rest separates by scenario, and since the worst case psi is nondecreasing in
+    every scenario's cost, the scenario-wise optima together minimise psi too. Each
+    scenario is a one-scenario MILP of the whole community.
+
+    rsym_choices (None: r_sym as in `fixed`): r_sym is first left free in every
+    scenario, which gives the reserve each scenario's plan would sell, r_w. Each
+    choice then fixes r_sym and solves the scenarios again; the best is returned.
+    A choice is a quantile theta of r_w (rho_hat weights), or a dict of r_sym
+    values. The reserve is a newsvendor: a MW sold earns pi and one not delivered
+    costs k pi, so theta = 1/k is where the trade-off sits if the plans did not
+    move. Returns a dict with 'obj' (psi plus the offset, the extensive form's
+    convention), the per-scenario costs, r_sym, every choice's value, or the
+    first scenario without a plan."""
+    t0 = time.time()
+    q = np.array([p for p, _ in scenarios])
+    fixed = dict(fixed)
+
+    def solve_all(fx, free=()):
+        c, offs, fvs = [], [], []
+        for w, (_, params) in enumerate(scenarios):
+            st, cost, off, fv = _solve_fixed_scenario(players, T, params, fx, time_limit,
+                                                      gap, free=free)
+            if cost is None:
+                return {'feasible': False, 'infeasible_scenario': w, 'status': st,
+                        'pass': 'free r_sym' if free else 'fixed'}
+            c.append(cost)
+            offs.append(off)
+            fvs.append(fv)
+        c, offs = np.array(c), np.array(offs)
+        psi, rho, _ = kl_worst(c, q, kl_radius or 0.0)
+        return {'feasible': True, 'obj': float(psi + q @ offs), 'scen_cost': c.tolist(),
+                'offset': float(q @ offs), 'free_values': fvs}
+
+    if not rsym_choices:
+        res = solve_all(fixed)
+        res.pop('free_values', None)
+        res['time'] = time.time() - t0
+        res['r_sym'] = {n: v for n, v in fixed.items() if n.startswith('r_sym_')}
+        return res
+    free = {f'r_sym_{i}' for i in range(len(T))}
+    first = solve_all(fixed, free)
+    if not first['feasible']:
+        first['time'] = time.time() - t0
+        return first
+    rw = {n: np.array([fv.get(n, 0.0) for fv in first['free_values']]) for n in free}
+    best, tried = None, {}
+    for ch in rsym_choices:
+        if isinstance(ch, dict):
+            label, r = ch.get('label', 'given'), {n: ch.get(n, 0.0) for n in free}
+        else:
+            label, r = f'q{ch:g}', {n: max(0.0, _weighted_quantile(rw[n], q, ch)) for n in free}
+        res = solve_all({**fixed, **r})
+        tried[label] = res.get('obj')
+        if res['feasible'] and (best is None or res['obj'] < best['obj']):
+            best = dict(res, r_sym=r, r_choice=label)
+    import gc
+    gc.collect()
+    if best is None:
+        return {'feasible': False, 'infeasible_scenario': -1, 'status': 'all r_sym choices',
+                'pass': 'fixed', 'time': time.time() - t0, 'r_tried': tried}
+    best.pop('free_values', None)
+    best.update(r_tried=tried, time=time.time() - t0)
+    return best
+
+
+def _alone_feasible(u, T, scenarios, fs, time_limit):
+    """Is member u, with its commitment fixed at fs, feasible on its own (grid trade
+    only) in every scenario? If so, any grand-coalition first stage that gives u this
+    commitment has a plan: the members' own plans side by side."""
+    st = ScenarioStack('alone_fix', [u], T, scenarios, dwr=False)
+    g, gv = _to_gurobi(st.model, 'alone_fix', time_limit, 1.0)
+    for n, v in fs.items():
+        if n in gv:
+            gv[n].LB = gv[n].UB = float(round(v))
+    st.release_model(collect=False)
+    g.Params.SolutionLimit = 1          # feasibility only
+    g.optimize()
+    ok = g.SolCount > 0
+    g.dispose()
+    return ok
+
+
+def cg_heuristic(players, T, scenarios, master, dw, kl_radius, ef=None, gap=None,
+                 time_limit=None, mip_kw=None):
+    """--cg-heuristic: grand-coalition plans from the column generation, the best of
+    the candidates below. Each fixes the electrolyzer owners' commitment, takes r_sym
+    as the least that every scenario delivers (fixed_first_stage_plan, rsym='min') and
+    solves the scenarios apart.
+
+      'lagr'  each owner's commitment in its pricing plan at the best Lagrangian
+              point (the plans the bound LB is made of)
+      'rmp'   each owner's commitment pattern of largest weight in the final master
+      'ef'    the extensive form's own first stage, when there is one; also with its
+              own r_sym ('ef_rsym')
+
+    A commitment need not have a plan (an owner's plan may lean on community trade
+    the others cannot supply). A candidate without one has every owner whose
+    commitment is not feasible on its own put on its stand-alone commitment and is
+    tried again: the members' own plans side by side are a plan of the community,
+    so the repaired candidate always has one."""
+    out = {'candidates': {}}
+    t0 = time.time()
+    owners = sorted(getattr(master, 'patterns', {}))
+    srcs = {}
+    best = getattr(master, 'best', None)
+    if best is not None:
+        srcs['lagr'] = {u: dict(best[2][u].fs) for u in owners
+                        if u in best[2] and getattr(best[2][u], 'fs', None)}
+    rmp = {}
+    for u in owners:
+        top, wtop = None, -1.0
+        for key, pat in master.patterns[u].items():
+            h = pat.get('mu')
+            if h is None or master._lp_pos(h) < 0:
+                continue
+            x = master.lp.x(h)
+            if x > wtop:
+                top, wtop = key, x
+        if top is not None:
+            rmp[u] = dict(top)
+    srcs['rmp'] = rmp
+    if ef is not None and ef.get('vals') and ef.get('status') != 'fallback-standalone':
+        fs_ef = {n: ef['vals'][n] for n in ef.get('first_stage_names', []) if n in ef['vals']}
+        srcs['ef'] = {'all': {n: v for n, v in fs_ef.items() if not n.startswith('r_sym_')}}
+        srcs['ef_rsym'] = {'all': fs_ef}       # its r_sym enters as a choice below
+    alone = {}
+
+    def stand_alone(u, names):
+        if u not in alone:
+            kw = dict(mip_kw or {})
+            kw.pop('time_limit', None)
+            e = solve_extensive_form([u], T, scenarios, release_scip=True, **kw)
+            alone[u] = e['vals']
+        return {n: alone[u][n] for n in names if n in alone[u]}
+
+    k_pen = float(scenarios[0][1].get('reserve_penalty_factor', 5.0))
+    choices = [0.0, 1.0 / k_pen, 0.5]
+    rs_rmp = {k: v for k, v in (dw.get('x0') or {}).items() if k.startswith('r_sym_')}
+    if rs_rmp:
+        choices.append(dict(rs_rmp, label='rmp'))
+    if 'ef_rsym' in srcs:
+        choices.append(dict({n: v for n, v in srcs['ef_rsym']['all'].items()
+                             if n.startswith('r_sym_')}, label='ef'))
+
+    def attempt(name, fs_by_owner, rsym):
+        fixed = {}
+        for fs in fs_by_owner.values():
+            fixed.update(fs)
+        res = fixed_first_stage_plan(players, T, scenarios, fixed, kl_radius, gap,
+                                     time_limit, rsym_choices=choices)
+        out['candidates'][name] = {k: v for k, v in res.items() if k != 'rho'}
+        print(f'  heuristic {name}: '
+              + (f'psi {res["obj"]:.6f} (r_sym {res["r_choice"]}; tried '
+                 + ', '.join(f'{k} {v:.2f}' for k, v in res['r_tried'].items() if v is not None)
+                 + ')' if res['feasible'] else
+                 f'no plan in scenario {res["infeasible_scenario"]} ({res["pass"]} pass, '
+                 f'status {res["status"]})') + f'  {res["time"]:.0f}s', flush=True)
+        return res
+
+    for name, fs_by_owner in srcs.items():
+        if not fs_by_owner or name == 'ef_rsym':
+            continue
+        rs = None
+        res = attempt(name, fs_by_owner, rs)
+        if not res['feasible'] and name in ('lagr', 'rmp'):
+            rep, moved = {}, []
+            for u, fs in fs_by_owner.items():
+                if _alone_feasible(u, T, scenarios, fs, time_limit):
+                    rep[u] = fs
+                else:
+                    rep[u] = stand_alone(u, fs)
+                    moved.append(u)
+            print(f'  heuristic {name}: {len(moved)} owner(s) put on their stand-alone '
+                  f'commitment {moved}', flush=True)
+            out['candidates'][name]['repaired'] = moved
+            attempt(f'{name}_repaired', rep, rs)
+    ok = {k: v for k, v in out['candidates'].items() if v['feasible']}
+    if ok:
+        k = min(ok, key=lambda k: ok[k]['obj'])
+        out.update(best=k, obj=ok[k]['obj'])
+    out['time'] = time.time() - t0
+    return out
+
+
+def standalone_seed(players, T, scenarios, ef_time, **kw):
+    """--ef-fallback standalone: what stands in for the extensive form when it stopped
+    (time or memory) without a plan. Every member's stand-alone plan, side by side, is
+    a plan of the grand coalition: the shared variables add up (r_sym and p are sums
+    of the members' own), and the worst case of a sum is at most the sum of the worst
+    cases, so sum_j val(DP_{j}) is an upper bound on the coalition's cost. The plans
+    seed the master as the EF's would; omega and eps then rest on that weak bound.
+    Returns (ef, alone): an EF record and the stand-alone values (profit)."""
+    t0 = time.time()
+    vals, first, alone, obj = {}, set(), {}, 0.0
+    for u in players:
+        e = solve_extensive_form([u], T, scenarios, release_scip=True, **kw)
+        own = e['stack'].vars
+        vals.update({n: v for n, v in e['vals'].items() if n in own})
+        first |= set(e['stack'].first_stage)
+        alone[u] = -e['obj']
+        obj += e['obj']
+    S = len(scenarios)
+    return {'status': 'fallback-standalone', 'obj': obj, 'dual_bound': -np.inf,
+            'gap': float('nan'), 'vals': vals, 'first_cost': float('nan'),
+            'scen_cost': [float('nan')] * S, 'worth_cost': [float('nan')] * S,
+            'time_build': 0.0, 'time_solve': ef_time, 'time_fallback': time.time() - t0,
+            'n_vars': float('nan'), 'first_stage_names': sorted(first),
+            'kl': {'radius': kw.get('kl_radius'), 'rho': [1.0 / S] * S, 'eta': float('nan'),
+                   'kl': float('nan'), 'expected_cost': float('nan'), 'solves': 0,
+                   'refinements': [], 'lambda': float('nan'), 'mu': float('nan')}}, alone
+
+
 def measure_eps(players, T, scenarios, payoff, **kw):
     """max_S (v(S) - sum_{j in S} E[x_j*]) / |S| over every proper coalition.
 
@@ -4777,6 +5126,18 @@ def _configure_direct(args):
         DirectMaster.doi_skip = frozenset(tuple(x.split(':')) for x in args.doi_skip.split(','))
 
 
+# an extensive form stopped early (--ef-mem-limit) or replaced (--ef-fallback) can hand
+# over a plan far from the optimum (n=60, |Omega|=100: 91% above the root bound);
+# omega_tol, relative to incumbent - LB, would then end the CG at once. Such a plan
+# still seeds the master, but the CG stops on --cg-gap alone.
+WEAK_INCUMBENT_GAP = 1e-2
+
+
+def _weak_incumbent(ef):
+    return ef.get('status') == 'fallback-standalone' or (
+        ef.get('status') == 'memlimit' and not ef.get('gap', 0.0) <= WEAK_INCUMBENT_GAP)
+
+
 def _direct_kwargs(args, ef):
     """The column-generation options run() hands the direct engine."""
     return dict(
@@ -4784,7 +5145,11 @@ def _direct_kwargs(args, ef):
         lp_solver=args.lp_solver, pricing_solver=args.pricing_solver,
         pricing_time_limit=args.mip_time_limit,
         pricing_gap=args.pricing_gap,
-        smoothing=not args.no_smoothing, incumbent=ef['obj'], gap_tol=args.cg_gap,
+        # the fallback's bound (sum of the stand-alone values) is far too weak to stop
+        # on: omega_tol is relative to incumbent - LB, so it would end the CG at once
+        smoothing=not args.no_smoothing,
+        incumbent=None if _weak_incumbent(ef) else ef['obj'],
+        gap_tol=args.cg_gap,
         pen_eps=0.0 if args.no_penalty else args.pen_eps,
         pen_delta=0.0 if args.no_penalty else args.pen_delta,
         pen_shrink=args.pen_shrink, max_rounds=args.max_rounds,
@@ -4936,8 +5301,14 @@ def instance(args):
 
 
 def run(args):
-    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP
+    global EF_NODEFILE_START, EF_KL_GRID, EF_KL_SINGLE, EF_TIME_CAP, EF_MEM_LIMIT, MEM_REPORT
+    global EF_NOREL
+    EF_NOREL = getattr(args, 'ef_norel', None)
     EF_TIME_CAP = getattr(args, 'ef_time_cap', EF_TIME_CAP) or None
+    EF_MEM_LIMIT = getattr(args, 'ef_mem_limit', None)
+    MEM_REPORT = getattr(args, 'mem_report', False)
+    PlayerPricing.lean = getattr(args, 'cg_lean', False)
+    DirectMaster.col_cap = getattr(args, 'cg_col_cap', None)
     EF_NODEFILE_START = getattr(args, 'ef_nodefile_start', None)
     EF_KL_GRID = getattr(args, 'ef_kl_grid', EF_KL_GRID)
     EF_KL_SINGLE = getattr(args, 'ef_kl_single', EF_KL_SINGLE)
@@ -4971,7 +5342,8 @@ def run(args):
         + (f"_blk{base['reserve_block_hours']}"
            if base.get('reserve_block_hours', _BLK_DEFAULT) != _BLK_DEFAULT else '') \
         + ('_admu' if args.adm_units else '') + ('' if args.stall_barrier else '_nosbar') \
-        + (f'_pp{args.partial_pricing}' if args.partial_pricing else '')         + (f'_{args.tag}' if args.tag else '')
+        + (f'_pp{args.partial_pricing}' if args.partial_pricing else '') \
+        + (f'_cap{args.cg_col_cap}' if getattr(args, 'cg_col_cap', None) else '')         + (f'_{args.tag}' if args.tag else '')
     print(f'\n=== {tag}: n={len(players)}, |T|={len(T)}, |Omega|={len(scen)} ===')
     _configure_direct(args)
 
@@ -4982,7 +5354,7 @@ def run(args):
         print(f'deterministic model on scenario 0: {det.model.getObjVal():.6f}')
 
     print('\n[1] extensive form (DP_N^Omega)')
-    ef = prev = None
+    ef = prev = alone_seed = None
     improving = getattr(args, 'ef_improve', None) is not None
     if args.ef_cache and os.path.exists(args.ef_cache):
         # the same instance's EF from an earlier run (another CG configuration):
@@ -5009,12 +5381,23 @@ def run(args):
             with open(args.ef_start, 'rb') as f:
                 start = pickle.load(f)['vals']
             print(f'  (MIP start from {args.ef_start})')
-        ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
-                                  release_scip=args.dual_init == 'none', improve=imp,
-                                  start=start, **mip_kw)
-        st = ef['stack']
-        ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
-        ef['first_stage_names'] = sorted(ef['stack'].first_stage)
+        t_ef = time.time()
+        try:
+            ef = solve_extensive_form(players, T, scen, log_file=args.ef_log,
+                                      release_scip=args.dual_init == 'none', improve=imp,
+                                      start=start, **mip_kw)
+        except RuntimeError as e:
+            if getattr(args, 'ef_fallback', None) != 'standalone' or 'no solution' not in str(e):
+                raise
+            t_ef = time.time() - t_ef
+            print(f'  {e}\n  (--ef-fallback standalone: seeding from the stand-alone plans)')
+            import gc
+            gc.collect()
+            ef, alone_seed = standalone_seed(players, T, scen, t_ef, **mip_kw)
+        if 'stack' in ef:
+            st = ef['stack']
+            ef['n_vars'] = st.n_vars if st.model is None else st.model.getNVars()
+            ef['first_stage_names'] = sorted(ef['stack'].first_stage)
         if prev is not None:
             ef = _merge_improved(prev, ef)
             ef['cached'] = True
@@ -5034,6 +5417,15 @@ def run(args):
                 pickle.dump({k: v for k, v in ef.items() if k != 'stack'}, f)
     print(f'  obj {ef["obj"]:.6f}  status {ef["status"]}  gap {ef["gap"]:.2e}  '
           f'{ef["time_solve"]:.1f}s  vars {ef["n_vars"]}')
+    if PlayerPricing.lean:
+        # the EF's name maps (stack) are not read past this point; its plan is
+        ef.pop('stack', None)
+        import gc
+        gc.collect()
+    _mem_report('after the extensive form')
+    if _weak_incumbent(ef):
+        print(f'  (the plan is {ef.get("gap", float("nan")):.1%} from its bound: the CG stops on '
+              f'--cg-gap {args.cg_gap:g}, not on omega)')
     if kl:
         k = ef['kl']
         print(f'  KL r={k["radius"]:g}: worst case {ef["obj"]:.6f} vs expected '
@@ -5076,6 +5468,10 @@ def run(args):
                     'bundle_qp': args.bundle_qp} if args.bundle else {})
         dw, master = solver_fn(players, T, scen, base, **_direct_kwargs(args, ef),
                                **extra_b, **extra_d)
+        _mem_report('after column generation')
+        if getattr(master, 'capped', 0):
+            print(f'  columns purged {master.purged}, past the --cg-col-cap ceiling '
+                  f'{master.capped} time(s)')
         tm = dw['timing']
         if dw.get('bundle'):
             print(f'  bundle: {tm["serious"]} serious / {tm["null"]} null steps, '
@@ -5118,6 +5514,19 @@ def run(args):
           f'{dw["time"]:.1f}s  DOI {dw["doi"]}  SAR {dw.get("sar", {}).get("phases")}  '
           f'PEN {dw.get("penalty", {}).get("rounds")}')
 
+    heur = None
+    if getattr(args, 'cg_heuristic', False):
+        print('\n[2b] a grand-coalition plan from the column generation')
+        heur = cg_heuristic(players, T, scen, master, dw, args.kl_radius, ef=ef,
+                            gap=args.ef_gap, time_limit=args.mip_time_limit, mip_kw=mip_kw)
+        if heur.get('obj') is not None:
+            print(f'  best {heur["best"]}: {heur["obj"]:.6f} against the extensive form\'s '
+                  f'{ef["obj"]:.6f} ({heur["time"]:.0f}s)')
+            if heur['obj'] < ef['obj']:
+                # the better plan is v^MIP's side of omega; the EF's bound is kept
+                ef = dict(ef, obj=heur['obj'], obj_ef=ef['obj'],
+                          status=f'{ef["status"]}+heuristic')
+
     if kl:
         print('\n[3] robust Owen allocation')
         al = robust_allocation(ef, dw, master)
@@ -5143,6 +5552,8 @@ def run(args):
 
     if args.skip_standalone:
         alone = {u: float('nan') for u in players}
+    elif alone_seed is not None:
+        alone = alone_seed          # solved already, for the fallback seed
     else:
         print('\n[4] stand-alone values val(DP_{j}^Omega)')
         alone = standalone_values(players, T, scen, **mip_kw)
@@ -5172,7 +5583,8 @@ def run(args):
         'm_linking_rows': len(master.row_keys),
         'ef': {**{k: ef[k] for k in ('status', 'obj', 'dual_bound', 'gap', 'first_cost',
                                      'scen_cost', 'worth_cost', 'time_build', 'time_solve')},
-               'cached': ef.get('cached', False)},
+               'cached': ef.get('cached', False),
+               **({'obj_ef': ef['obj_ef']} if 'obj_ef' in ef else {})},
         'ef_first_stage': {k: v for k, v in first.items() if abs(v) > 1e-9},
         'dw': {k: dw.get(k) for k in ('status', 'obj', 'lb', 'ub', 'gap', 'sigma', 'x0',
                                       'iterations', 'columns', 'time', 'doi', 'timing')},
@@ -5184,7 +5596,8 @@ def run(args):
             'bundle', 'bundle_t', 'bundle_t_min', 'bundle_age', 'bundle_cap', 'bundle_qp',
             'dual_init', 'omega_tol', 'pricing_abs', 'kl_radius', 'kl_nested', 'lp_mixed',
             'split_scenarios', 'mp12',
-            'kl_cut_frac', 'kl_master')},
+            'kl_cut_frac', 'kl_master', 'cg_lean', 'cg_col_cap', 'ef_mem_limit',
+            'ef_fallback', 'ef_norel', 'cg_heuristic')},
         'sar': dw.get('sar'),
         'penalty': dw.get('penalty'),
         'cg_log': master.log,
@@ -5196,6 +5609,7 @@ def run(args):
                'ef': ef.get('kl'), 'master': dw.get('kl')} if kl else None,
         'standalone': alone, 'chi_LR': chi_lr,
         'weak_eps': core,
+        'heuristic': heur,
         # a row's price: its dual over the pricing measure's weight of the scenario
         'coupling_prices': {f'{k}_{t}_s{w}': d / (dw['duals'][rho_key(w)] if kl
                                                   else master.probs[w])
@@ -5269,11 +5683,13 @@ def build_parser():
     ap.add_argument('--pricing-solver', default='gurobi', choices=['highs', 'gurobi'])
     ap.add_argument('--pricing-gap', type=float, default=MIP_GAP,
                     help=f'relative gap of the pricing MILPs (default {MIP_GAP})')
-    ap.add_argument('--pricing-workers', type=int, default=8,
-                    help='prosumers priced in parallel (0: one per core). Default 8 since '
-                         '2026-10-05: two Gurobi threads per worker on a 16-core machine '
-                         'beat 16 x 1 by 3-10%% at n=60, 20 scenarios, KL 0.5 '
-                         '(ieee_owen/kl_experiment_plan.md)')
+    ap.add_argument('--pricing-workers', type=int, default=12,
+                    help='prosumers priced in parallel (0: one per core). Default 12 since '
+                         '2026-10-15: on the 24-thread machine 12 x 2 threads took the '
+                         'n=60, 20-scenario day-1 CG from 1,189 s (8 workers) to 1,014 s '
+                         '(24: 1,046 s). It was 8 from 2026-10-05, two Gurobi threads per '
+                         'worker on a 16-core machine, 3-10%% ahead of 16 x 1 at n=60, '
+                         '20 scenarios, KL 0.5 (ieee_owen/kl_experiment_plan.md)')
     ap.add_argument('--round-tol', type=float, default=None,
                     help='column admission tolerance of the penalty rounds before the '
                          'last (default: --cg-gap)')
@@ -5293,6 +5709,31 @@ def build_parser():
     ap.add_argument('--ef-nodefile-start', type=float, default=None,
                     help='Gurobi NodefileStart [GB] for the extensive form: B&B nodes '
                          'beyond it go to disk (default: off)')
+    ap.add_argument('--ef-mem-limit', type=float, default=None, metavar='GB',
+                    help='Gurobi SoftMemLimit [GB] for the extensive forms: past it the '
+                         "solve stops with its incumbent (status 'memlimit') like a time "
+                         'limit (default: off)')
+    ap.add_argument('--ef-norel', type=float, default=None, metavar='SECONDS',
+                    help="Gurobi NoRelHeurTime for the grand coalition's extensive form: "
+                         'plans before the root LP, for a solve --ef-mem-limit may stop '
+                         'there (default: off)')
+    ap.add_argument('--ef-fallback', choices=('standalone',), default=None,
+                    help='if the extensive form stops without a plan (time or memory), '
+                         "seed the master from the members' stand-alone plans and use "
+                         'the sum of their values as the upper bound (default: fail)')
+    ap.add_argument('--cg-heuristic', action='store_true',
+                    help='after the CG, grand-coalition plans with the first stage fixed '
+                         "from the master (and from the EF's plan), solved scenario by "
+                         "scenario; the best replaces the EF's value if it is lower")
+    ap.add_argument('--cg-lean', action='store_true',
+                    help="memory: drop each pricing unit's SCIP model once its solver "
+                         'copy exists, keep no per-call copies of the duals or primal '
+                         'vectors, and drop the EF name maps before the CG; same numbers')
+    ap.add_argument('--cg-col-cap', type=int, default=None, metavar='K',
+                    help='memory: at most K prosumer columns per pricing unit in the '
+                         'master; past it the purge ignores --purge-age (default: off)')
+    ap.add_argument('--mem-report', action='store_true',
+                    help="print the process's private memory at the phase boundaries")
     ap.add_argument('--ef-improve', type=float, default=None, metavar='SECONDS',
                     help='KL EF: from the plan in --ef-cache, look for a better one '
                          '(MIPFocus 1, then the LP polish of _solve_extensive_kl) for this '
