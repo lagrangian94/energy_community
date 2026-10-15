@@ -1,0 +1,25 @@
+
+Cluster assignments:
+Cluster 0 (represented by Day 25): [ 1 12 17 21 25 26 27 28]... (total 8 days)
+Cluster 1 (represented by Day 4): [ 2  3  4  5  6  7  8  9 10 11]... (total 23 days)
+[reserve] pi_res = 56 EUR/MW.h (daily mean of fcrn_dk2_56 hourly prices), 1h blocks
+[reserve] c_min_G = 0.15 (electrolyzer min load / els_cap); literature 0.1-0.16 -> OK
+[reserve] c_sb_G = 0.01 (electrolyzer standby draw / els_cap); literature 0.025-0.05 -> OUT OF RANGE
+✓ spring  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ summer  :  92 days | Mean: 1 MWh | RMSE range: 0.0-0.3 MWh
+✓ fall    :  91 days | Mean: 1 MWh | RMSE range: 0.0-0.2 MWh
+✓ winter  :  90 days | Mean: 1 MWh | RMSE range: 0.0-0.1 MWh
+
+=== 15p_reserve_peak_day2_S40_seed0_grb_direct-gurobi_kl0.0480182_dual_ndw_rsc0.303571: n=15, |T|=24, |Omega|=40 ===
+
+[1] extensive form (DP_N^Omega)
+  (read from ieee_owen/weak_eps_experiment/stochastic/oosn17_xi/improve/plans/dro_n15_S40_day2.pkl)
+Set parameter Username
+Set parameter LicenseID to value 2839433
+Academic license - for non-commercial use only - expires 2027-06-29
+Set parameter OutputFlag to value 1
+Set parameter LogToConsole to value 0
+  improve: psi 2180.850621 -> MILP 2179.659047 (timelimit, 600s) -> polish 2179.658568 (2 LP, 4s)  adopted True
+  obj 2179.658568  status timelimit  gap 1.91e-03  613.0s  vars 178984
+  KL r=0.0480182: worst case 2179.658568 vs expected 2107.239792; 1 MILP solve(s); rho* 0.026 0.015 0.026 0.015 0.042 0.024 0.026 0.024 0.023 0.051 0.034 0.027 0.016 0.021 0.017 0.026 0.020 0.016 0.022 0.019 0.023 0.035 0.030 0.030 0.024 0.025 0.025 0.039 0.029 0.033 0.017 0.018 0.024 0.014 0.036 0.017 0.031 0.017 0.025 0.020 (KL 0.0480)
+    round 1: MIPGap 0e+00  600.1s  3686 nodes  psi-bound 1.91e-03  psi-incumbent 1.05e-05
