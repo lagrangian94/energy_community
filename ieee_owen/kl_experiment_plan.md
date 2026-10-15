@@ -937,7 +937,7 @@ python ieee_owen/weak_eps_experiment/kl_oosn_plot.py
 - **다시 골라도 shift는 평균 0.04 € 안에서 같고, 지킨 날 수는 한 칸도 바뀌지 않는다.** n=6은 SAA를 최적까지 풀어서 정확한 비교다. 약속과 번 돈이 같이 움직인다(1단계를 바꿔도 수익은 0.04~0.08% 차이). optimizer's curse는 거의 2단계 recourse에 있다. 처음 우려(재사용이 SAA의 shift를 0 쪽으로 끌어 20 → 100 구간이 과장된다)는 맞지 않았다.
 - 예외: n=60 \|Ω\|=100 SAA는 10분 안에 더 나은 해를 14일 중 2일만 찾았다. n=6 DRO의 EF 갭이 하루 최대 7%인 날이 있다(KL 상한이 느슨한 것인지 incumbent가 나쁜 것인지 확인 안 함).
 - **그림과 표는 재사용 계획 기준 그대로다**(`kl_oosn_plot.py`를 `--improve` 없이). 칸마다 출처가 섞이지 않게 하려는 것이다.
-- **원고 문장과 어긋남(고칠 것)**: V-C 첫 문단이 "Every extensive form is solved within a predefined time limit, so the larger instances are evaluated with near-optimal plans"라고 쓰는데, 그림의 40·100개 칸은 EF를 풀지 않고 20개 계획을 평가한 값이다. "40·100개는 20개로 고른 1단계를 큰 표본에서 평가했고, 그 표본에서 다시 골라도(110칸) shift가 0.04 € 안에서 같다"로 바꾸는 쪽이 정확하다.
+- **원고 문장과의 차이(내부 기록, 고치지 않음)**: V-C 첫 문단은 "Every extensive form is solved within a predefined time limit, so the larger instances are evaluated with near-optimal plans"라고 쓰고, 그림의 40·100개 칸은 20개 계획을 큰 표본에서 평가한 값이다. 다시 골라도 shift가 0.04 € 안에서 같으므로(위 표) 원고는 그대로 두기로 했다(사용자 결정, 2026-10-15). 리뷰어가 물으면 이 표가 근거다.
 
 #### (3) \|Ω\|=100, n=60 RCG 시간·메모리 (8.19 학습 쪽 기록, `ubound17_xi/train/`)
 
@@ -977,7 +977,6 @@ KL 실행의 val(DP^DR_N)은 음수(n=6 약 −377)인데 결정론 실행은 �
 
 #### (7) 남은 일
 
-- V-C 문장과 그림 출처의 어긋남((2) 마지막 항목).
 - 빨간색 정리, `% PROVISIONAL` 주석 정리.
 - `tab:runtime` \|Ω\|=40·100 칸(혼자 도는 실행 또는 블록 삭제).
 - .bib에 없는 키 24개(.bib는 사용자가 채움).
