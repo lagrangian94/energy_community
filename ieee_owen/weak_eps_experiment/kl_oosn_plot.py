@@ -29,13 +29,15 @@ PLAN_SCEN = 20
 SERIES = (('dro', r'DR, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
           ('saa', r'SAA, $r=0$', '#eb6834', 's'))
 # (file stem, panel grid, figure size [in]): IEEE one column is 3.5 in, two are 7.16 in
-LAYOUTS = (('oosn_shift', (2, 2), (3.5, 3.4)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
+# 2.7 in tall keeps the manuscript at its page count (3.4 in pushed it a page over)
+LAYOUTS = (('oosn_shift', (2, 2), (3.5, 2.7)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
 
 
 def draw(stat, sizes, scens, rows_cols, figsize, path):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
+    import matplotlib.ticker
     plt.rcParams.update({'font.size': 8, 'axes.linewidth': 0.6, 'pdf.fonttype': 42})
     fig, axes = plt.subplots(*rows_cols, figsize=figsize, sharex=True, sharey=True,
                              squeeze=False)
@@ -52,6 +54,8 @@ def draw(stat, sizes, scens, rows_cols, figsize, path):
         ax.set_xscale('log')
         ax.set_xticks(scens); ax.set_xticklabels([str(m) for m in scens]); ax.minorticks_off()
         ax.set_xlim(min(scens) / 1.3, max(scens) * 1.3)
+        # at 2.7 in the default locator keeps only every other tick
+        ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(10))
         ax.text(0.96, 0.95, f'$n={n}$', transform=ax.transAxes, ha='right', va='top')
         ax.grid(True, which='major', lw=0.3, color='#d9d8d2')
         for s in ('top', 'right'):

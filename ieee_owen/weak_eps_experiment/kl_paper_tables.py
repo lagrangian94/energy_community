@@ -243,13 +243,14 @@ def main():
     def signed(x, d):
         return ('$-$' if x < 0 else '') + f'{abs(x):.{d}f}'
     for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Days the budget holds, {lab} & ' + ' & '.join(
+        w(rf'Days budget met, {lab} & ' + ' & '.join(
             tbd(n, f'{int((O[n][f"d_{k}"] >= O[n][f"p_{k}"]).sum())}') for n in SIZES) + r' \\')
     for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
         w(rf'Shift per member, {lab} & ' + ' & '.join(
             tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
             for n in SIZES) + r' \\')
-    w(r'Cost of hedging [\% of $v^{\mathrm{DR}}(N)$] & ' + ' & '.join(
+    # percent of v^DR(N); the text says so, the label stays one column wide
+    w(r'Cost of hedging (\%) & ' + ' & '.join(
         tbd(n, f'{100 * float(np.mean(O[n]["cost"] / O[n]["vdr"])):.2f}') for n in SIZES) + r' \\')
     for n in SIZES:
         o = O[n]
