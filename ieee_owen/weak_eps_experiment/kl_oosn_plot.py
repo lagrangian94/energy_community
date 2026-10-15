@@ -11,7 +11,7 @@ Reads run_kl_oos.py's results (|Omega| = 20) and run_kl_oosn.py's (the others); 
 (one row per size, sample, day and plan), <out>/oosn_summary.csv and the figure: one
 column wide, 2 x 2 (<out>/oosn_shift.{pdf,png}), and two columns wide, 1 x 4
 (<out>/oosn_shift_row.{pdf,png}). A marker is the mean over the days, the band the
-middle half of the days; the dotted line marks the 20 scenarios of the main runs.
+middle half of the days.
 
     python ieee_owen/weak_eps_experiment/kl_oosn_plot.py [--improve]
 """
@@ -25,8 +25,9 @@ import run_kl_oos as O
 OUT = os.path.join('ieee_owen', 'weak_eps_experiment', 'stochastic', 'oosn17_xi')
 PLAN_SCEN = 20
 # the first two categorical slots of the palette; the markers repeat the identity
-SERIES = (('dro', r'with the ball, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
-          ('saa', r'sample average, $r=0$', '#eb6834', 's'))
+# legend names follow the manuscript's DP^DR and DP^SAA
+SERIES = (('dro', r'DR, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
+          ('saa', r'SAA, $r=0$', '#eb6834', 's'))
 # (file stem, panel grid, figure size [in]): IEEE one column is 3.5 in, two are 7.16 in
 LAYOUTS = (('oosn_shift', (2, 2), (3.5, 3.4)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
 
@@ -40,7 +41,6 @@ def draw(stat, sizes, scens, rows_cols, figsize, path):
                              squeeze=False)
     for ax, n in zip(axes.flat, sizes):
         ax.axhline(0.0, color='#52514e', lw=0.6)
-        ax.axvline(PLAN_SCEN, color='#a3a29c', lw=0.6, ls=':')
         for lab, label, color, marker in SERIES:
             xs = [m for m in scens if (n, m, lab) in stat]
             if not xs:
@@ -56,8 +56,11 @@ def draw(stat, sizes, scens, rows_cols, figsize, path):
         ax.grid(True, which='major', lw=0.3, color='#d9d8d2')
         for s in ('top', 'right'):
             ax.spines[s].set_visible(False)
-    fig.supxlabel(r'training scenarios $|\Omega|$', fontsize=8)
-    fig.supylabel('shift per member [EUR]', fontsize=8, x=0.01)
+    # IEEE style: sentence case, units in parentheses. The caption gives the formula,
+    # (val(DP^out_N) - val(DP^DR_N)) / n at each series' radius (r = 0 is DP^SAA), in the
+    # manuscript's own macros rather than in matplotlib's fonts
+    fig.supxlabel(r'Sample size $|\Omega|$', fontsize=8)
+    fig.supylabel('Shift per member (€)', fontsize=8, x=0.01)
     handles, labels = axes.flat[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', ncol=len(SERIES), frameon=False,
                fontsize=7, handlelength=1.6, columnspacing=1.0, bbox_to_anchor=(0.5, 1.0))
