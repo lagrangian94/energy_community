@@ -2,10 +2,10 @@
 % days per size: n=6: 31, n=15: 31, n=30: 31, n=60: 31
 
 % ---- tab:results
-$\vdr{N}$ & $-$258 & $-$2{,}229 & $-$4{,}309 & $-$12{,}045 \\
-$v^{\mathrm{DR}}(N)$ & 959 & 2{,}069 & 3{,}657 & 8{,}611 \\
-$g_K^{\mathrm{LR\text{-}DR}}$ & 9.36 & 8.83 & 3.73 & 2.02 \\
-$\varepsilon_K^{\mathrm{LR\text{-}DR}}=g_K^{\mathrm{LR\text{-}DR}}/n$ & 1.560 & 0.588 & 0.124 & 0.034 \\
+$\vdr{N}$ & $-$377 & $-$2{,}258 & $-$4{,}345 & $-$12{,}121 \\
+$v^{\mathrm{DR}}(N)$ & 965 & 2{,}073 & 3{,}663 & 8{,}626 \\
+$g_{r,K}^{\mathrm{LR}}$ & 9.88 & 9.26 & 3.98 & 2.22 \\
+$\varepsilon_{r,K}^{\mathrm{LR}}$ & 1.646 & 0.617 & 0.133 & 0.037 \\
 
 % ---- tab:runtime
 Solving $\vdr{N}$ & 5 & 540 & 1{,}188 & 1{,}812 \\
@@ -39,11 +39,14 @@ Coalition generation & 401 & $>3{,}600$ & $>3{,}600$ & $>3{,}600$ \\
 % flat: n=6: 4.0x, n=15: 4.1x, n=30: 5.9x, n=60: not reached / not run
 % ---- tab:oos (arithmetic means over the days; signed)
 % days per size: n=6: 31, n=15: 31, n=30: 31, n=60: 31; test scenarios: 500
-Days the budget holds, $r=0$ & 9 & 10 & 10 & 10 \\
-Days the budget holds, $r=0.096$ & 28 & 30 & 30 & 31 \\
-Shift per member, $r=0$ [\euro] & $-$2.08 & $-$1.10 & $-$1.04 & $-$1.28 \\
-Shift per member, $r=0.096$ [\euro] & 7.62 & 6.16 & 5.16 & 6.27 \\
-Cost of hedging [\% of $v^{\mathrm{DR}}(N)$] & 0.08 & 0.05 & 0.04 & 0.04 \\
+% Days the budget holds (of 31)
+SAA, $r=0$ & 9 & 10 & 10 & 10 \\
+DR, $r=0.096$ & 28 & 30 & 30 & 31 \\
+% Shift per member (\euro)
+SAA, $r=0$ & $-$2.08 & $-$1.10 & $-$1.04 & $-$1.28 \\
+DR, $r=0.096$ & 7.62 & 6.16 & 5.16 & 6.27 \\
+% Cost of hedging (\% of $v^{\mathrm{DR}}(N)$)
+DR, $r=0.096$ & 0.08 & 0.05 & 0.04 & 0.04 \\
 % n=6: promised - delivered, mean EUR: r=0 +12.5, KL -45.7; cost of hedging 0.76 +- 0.03 EUR/day (0.229% of the delivered value, 0.078% of v^DR(N))
 %   r=0: budget holds on 9/31; by more than 1.96 s.e. of the test mean on 6, fails by more than that on 19, within it on 6; shortfall per member on the days it fails: mean 5.04, max 10.26 EUR
 %   KL: budget holds on 28/31; by more than 1.96 s.e. of the test mean on 25, fails by more than that on 1, within it on 5; shortfall per member on the days it fails: mean 1.85, max 2.29 EUR
@@ -61,8 +64,9 @@ Cost of hedging [\% of $v^{\mathrm{DR}}(N)$] & 0.08 & 0.05 & 0.04 & 0.04 \\
 %   KL: budget holds on 31/31; by more than 1.96 s.e. of the test mean on 29, fails by more than that on 0, within it on 2; shortfall per member on the days it fails: mean --, max -0.77 EUR
 %   sample-average extensive form above a gap of 1e-4 on 0 days
 % ---- quoted in the text
-% duality gap, geometric mean: n=6: 9.36, n=15: 8.83, n=30: 3.73, n=60: 2.02
-% eps_K, geometric mean: n=6: 1.560, n=15: 0.588, n=30: 0.124, n=60: 0.034
+% duality gap, arithmetic mean: n=6: 9.88, n=15: 9.26, n=30: 3.98, n=60: 2.22
+% eps_K, arithmetic mean: n=6: 1.646, n=15: 0.617, n=30: 0.133, n=60: 0.037
+% eps_K as a share of the mean surplus per member, v^DR(N) / n: n=6: 1.023%, n=15: 0.447%, n=30: 0.109%, n=60: 0.026%
 % RCG time, geometric mean [s]: n=6: 76, n=15: 563, n=30: 586, n=60: 1005
 % n=6: a single member gains on 0/31 days; within 0.1% of eps_K on 0, above eps_K on 0; extensive form at its 30-minute cap on 0 days
 % n=15: a single member gains on 24/31 days; within 0.1% of eps_K on 1, above eps_K on 0; extensive form at its 30-minute cap on 0 days

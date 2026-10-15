@@ -10,9 +10,12 @@ Same rule as paper_tables.py: the tables are generated, not typed. Sources:
   stochastic/oos17_xi/oos_*.json     out-of-sample values (run_kl_oos.py)
 
 CONVENTIONS.
-- Geometric mean of |x| over the days, sign restored (val(DP_N) is a net cost here,
-  so it prints negative). A cell with no data prints \\TBD{--}; one that rests on
-  fewer days than the caption says prints inside \\TBD{} with the count in a comment.
+- Values (tab:results, tab:oos) are arithmetic means over the days; run times
+  (tab:runtime) are geometric means of |x|, sign restored. The values were geometric
+  means too until 2026-10-15, when tab:results and tab:oos became one table and the
+  signed out-of-sample quantities, which admit no geometric mean, set the rule for both.
+  A cell with no data prints \\TBD{--}; one that rests on fewer days than the caption
+  says prints inside \\TBD{} with the count in a comment.
 - The extensive form stops at a gap of 1e-4 or 30 minutes, and g and eps rest on
   its incumbent. A day whose extensive form was re-solved later (resolve_ef.py) is
   read from 'ef_first', the 30-minute plan, so every day follows the same rule
@@ -132,9 +135,16 @@ def oos_rows(scen):
     return out
 
 
-def cell(vals, digits, days=DAYS):
-    """Geometric mean; inside \\TBD{} while fewer than `days` days are in."""
-    x = gm(vals)
+def am(a):
+    a = np.asarray(a, float)
+    a = a[np.isfinite(a)]
+    return float(a.mean()) if len(a) else None
+
+
+def cell(vals, digits, days=DAYS, mean=gm):
+    """Mean over the days (geometric unless told); inside \\TBD{} while fewer than
+    `days` days are in."""
+    x = mean(vals)
     if x is None:
         return r'\TBD{--}'
     return num(x, digits) if len(vals) >= days else rf'\TBD{{{num(x, digits)}}}'
@@ -152,12 +162,14 @@ def main():
     w('% days per size: ' + ', '.join(f'n={n}: {len(R[n]["g"])}' for n in SIZES))
     w('')
     w('% ---- tab:results')
-    row = lambda name, key, d: w(f'{name} & ' + ' & '.join(cell(R[n][key], d) for n in SIZES) + r' \\')
+    # arithmetic means: values, not run times (CONVENTIONS)
+    row = lambda name, key, d: w(f'{name} & ' + ' & '.join(cell(R[n][key], d, mean=am)
+                                                            for n in SIZES) + r' \\')
     row(r'$\vdr{N}$', 'val', 0)
     row(r'$v^{\mathrm{DR}}(N)$', 'vdr', 0)
-    row(r'$g_K^{\mathrm{LR\text{-}DR}}$', 'g', 2)
-    w(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}=g_K^{\mathrm{LR\text{-}DR}}/n$ & '
-      + ' & '.join(cell(R[n]['eps'], 3) for n in SIZES) + r' \\')
+    row(r'$g_{r,K}^{\mathrm{LR}}$', 'g', 2)
+    # the text defines eps_K = g_K / n; the row carries the symbol only
+    row(r'$\varepsilon_{r,K}^{\mathrm{LR}}$', 'eps', 3)
     w('')
     w('% ---- tab:runtime')
     w(r'Solving $\vdr{N}$ & ' + ' & '.join(cell(R[n]['t_ef'], 0) for n in SIZES) + r' \\')
@@ -279,6 +291,7 @@ def main():
             f'n={n}: ' + (f'{ratio[(m, n)]:.1f}x' if ratio.get((m, n)) else 'not reached / not run')
             for n in SIZES))
     O = oos_rows(a.scen)
+    # since 2026-10-15 the out-of-sample block of tab:results (one table, two blocks)
     w('% ---- tab:oos (arithmetic means over the days; signed)')
     w('% days per size: ' + ', '.join(f'n={n}: {len(O[n]["day"])}' for n in SIZES)
       + '; test scenarios: ' + ', '.join(sorted({f'{int(t)}' for n in SIZES for t in O[n]['test']})))
@@ -288,14 +301,21 @@ def main():
 
     def signed(x, d):
         return ('$-$' if x < 0 else '') + f'{abs(x):.{d}f}'
-    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Days the budget holds, {lab} & ' + ' & '.join(
+    # grouped by quantity, one row per plan named as in fig:oos (DR, SAA); the manuscript
+    # adds the group headers and the indents
+    plans = ((r'SAA, $r=0$', 'saa'), (rf'DR, $r={RB.Q.radius(a.scen):.3f}$', 'dro'))
+    w(r'% Days the budget holds (of 31)')
+    for lab, k in plans:
+        w(rf'{lab} & ' + ' & '.join(
             tbd(n, f'{int((O[n][f"d_{k}"] >= O[n][f"p_{k}"]).sum())}') for n in SIZES) + r' \\')
-    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Shift per member, {lab} [\euro] & ' + ' & '.join(
+    w(r'% Shift per member (\euro)')
+    for lab, k in plans:
+        w(rf'{lab} & ' + ' & '.join(
             tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
             for n in SIZES) + r' \\')
-    w(r'Cost of hedging [\% of $v^{\mathrm{DR}}(N)$] & ' + ' & '.join(
+    # what the DR plan earns below the SAA plan: a row of its own under the group header
+    w(r'% Cost of hedging (\% of $v^{\mathrm{DR}}(N)$)')
+    w(plans[1][0] + ' & ' + ' & '.join(
         tbd(n, f'{100 * float(np.mean(O[n]["cost"] / O[n]["vdr"])):.2f}') for n in SIZES) + r' \\')
     for n in SIZES:
         o = O[n]
@@ -319,10 +339,13 @@ def main():
         w(f'%   sample-average extensive form above a gap of 1e-4 on {int(cap.sum())} days'
           + (f' {sorted(int(d) for d in o["day"][cap])}' if cap.any() else ''))
     w('% ---- quoted in the text')
-    g = {n: gm(R[n]['g']) for n in SIZES}
-    e = {n: gm(R[n]['eps']) for n in SIZES}
-    w(f'% duality gap, geometric mean: ' + ', '.join(f'n={n}: {g[n]:.2f}' for n in SIZES))
-    w(f'% eps_K, geometric mean: ' + ', '.join(f'n={n}: {e[n]:.3f}' for n in SIZES))
+    g = {n: am(R[n]['g']) for n in SIZES}
+    e = {n: am(R[n]['eps']) for n in SIZES}
+    v = {n: am(R[n]['vdr']) for n in SIZES}
+    w(f'% duality gap, arithmetic mean: ' + ', '.join(f'n={n}: {g[n]:.2f}' for n in SIZES))
+    w(f'% eps_K, arithmetic mean: ' + ', '.join(f'n={n}: {e[n]:.3f}' for n in SIZES))
+    w(f'% eps_K as a share of the mean surplus per member, v^DR(N) / n: '
+      + ', '.join(f'n={n}: {100 * e[n] / (v[n] / n):.3f}%' for n in SIZES))
     w(f'% RCG time, geometric mean [s]: '
       + ', '.join(f'n={n}: {gm(R[n]["t_rcg"]):.0f}' for n in SIZES))
     for n in SIZES:

@@ -5,12 +5,15 @@ receives, (earned - promised) / n, with the ball and without it (r = 0), at
 |Omega| = 5, 20, 40, 100. Both settle closer to what was promised as the sample grows,
 and closer to each other, the radius being of order 1 / |Omega|.
 
-Reads run_kl_oos.py's results (|Omega| = 20) and run_kl_oosn.py's (the others); writes
-<out>/oosn_days.csv (one row per size, sample, day and plan), <out>/oosn_summary.csv and
-<out>/oosn_shift.{pdf,png}. A marker is the mean over the days, the band the middle
-half of the days.
+Reads run_kl_oos.py's results (|Omega| = 20) and run_kl_oosn.py's (the others); with
+--improve, a cell of |Omega| > 20 is read from run_kl_oosn_improve.py's results instead
+(the plan re-chosen on its own sample) where that file exists. Writes <out>/oosn_days.csv
+(one row per size, sample, day and plan), <out>/oosn_summary.csv and the figure: one
+column wide, 2 x 2 (<out>/oosn_shift.{pdf,png}), and two columns wide, 1 x 4
+(<out>/oosn_shift_row.{pdf,png}). A marker is the mean over the days, the band the
+middle half of the days.
 
-    python ieee_owen/weak_eps_experiment/kl_oosn_plot.py
+    python ieee_owen/weak_eps_experiment/kl_oosn_plot.py [--improve]
 """
 import os, json, argparse
 
@@ -22,8 +25,62 @@ import run_kl_oos as O
 OUT = os.path.join('ieee_owen', 'weak_eps_experiment', 'stochastic', 'oosn17_xi')
 PLAN_SCEN = 20
 # the first two categorical slots of the palette; the markers repeat the identity
-SERIES = (('dro', r'with the ball, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
-          ('saa', r'sample average, $r=0$', '#eb6834', 's'))
+# legend names follow the manuscript's DP^DR and DP^SAA
+SERIES = (('dro', r'DR, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
+          ('saa', r'SAA, $r=0$', '#eb6834', 's'))
+# (file stem, panel grid, figure size [in]): IEEE one column is 3.5 in, two are 7.16 in
+# 2.7 in tall keeps the manuscript at its page count (3.4 in pushed it a page over)
+LAYOUTS = (('oosn_shift', (2, 2), (3.5, 2.7)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
+
+
+def draw(stat, sizes, scens, rows_cols, figsize, path):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker
+    plt.rcParams.update({'font.size': 8, 'axes.linewidth': 0.6, 'pdf.fonttype': 42})
+    fig, axes = plt.subplots(*rows_cols, figsize=figsize, sharex=True, sharey=True,
+                             squeeze=False)
+    for ax, n in zip(axes.flat, sizes):
+        ax.axhline(0.0, color='#52514e', lw=0.6)
+        for lab, label, color, marker in SERIES:
+            xs = [m for m in scens if (n, m, lab) in stat]
+            if not xs:
+                continue
+            mean, lo, hi = (np.array([stat[n, m, lab][i] for m in xs]) for i in range(3))
+            ax.fill_between(xs, lo, hi, color=color, alpha=0.18, lw=0)
+            ax.plot(xs, mean, color=color, marker=marker, lw=1.3, ms=4, label=label,
+                    markeredgecolor='white', markeredgewidth=0.5)
+        ax.set_xscale('log')
+        ax.set_xticks(scens); ax.set_xticklabels([str(m) for m in scens]); ax.minorticks_off()
+        ax.set_xlim(min(scens) / 1.3, max(scens) * 1.3)
+        # at 2.7 in the default locator keeps only every other tick
+        ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(10))
+        ax.text(0.96, 0.95, f'$n={n}$', transform=ax.transAxes, ha='right', va='top')
+        ax.grid(True, which='major', lw=0.3, color='#d9d8d2')
+        for s in ('top', 'right'):
+            ax.spines[s].set_visible(False)
+    # IEEE style: sentence case, units in parentheses. The caption gives the formula,
+    # (val(DP^out_N) - val(DP^DR_N)) / n at each series' radius (r = 0 is DP^SAA), in the
+    # manuscript's own macros rather than in matplotlib's fonts
+    fig.supxlabel(r'Sample size $|\Omega|$', fontsize=8)
+    ylab = fig.supylabel('Shift per member (€)', fontsize=8)
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center', ncol=len(SERIES), frameon=False,
+               fontsize=7, handlelength=1.6, columnspacing=1.0, bbox_to_anchor=(0.5, 1.0))
+    # 0.28 in on top for the legend; tight_layout leaves room for the shared labels itself
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.28 / figsize[1]), pad=0.3, h_pad=0.4, w_pad=0.4)
+    # the y label 3 pt left of the tick labels, wherever the layout put them
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    x0 = min(ax.get_tightbbox(rend).x0 for ax in axes[:, 0]) / fig.bbox.width
+    ylab.set_horizontalalignment('right')
+    ylab.set_x(x0 - 3 / 72 / figsize[0])
+    for ext in ('pdf', 'png'):
+        # cropped to the drawing: whatever margin is left would be scaled into the column
+        fig.savefig(f'{path}.{ext}', dpi=300, bbox_inches='tight', pad_inches=0.02)
+    plt.close(fig)
+    print('wrote', f'{path}.{{pdf,png}}')
 
 
 def main():
@@ -32,14 +89,19 @@ def main():
     ap.add_argument('--scen', default='5,20,40,100')
     ap.add_argument('--days', default='1-31')
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--improve', action='store_true',
+                    help='|Omega| > 20 from the re-chosen plans (<out>/improve) where present')
     a = ap.parse_args()
     sizes = [int(v) for v in a.n.split(',')]
     scens = [int(v) for v in a.scen.split(',')]
-    rows = []
+    rows, improved = [], 0
     for n in sizes:
         for m in scens:
             for d in Q.days(a.days):
                 f = os.path.join(O.OUT if m == PLAN_SCEN else a.out, f'oos_n{n}_S{m}_day{d}.json')
+                g = os.path.join(a.out, 'improve', f'oos_n{n}_S{m}_day{d}.json')
+                if a.improve and m > PLAN_SCEN and os.path.exists(g):
+                    f, improved = g, improved + 1
                 if not os.path.exists(f):
                     continue
                 plans = json.load(open(f, encoding='utf-8'))['plans']
@@ -76,38 +138,10 @@ def main():
     with open(os.path.join(a.out, 'oosn_summary.csv'), 'w') as f:
         f.write('\n'.join(lines) + '\n')
     print('\n'.join(lines))
-
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    plt.rcParams.update({'font.size': 8, 'axes.linewidth': 0.6, 'pdf.fonttype': 42})
-    fig, axes = plt.subplots(1, len(sizes), figsize=(7.16, 2.4), sharey=True)
-    for ax, n in zip(axes, sizes):
-        ax.axhline(0.0, color='#52514e', lw=0.6)
-        for lab, label, color, marker in SERIES:
-            xs = [m for m in scens if (n, m, lab) in stat]
-            if not xs:
-                continue
-            mean, lo, hi = (np.array([stat[n, m, lab][i] for m in xs]) for i in range(3))
-            ax.fill_between(xs, lo, hi, color=color, alpha=0.18, lw=0)
-            ax.plot(xs, mean, color=color, marker=marker, lw=1.5, ms=4.5, label=label,
-                    markeredgecolor='white', markeredgewidth=0.6)
-        ax.set_xscale('log')
-        ax.set_xticks(scens); ax.set_xticklabels([str(m) for m in scens]); ax.minorticks_off()
-        ax.set_xlim(min(scens) / 1.3, max(scens) * 1.3)
-        ax.set_title(f'$n={n}$', fontsize=8)
-        ax.set_xlabel(r'training scenarios $|\Omega|$')
-        ax.grid(True, which='major', lw=0.3, color='#d9d8d2')
-        for s in ('top', 'right'):
-            ax.spines[s].set_visible(False)
-    axes[0].set_ylabel('shift per member [EUR]')
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='upper center', ncol=len(SERIES), frameon=False,
-               bbox_to_anchor=(0.5, 1.02))
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
-    for ext in ('pdf', 'png'):
-        fig.savefig(os.path.join(a.out, f'oosn_shift.{ext}'), dpi=300)
-    print('wrote', os.path.join(a.out, 'oosn_shift.{pdf,png}'))
+    if a.improve:
+        print(f'{improved} cells of |Omega| > {PLAN_SCEN} from the re-chosen plans')
+    for stem, grid, size in LAYOUTS:
+        draw(stat, sizes, scens, grid, size, os.path.join(a.out, stem))
 
 
 if __name__ == '__main__':
