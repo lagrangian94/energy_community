@@ -233,7 +233,8 @@ def run_one(n, scen, day, a):
     if os.path.exists(log) and 'wrote ' in open(log, encoding='utf-8', errors='replace').read():
         return None
     rc, wall, peak_priv, peak_ws, min_free, killed = watched(
-        command(n, scen, day, a.out, a.ef_round_limit, a.nodefile), log, a.min_free)
+        command(n, scen, day, a.out, a.ef_round_limit, a.nodefile)
+        + ['--ef-time-cap', str(a.ef_time_cap)], log, a.min_free)
     row = (f'{time.strftime("%Y-%m-%d %H:%M")},{n},{scen},{day},{radius(scen):.6g},{rc},'
            f'{wall:.0f},{peak_priv:.2f},{peak_ws:.2f},{min_free:.2f},{int(killed)}')
     csv = os.path.join(a.out, 'runs.csv')
@@ -260,6 +261,8 @@ def main():
     ap.add_argument('--days', default='1-31', help='middle loop, e.g. 1-31 or 3,6,9')
     ap.add_argument('--n', default='6,15,30,60', help='inner loop')
     ap.add_argument('--ef-round-limit', type=float, default=10800)
+    ap.add_argument('--ef-time-cap', type=float, default=1800.0,
+                    help='seconds for the extensive form (stochastic_extension default)')
     ap.add_argument('--nodefile', type=float, default=3.0, help='EF NodefileStart [GB]')
     ap.add_argument('--min-free', type=float, default=0.7, help='kill below this [GB]')
     ap.add_argument('--out', default=OUT)

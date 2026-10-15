@@ -16,7 +16,9 @@ CONVENTIONS.
 - The extensive form stops at a gap of 1e-4 or 30 minutes, and g and eps rest on
   its incumbent. A day whose extensive form was re-solved later (resolve_ef.py) is
   read from 'ef_first', the 30-minute plan, so every day follows the same rule
-  (kl_experiment_plan.md, sec. 8.11).
+  (kl_experiment_plan.md, sec. 8.11). The |Omega| = 40 and 100 blocks of tab:runtime
+  give the extensive form an hour (run_kl_main.py --ef-time-cap 3600), and a cell any
+  of whose days stopped there prints as >3,600.
 - eps(chi) is not a row: without Dinkelbach (sec. 8.12) it is exact only where all
   coalitions are valued. A single member j gains val({j}) - chi_j by leaving, which
   bounds eps(chi) from below, and eps_K bounds it from above; how often the two meet
@@ -224,6 +226,31 @@ def main():
     w('%   timed on another machine (stochastic/bench17_xi_cykim), about 1.5 times faster on it')
     w('% coalition generation converged on (days/run): ' + ', '.join(
         f'n={n}: {c}' for n, c in zip(SIZES, conv)))
+    # larger samples (|Omega| = 40, 100): the extensive form has an hour, and a cell any
+    # of whose days stopped there prints as out of it, since the mean would understate it
+    for scen in (40, 100):
+        S = main_rows(scen)
+        tried = {}
+        csv = os.path.join(MAIN, 'runs.csv')
+        for ln in open(csv).read().splitlines()[1:]:
+            f = ln.split(',')
+            if int(f[2]) == scen:
+                tried.setdefault(int(f[1]), []).append(f)
+        w(r'\midrule')
+        w(rf'\multicolumn{{5}}{{@{{}}l}}{{\textit{{$|\Omega|={scen}$}}}} \\')
+
+        def ef_cell(n):
+            r = S[n]
+            if r['t_ef'] and any(r['capped']):
+                return r'$>3{,}600$' if len(r['t_ef']) >= DAYS else r'\TBD{$>3{,}600$}'
+            return cell(r['t_ef'], 0)
+        w(r'\hspace{0.6em}Solving $\vdr{N}$ & ' + ' & '.join(ef_cell(n) for n in SIZES) + r' \\')
+        w(r'\hspace{0.6em}RCG, nested master & '
+          + ' & '.join(cell(S[n]['t_rcg'], 0) for n in SIZES) + r' \\')
+        w(f'%   |Omega|={scen}, days with results (EF at its cap), and runs that failed: ' + ', '.join(
+            f'n={n}: {len(S[n]["t_ef"])} ({sum(S[n]["capped"])}), '
+            f'{sum(f[5] != "0" or f[10] != "0" for f in tried.get(n, []))} failed'
+            for n in SIZES))
     w('')
     w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
     for m in ('conic', 'flat'):
