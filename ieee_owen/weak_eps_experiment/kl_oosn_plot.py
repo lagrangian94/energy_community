@@ -60,15 +60,21 @@ def draw(stat, sizes, scens, rows_cols, figsize, path):
     # (val(DP^out_N) - val(DP^DR_N)) / n at each series' radius (r = 0 is DP^SAA), in the
     # manuscript's own macros rather than in matplotlib's fonts
     fig.supxlabel(r'Sample size $|\Omega|$', fontsize=8)
-    fig.supylabel('Shift per member (€)', fontsize=8, x=0.01)
+    ylab = fig.supylabel('Shift per member (€)', fontsize=8)
     handles, labels = axes.flat[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', ncol=len(SERIES), frameon=False,
                fontsize=7, handlelength=1.6, columnspacing=1.0, bbox_to_anchor=(0.5, 1.0))
-    # room for the shared labels: 0.17 in on the left, 0.28 in on top for the legend
-    fig.tight_layout(rect=(0.17 / figsize[0], 0, 1, 1 - 0.28 / figsize[1]), pad=0.3,
-                     h_pad=0.4, w_pad=0.4)
+    # 0.28 in on top for the legend; tight_layout leaves room for the shared labels itself
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.28 / figsize[1]), pad=0.3, h_pad=0.4, w_pad=0.4)
+    # the y label 3 pt left of the tick labels, wherever the layout put them
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    x0 = min(ax.get_tightbbox(rend).x0 for ax in axes[:, 0]) / fig.bbox.width
+    ylab.set_horizontalalignment('right')
+    ylab.set_x(x0 - 3 / 72 / figsize[0])
     for ext in ('pdf', 'png'):
-        fig.savefig(f'{path}.{ext}', dpi=300)
+        # cropped to the drawing: whatever margin is left would be scaled into the column
+        fig.savefig(f'{path}.{ext}', dpi=300, bbox_inches='tight', pad_inches=0.02)
     plt.close(fig)
     print('wrote', f'{path}.{{pdf,png}}')
 
