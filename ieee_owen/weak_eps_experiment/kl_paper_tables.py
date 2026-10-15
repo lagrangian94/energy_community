@@ -254,7 +254,9 @@ def main():
         w(rf'{lab} & ' + ' & '.join(
             tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
             for n in SIZES) + r' \\')
-    w(r'Cost of hedging (\% of $v^{\mathrm{DR}}(N)$) & ' + ' & '.join(
+    # what the DR plan earns below the SAA plan: a row of its own under the group header
+    w(r'% Cost of hedging (\% of $v^{\mathrm{DR}}(N)$)')
+    w(plans[1][0] + ' & ' + ' & '.join(
         tbd(n, f'{100 * float(np.mean(O[n]["cost"] / O[n]["vdr"])):.2f}') for n in SIZES) + r' \\')
     for n in SIZES:
         o = O[n]
