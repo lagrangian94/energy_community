@@ -164,9 +164,9 @@ def main():
                                                             for n in SIZES) + r' \\')
     row(r'$\vdr{N}$', 'val', 0)
     row(r'$v^{\mathrm{DR}}(N)$', 'vdr', 0)
-    row(r'$g_K^{\mathrm{LR\text{-}DR}}$', 'g', 2)
+    row(r'$g_{r,K}^{\mathrm{LR}}$', 'g', 2)
     # the text defines eps_K = g_K / n; the row carries the symbol only
-    row(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}$', 'eps', 3)
+    row(r'$\varepsilon_{r,K}^{\mathrm{LR}}$', 'eps', 3)
     w('')
     w('% ---- tab:runtime')
     w(r'Solving $\vdr{N}$ & ' + ' & '.join(cell(R[n]['t_ef'], 0) for n in SIZES) + r' \\')
