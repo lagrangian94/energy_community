@@ -153,7 +153,8 @@ def main():
     row(r'$\vdr{N}$', 'val', 0)
     row(r'$v^{\mathrm{DR}}(N)$', 'vdr', 0)
     row(r'$g_K^{\mathrm{LR\text{-}DR}}$', 'g', 2)
-    w(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}=g_K^{\mathrm{LR\text{-}DR}}/n$ & '
+    # the text defines eps_K = g_K / n; the row carries the symbol only
+    w(r'$\varepsilon_K^{\mathrm{LR\text{-}DR}}$ & '
       + ' & '.join(cell(R[n]['eps'], 3) for n in SIZES) + r' \\')
     w('')
     w('% ---- tab:runtime')
@@ -231,6 +232,7 @@ def main():
             f'n={n}: ' + (f'{ratio[(m, n)]:.1f}x' if ratio.get((m, n)) else 'not reached / not run')
             for n in SIZES))
     O = oos_rows(a.scen)
+    # since 2026-10-15 the lower block of tab:results (one table, two blocks; euro in the caption)
     w('% ---- tab:oos (arithmetic means over the days; signed)')
     w('% days per size: ' + ', '.join(f'n={n}: {len(O[n]["day"])}' for n in SIZES)
       + '; test scenarios: ' + ', '.join(sorted({f'{int(t)}' for n in SIZES for t in O[n]['test']})))
@@ -244,7 +246,7 @@ def main():
         w(rf'Days the budget holds, {lab} & ' + ' & '.join(
             tbd(n, f'{int((O[n][f"d_{k}"] >= O[n][f"p_{k}"]).sum())}') for n in SIZES) + r' \\')
     for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Shift per member, {lab} [\euro] & ' + ' & '.join(
+        w(rf'Shift per member, {lab} & ' + ' & '.join(
             tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
             for n in SIZES) + r' \\')
     w(r'Cost of hedging [\% of $v^{\mathrm{DR}}(N)$] & ' + ' & '.join(
