@@ -234,7 +234,7 @@ def run_one(n, scen, day, a):
         return None
     rc, wall, peak_priv, peak_ws, min_free, killed = watched(
         command(n, scen, day, a.out, a.ef_round_limit, a.nodefile)
-        + ['--ef-time-cap', str(a.ef_time_cap)], log, a.min_free)
+        + ['--ef-time-cap', str(a.ef_time_cap)] + a.extra.split(), log, a.min_free)
     row = (f'{time.strftime("%Y-%m-%d %H:%M")},{n},{scen},{day},{radius(scen):.6g},{rc},'
            f'{wall:.0f},{peak_priv:.2f},{peak_ws:.2f},{min_free:.2f},{int(killed)}')
     csv = os.path.join(a.out, 'runs.csv')
@@ -263,6 +263,9 @@ def main():
     ap.add_argument('--ef-round-limit', type=float, default=10800)
     ap.add_argument('--ef-time-cap', type=float, default=1800.0,
                     help='seconds for the extensive form (stochastic_extension default)')
+    ap.add_argument('--extra', default='',
+                    help='further stochastic_extension options, space separated, e.g. '
+                         '"--no-omega-tol --cg-gap 7.5e-6 --ef-mem-limit 18"')
     ap.add_argument('--nodefile', type=float, default=3.0, help='EF NodefileStart [GB]')
     ap.add_argument('--min-free', type=float, default=0.7, help='kill below this [GB]')
     ap.add_argument('--out', default=OUT)

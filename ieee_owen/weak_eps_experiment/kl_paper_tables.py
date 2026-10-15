@@ -80,7 +80,8 @@ def main_rows(scen):
             r['g'].append(g)
             r['eps'].append(g / n)
             r['t_ef'].append(ef['time_solve'])
-            r['capped'].append(ef['status'] == 'timelimit')
+            # stopped by the time cap or by the memory cap (--ef-mem-limit, larger samples)
+            r['capped'].append(ef['status'].split('+')[0] in ('timelimit', 'memlimit'))
             r['t_rcg'].append(j['dw']['time'])
             r['single'].append(max(alone[u] - (owen[u] - g / n) for u in owen))
         out[n] = r
@@ -226,8 +227,12 @@ def main():
     w('%   timed on another machine (stochastic/bench17_xi_cykim), about 1.5 times faster on it')
     w('% coalition generation converged on (days/run): ' + ', '.join(
         f'n={n}: {c}' for n, c in zip(SIZES, conv)))
-    # larger samples (|Omega| = 40, 100): the extensive form has an hour, and a cell any
-    # of whose days stopped there prints as out of it, since the mean would understate it
+    # larger samples (|Omega| = 40, 100). Both rows print against the hour: a cell whose
+    # extensive form stopped at its time or memory cap on any day, or whose RCG mean is
+    # above 3,600 s, prints >3,600 (the mean would understate it). A size not run yet
+    # prints >3,600 once a smaller size of the same sample does: the time only grows
+    # with n (as the coalition-generation row). The comment says which cells are inferred.
+    HOUR = 3600.0
     for scen in (40, 100):
         S = main_rows(scen)
         tried = {}
@@ -238,19 +243,35 @@ def main():
                 tried.setdefault(int(f[1]), []).append(f)
         w(r'\midrule')
         w(rf'\multicolumn{{5}}{{@{{}}l}}{{\textit{{$|\Omega|={scen}$}}}} \\')
+        notes = []
 
-        def ef_cell(n):
-            r = S[n]
-            if r['t_ef'] and any(r['capped']):
-                return r'$>3{,}600$' if len(r['t_ef']) >= DAYS else r'\TBD{$>3{,}600$}'
-            return cell(r['t_ef'], 0)
-        w(r'\hspace{0.6em}Solving $\vdr{N}$ & ' + ' & '.join(ef_cell(n) for n in SIZES) + r' \\')
-        w(r'\hspace{0.6em}RCG, nested master & '
-          + ' & '.join(cell(S[n]['t_rcg'], 0) for n in SIZES) + r' \\')
+        def over(vals):
+            return r'$>3{,}600$' if len(vals) >= DAYS else r'\TBD{$>3{,}600$}'
+
+        def hour_row(key, out_of_hour):
+            cells, below = [], False
+            for n in SIZES:
+                r = S[n]
+                if r[key]:
+                    below = below or out_of_hour(r)
+                    cells.append(over(r[key]) if out_of_hour(r) else cell(r[key], 0))
+                elif below:
+                    cells.append(r'\TBD{$>3{,}600$}')
+                    notes.append(f'{key} n={n} not run, inferred from the smaller size')
+                else:
+                    cells.append(r'\TBD{--}')
+            return cells
+        ef = hour_row('t_ef', lambda r: any(r['capped']))
+        rcg = hour_row('t_rcg', lambda r: gm(r['t_rcg']) > HOUR)
+        w(r'\hspace{0.6em}Solving $\vdr{N}$ & ' + ' & '.join(ef) + r' \\')
+        w(r'\hspace{0.6em}RCG, nested master & ' + ' & '.join(rcg) + r' \\')
         w(f'%   |Omega|={scen}, days with results (EF at its cap), and runs that failed: ' + ', '.join(
             f'n={n}: {len(S[n]["t_ef"])} ({sum(S[n]["capped"])}), '
             f'{sum(f[5] != "0" or f[10] != "0" for f in tried.get(n, []))} failed'
             for n in SIZES))
+        w(f'%   |Omega|={scen}, RCG geometric means [s]: ' + ', '.join(
+            f'n={n}: {gm(S[n]["t_rcg"]):.0f}' if S[n]['t_rcg'] else f'n={n}: --'
+            for n in SIZES) + ''.join(f'; {x}' for x in notes))
     w('')
     w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
     for m in ('conic', 'flat'):
