@@ -29,8 +29,8 @@ PLAN_SCEN = 20
 SERIES = (('dro', r'DR, $r=\chi^2_{1,0.95}/(2|\Omega|)$', '#2a78d6', 'o'),
           ('saa', r'SAA, $r=0$', '#eb6834', 's'))
 # (file stem, panel grid, figure size [in]): IEEE one column is 3.5 in, two are 7.16 in
-# 2.7 in tall keeps the manuscript at its page count (3.4 in pushed it a page over)
-LAYOUTS = (('oosn_shift', (2, 2), (3.5, 2.7)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
+# 2.3 in tall to save room in the manuscript (3.4 in pushed it a page over; 2.7 until 2026-10-15)
+LAYOUTS = (('oosn_shift', (2, 2), (3.5, 2.3)), ('oosn_shift_row', (1, 4), (7.16, 2.1)))
 
 
 def draw(stat, sizes, scens, rows_cols, figsize, path):
