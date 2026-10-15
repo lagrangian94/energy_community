@@ -5388,11 +5388,13 @@ def build_parser():
     ap.add_argument('--pricing-solver', default='gurobi', choices=['highs', 'gurobi'])
     ap.add_argument('--pricing-gap', type=float, default=MIP_GAP,
                     help=f'relative gap of the pricing MILPs (default {MIP_GAP})')
-    ap.add_argument('--pricing-workers', type=int, default=8,
-                    help='prosumers priced in parallel (0: one per core). Default 8 since '
-                         '2026-10-05: two Gurobi threads per worker on a 16-core machine '
-                         'beat 16 x 1 by 3-10%% at n=60, 20 scenarios, KL 0.5 '
-                         '(ieee_owen/kl_experiment_plan.md)')
+    ap.add_argument('--pricing-workers', type=int, default=12,
+                    help='prosumers priced in parallel (0: one per core). Default 12 since '
+                         '2026-10-15: on the 24-thread machine 12 x 2 threads took the '
+                         'n=60, 20-scenario day-1 CG from 1,189 s (8 workers) to 1,014 s '
+                         '(24: 1,046 s). It was 8 from 2026-10-05, two Gurobi threads per '
+                         'worker on a 16-core machine, 3-10%% ahead of 16 x 1 at n=60, '
+                         '20 scenarios, KL 0.5 (ieee_owen/kl_experiment_plan.md)')
     ap.add_argument('--round-tol', type=float, default=None,
                     help='column admission tolerance of the penalty rounds before the '
                          'last (default: --cg-gap)')
