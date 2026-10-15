@@ -232,7 +232,7 @@ def main():
             f'n={n}: ' + (f'{ratio[(m, n)]:.1f}x' if ratio.get((m, n)) else 'not reached / not run')
             for n in SIZES))
     O = oos_rows(a.scen)
-    # since 2026-10-15 the lower block of tab:results (one table, two blocks; euro in the caption)
+    # since 2026-10-15 the out-of-sample block of tab:results (one table, two blocks)
     w('% ---- tab:oos (arithmetic means over the days; signed)')
     w('% days per size: ' + ', '.join(f'n={n}: {len(O[n]["day"])}' for n in SIZES)
       + '; test scenarios: ' + ', '.join(sorted({f'{int(t)}' for n in SIZES for t in O[n]['test']})))
@@ -242,15 +242,19 @@ def main():
 
     def signed(x, d):
         return ('$-$' if x < 0 else '') + f'{abs(x):.{d}f}'
-    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Days budget met, {lab} & ' + ' & '.join(
+    # grouped by quantity, one row per plan named as in fig:oos (DR, SAA); the manuscript
+    # adds the group headers and the indents
+    plans = ((r'SAA, $r=0$', 'saa'), (rf'DR, $r={RB.Q.radius(a.scen):.3f}$', 'dro'))
+    w(r'% Days the budget holds (of 31)')
+    for lab, k in plans:
+        w(rf'{lab} & ' + ' & '.join(
             tbd(n, f'{int((O[n][f"d_{k}"] >= O[n][f"p_{k}"]).sum())}') for n in SIZES) + r' \\')
-    for lab, k in ((r'$r=0$', 'saa'), (rf'$r={RB.Q.radius(a.scen):.3f}$', 'dro')):
-        w(rf'Shift per member, {lab} & ' + ' & '.join(
+    w(r'% Shift per member (\euro)')
+    for lab, k in plans:
+        w(rf'{lab} & ' + ' & '.join(
             tbd(n, signed(float(np.mean((O[n][f'd_{k}'] - O[n][f'p_{k}']) / n)), 2))
             for n in SIZES) + r' \\')
-    # percent of v^DR(N); the text says so, the label stays one column wide
-    w(r'Cost of hedging (\%) & ' + ' & '.join(
+    w(r'Cost of hedging (\% of $v^{\mathrm{DR}}(N)$) & ' + ' & '.join(
         tbd(n, f'{100 * float(np.mean(O[n]["cost"] / O[n]["vdr"])):.2f}') for n in SIZES) + r' \\')
     for n in SIZES:
         o = O[n]
