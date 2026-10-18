@@ -62,6 +62,31 @@ def gm(a):
     return s * float(np.exp(np.mean(np.log(np.abs(a)))))
 
 
+SHIFT = 10.0       # shifted geometric mean of run times (runtime_reporting.md)
+HOUR = 3600.0
+
+
+def sgm(a, shift=SHIFT):
+    """Shifted geometric mean, prod (t + s)^(1/k) - s, s = 10 s (Achterberg 2007,
+    Mittelmann's benchmarks); None if empty."""
+    a = np.asarray(a, float)
+    a = a[np.isfinite(a)]
+    if not len(a):
+        return None
+    return float(np.exp(np.mean(np.log(a + shift))) - shift)
+
+
+def tcell(vals, stopped, limit=HOUR, days=DAYS):
+    """A run-time cell: the shifted geometric mean with every stopped run counted at
+    the limit (runtime_reporting.md), >limit if every run stopped; inside \\TBD{}
+    while fewer than `days` days are in."""
+    if not len(vals):
+        return r'\TBD{--}'
+    t = [limit if st else min(v, limit) for v, st in zip(vals, stopped)]
+    txt = rf'$>{num(limit, 0)}$' if all(stopped) else num(sgm(t), 0)
+    return txt if len(vals) >= days else rf'\TBD{{{txt}}}'
+
+
 def num(x, digits):
     if x is None:
         return r'\TBD{--}'
@@ -172,8 +197,11 @@ def main():
     row(r'$\varepsilon_{r,K}^{\mathrm{LR}}$', 'eps', 3)
     w('')
     w('% ---- tab:runtime')
-    w(r'Solving $\vdr{N}$ & ' + ' & '.join(cell(R[n]['t_ef'], 0) for n in SIZES) + r' \\')
-    w(r'RCG, nested master & ' + ' & '.join(cell(R[n]['t_rcg'], 0) for n in SIZES) + r' \\')
+    # the |Omega|=20 extensive form had 30 minutes: a stopped one counts at its own time
+    w(r'Solving $\vdr{N}$ & ' + ' & '.join(
+        tcell(R[n]['t_ef'], [False] * len(R[n]['t_ef'])) for n in SIZES) + r' \\')
+    w(r'RCG, nested master & ' + ' & '.join(
+        tcell(R[n]['t_rcg'], [t > HOUR for t in R[n]['t_rcg']]) for n in SIZES) + r' \\')
     cg, conv = [], []
     C = bench_rows(a.scen, COALGEN)
     out_below = False               # out of budget on every day run at a smaller size
@@ -183,10 +211,12 @@ def main():
         # a size that was not run prints as out of budget once a smaller size is, on every
         # day it ran: the separation only grows with n. The comment below says which
         # cells are measured and which are this inference.
-        cg.append(num(gm(ok), 0) if ok else
-                  (r'$>3{,}600$' if rows or out_below else '--'))
+        # a day that does not converge counts at the hour; a size not run: --
+        cg.append(num(sgm([float(f['alg_s']) if f['status'] == 'converged' else HOUR
+                           for f in rows]), 0) if ok else
+                  (r'$>3{,}600$' if rows else '--'))
         conv.append(f'{len(ok)}/{len(rows)}' if rows else
-                    ('not run (inferred from the smaller size)' if out_below else 'not run'))
+                    ('not run (a smaller size is out of the hour)' if out_below else 'not run'))
         out_below = out_below or (bool(rows) and not ok)
     # time to the bound: first moment the Lagrangian bound is within 5% of omega of the
     # RCG's final bound (run_kl_bench.py), on the days the benchmarks ran. The RCG's
@@ -214,7 +244,7 @@ def main():
       f'(reached/run)')
     # the RCG's own time to the bound is the reference of the ratios below, not a row
     w('% RCG, nested master, by the same measure: '
-      + ', '.join(f'n={n}: {gm([rcg[(n, d)] for d in days_run if (n, d) in rcg]):.0f}'
+      + ', '.join(f'n={n}: {sgm([rcg[(n, d)] for d in days_run if (n, d) in rcg]):.0f}'
                   for n in SIZES))
     ratio = {}
     for name, m in ((r'CG, conic master', 'conic'), (r'RCG, single master', 'flat')):
@@ -229,8 +259,9 @@ def main():
             elif not got:
                 cells.append(r'$>3{,}600$')
             else:
-                cells.append(num(gm(got), 0))
-                ratio[(m, n)] = gm(got) / gm([rcg[(n, int(f['day']))] for f in hit])
+                # a day that does not reach the bound counts at the hour
+                cells.append(num(sgm(got + [HOUR] * (len(rows) - len(got))), 0))
+                ratio[(m, n)] = sgm(got) / sgm([rcg[(n, int(f['day']))] for f in hit])
         w(f'{name} & ' + ' & '.join(cells) + r' \\')
         w(f'%   bound reached on (days/run): ' + ', '.join(reach))
     os.chdir(here)
@@ -244,7 +275,6 @@ def main():
     # above 3,600 s, prints >3,600 (the mean would understate it). A size not run
     # because a smaller size of the same sample is already out of the hour prints --
     # (not run, as the caption says; 2026-10-18), and the comment below names it.
-    HOUR = 3600.0
     for scen in (40, 100):
         S = main_rows(scen)
         tried = {}
@@ -257,16 +287,16 @@ def main():
         w(rf'\multicolumn{{5}}{{@{{}}l}}{{\textit{{$|\Omega|={scen}$}}}} \\')
         notes = []
 
-        def over(vals):
-            return r'$>3{,}600$' if len(vals) >= DAYS else r'\TBD{$>3{,}600$}'
-
-        def hour_row(key, out_of_hour):
+        def hour_row(key, stopped_of):
+            # stopped runs (EF at its time or memory cap, RCG past the hour) count at
+            # the hour; a size not run once a smaller one has every run stopped: --
             cells, below = [], False
             for n in SIZES:
                 r = S[n]
                 if r[key]:
-                    below = below or out_of_hour(r)
-                    cells.append(over(r[key]) if out_of_hour(r) else cell(r[key], 0))
+                    st = stopped_of(r)
+                    below = below or all(st)
+                    cells.append(tcell(r[key], st))
                 elif below:
                     # not run: a smaller size of the same sample is already out of the hour
                     cells.append('--')
@@ -274,17 +304,19 @@ def main():
                 else:
                     cells.append(r'\TBD{--}')
             return cells
-        ef = hour_row('t_ef', lambda r: any(r['capped']))
-        rcg = hour_row('t_rcg', lambda r: gm(r['t_rcg']) > HOUR)
+        ef = hour_row('t_ef', lambda r: list(r['capped']))
+        rcg = hour_row('t_rcg', lambda r: [t > HOUR for t in r['t_rcg']])
         w(r'\hspace{0.6em}Solving $\vdr{N}$ & ' + ' & '.join(ef) + r' \\')
         w(r'\hspace{0.6em}RCG, nested master & ' + ' & '.join(rcg) + r' \\')
         w(f'%   |Omega|={scen}, days with results (EF at its cap), and runs that failed: ' + ', '.join(
             f'n={n}: {len(S[n]["t_ef"])} ({sum(S[n]["capped"])}), '
             f'{sum(f[5] != "0" or f[10] != "0" for f in tried.get(n, []))} failed'
             for n in SIZES))
-        w(f'%   |Omega|={scen}, RCG geometric means [s]: ' + ', '.join(
-            f'n={n}: {gm(S[n]["t_rcg"]):.0f}' if S[n]['t_rcg'] else f'n={n}: --'
-            for n in SIZES) + ''.join(f'; {x}' for x in notes))
+        w(f'%   |Omega|={scen}, RCG uncapped shifted geometric means [s] (runs past the '
+          'hour/runs): ' + ', '.join(
+              f'n={n}: {sgm(S[n]["t_rcg"]):.0f} ({sum(t > HOUR for t in S[n]["t_rcg"])}/'
+              f'{len(S[n]["t_rcg"])})' if S[n]['t_rcg'] else f'n={n}: --'
+              for n in SIZES) + ''.join(f'; {x}' for x in notes))
     w('')
     w('% ---- time to the bound relative to the RCG, on the days the method reaches it')
     for m in ('conic', 'flat'):
