@@ -1010,3 +1010,11 @@ KL 실행의 val(DP^DR_N)은 음수(n=6 약 −377)인데 결정론 실행은 �
 - 원고 본문에는 메모리 얘기를 넣지 않는다(사용자 결정). 넣은 문단: EF는 \|Ω\|=40에서 n=30부터, 100에서 n=15부터 1시간을 넘고(mixed-integer recourse), RCG는 \|Ω\|=40 전부 1시간 안(n=60 2,967 s), 100에서는 n=15부터 넘는다.
 - 메모리 옵션(모두 기본 꺼짐, `stochastic_extension.py`): `--ef-mem-limit`, `--ef-norel`, `--ef-fallback standalone`, `--cg-lean`, `--cg-col-cap`, `--mem-report`, `--cg-heuristic`(1단계 고정 후 시나리오별 풀이; n=6에서 EF보다 나빠 쓰지 않음). n=60, \|Ω\|=20에서 `--cg-lean`은 결과가 같고 CG 몫 메모리 4.1 → 1.7 GB(그 뒤 main의 `slim()`이 같은 일을 기본으로 한다).
 
+
+#### 8.23 (2) 31일로 늘리기 (2026-10-18, 사용자 결정)
+
+- **\|Ω\|=40, n=60**: 3~31일차를 1·2일차와 같은 방식으로 푼다(EF 1시간 또는 `--ef-mem-limit 18`, 그 incumbent로 시작, `--no-omega-tol --cg-gap 7.5e-6 --cg-lean --ef-fallback standalone`). 3일차는 10-15에 RCG 100회째에서 끊긴 날이고 EF 캐시(3,025 s, 메모리 상한)를 다시 쓴다.
+- 그다음 **\|Ω\|=100, n=15**: 4~31일차, 1~3일차와 같은 방식(EF 1시간, 보통의 CG 종료). worker는 12(8.21; 1~3일차는 8).
+- **\|Ω\|=100, n=30·60은 `--`**(돌리지 않음). `kl_paper_tables.py`가 더 작은 n이 이미 1시간을 넘는 크기를 추론값 대신 `--`로 낸다. 문헌 관행(Angulo, Ahmed & Dey 2016 IJOC; Zou, Ahmed & Sun 2019 MP: 더 큰 크기는 표에서 빼고 본문 한 문장)과 `runtime_reporting.md`(추론값을 실측처럼 쓰지 않는다)에 맞춘 것.
+- 큐: `main17_xi_31days_queue.log`. 같은 PC의 zonal_consistency 큐(`rep_days_queue.sh`)가 끝난 뒤 시작한다. 어림: n=60이 하루 약 1.5시간 × 29일, n=15가 하루 약 3.7시간 × 28일, 합계 약 6일.
+- 표 형식을 `runtime_reporting.md`(shifted geometric mean, 제한값으로 세고 횟수 표시)로 바꾸는 일은 이 실행이 끝난 뒤에 한다.

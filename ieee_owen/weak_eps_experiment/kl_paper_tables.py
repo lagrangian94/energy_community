@@ -241,9 +241,9 @@ def main():
         f'n={n}: {c}' for n, c in zip(SIZES, conv)))
     # larger samples (|Omega| = 40, 100). Both rows print against the hour: a cell whose
     # extensive form stopped at its time or memory cap on any day, or whose RCG mean is
-    # above 3,600 s, prints >3,600 (the mean would understate it). A size not run yet
-    # prints >3,600 once a smaller size of the same sample does: the time only grows
-    # with n (as the coalition-generation row). The comment says which cells are inferred.
+    # above 3,600 s, prints >3,600 (the mean would understate it). A size not run
+    # because a smaller size of the same sample is already out of the hour prints --
+    # (not run, as the caption says; 2026-10-18), and the comment below names it.
     HOUR = 3600.0
     for scen in (40, 100):
         S = main_rows(scen)
@@ -268,8 +268,9 @@ def main():
                     below = below or out_of_hour(r)
                     cells.append(over(r[key]) if out_of_hour(r) else cell(r[key], 0))
                 elif below:
-                    cells.append(r'\TBD{$>3{,}600$}')
-                    notes.append(f'{key} n={n} not run, inferred from the smaller size')
+                    # not run: a smaller size of the same sample is already out of the hour
+                    cells.append('--')
+                    notes.append(f'{key} n={n} not run (a smaller size is out of the hour)')
                 else:
                     cells.append(r'\TBD{--}')
             return cells
