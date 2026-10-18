@@ -78,12 +78,12 @@ def sgm(a, shift=SHIFT):
 
 def tcell(vals, stopped, limit=HOUR, days=DAYS):
     """A run-time cell: the shifted geometric mean with every stopped run counted at
-    the limit (runtime_reporting.md), >limit if every run stopped; inside \\TBD{}
+    the limit (runtime_reporting.md), so a cell whose runs all stopped is the limit; inside \\TBD{}
     while fewer than `days` days are in."""
     if not len(vals):
         return r'\TBD{--}'
     t = [limit if st else min(v, limit) for v, st in zip(vals, stopped)]
-    txt = rf'$>{num(limit, 0)}$' if all(stopped) else num(sgm(t), 0)
+    txt = num(sgm(t), 0)              # every run stopped: the limit itself
     return txt if len(vals) >= days else rf'\TBD{{{txt}}}'
 
 
@@ -214,7 +214,7 @@ def main():
         # a day that does not converge counts at the hour; a size not run: --
         cg.append(num(sgm([float(f['alg_s']) if f['status'] == 'converged' else HOUR
                            for f in rows]), 0) if ok else
-                  (r'$>3{,}600$' if rows else '--'))
+                  (num(HOUR, 0) if rows else '--'))
         conv.append(f'{len(ok)}/{len(rows)}' if rows else
                     ('not run (a smaller size is out of the hour)' if out_below else 'not run'))
         out_below = out_below or (bool(rows) and not ok)
@@ -257,7 +257,7 @@ def main():
             if not rows:
                 cells.append('--')
             elif not got:
-                cells.append(r'$>3{,}600$')
+                cells.append(num(HOUR, 0))
             else:
                 # a day that does not reach the bound counts at the hour
                 cells.append(num(sgm(got + [HOUR] * (len(rows) - len(got))), 0))
