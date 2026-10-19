@@ -1026,3 +1026,4 @@ KL 실행의 val(DP^DR_N)은 음수(n=6 약 −377)인데 결정론 실행은 �
 - 1~13일차 RCG(shift 10 s, 1시간 넘은 날은 3,600): **3,266 s, 13일 중 7일이 1시간 초과**. 원고는 아직 3,202(표와 본문 "RCG stays within the hour on average with 40 scenarios, 3,202 s at n=60"); 표 스크립트는 3일차 JSON이 없어 3,128을 낸다.
 - 이어 돌리기: `run_kl_main.py --ef-time-cap 3600 --scen 40 --n 60 --days 3,14-31 --extra "--no-omega-tol --cg-lean --ef-fallback standalone --cg-gap 3e-5 --ef-mem-limit 18"`. 끝나면 표를 다시 생성하고 원고의 표 칸과 본문 숫자를 고친다.
 - 이 PC는 그 사이 |Ω|=100, n=15의 4~31일차를 돌린다(10-19 11:15 시작, 하루 약 3.6시간, 끝 10-24 무렵).
+- **10-19 11:30, 실험 종료(사용자 결정).** |Ω|=100, n=15도 1~3일차로 둔다(사흘 모두 EF·RCG가 1시간 초과라 표의 3,600은 그대로). 4일차는 EF 도중 멈춰 캐시가 없고, 4~31일차는 안 돌렸다. 이어 돌리기: `run_kl_main.py --ef-time-cap 3600 --scen 100 --n 15 --days 4-31`(하루 약 3.6시간). 이 PC에서 돌고 있는 이 프로젝트 작업은 없다.
