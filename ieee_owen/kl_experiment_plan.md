@@ -1018,3 +1018,11 @@ KL 실행의 val(DP^DR_N)은 음수(n=6 약 −377)인데 결정론 실행은 �
 - **\|Ω\|=100, n=30·60은 `--`**(돌리지 않음). `kl_paper_tables.py`가 더 작은 n이 이미 1시간을 넘는 크기를 추론값 대신 `--`로 낸다. 문헌 관행(Angulo, Ahmed & Dey 2016 IJOC; Zou, Ahmed & Sun 2019 MP: 더 큰 크기는 표에서 빼고 본문 한 문장)과 `runtime_reporting.md`(추론값을 실측처럼 쓰지 않는다)에 맞춘 것.
 - 큐: `main17_xi_31days_queue.log`. 같은 PC의 zonal_consistency 큐(`rep_days_queue.sh`)가 끝난 뒤 시작한다. 어림: n=60이 하루 약 1.5시간 × 29일, n=15가 하루 약 3.7시간 × 28일, 합계 약 6일.
 - 표 형식을 `runtime_reporting.md`(shifted geometric mean, 제한값으로 세고 횟수 표시)로 바꾸는 일은 이 실행이 끝난 뒤에 한다.
+
+#### 8.23 (3) |Ω|=40, n=60을 13일에서 멈춤 (2026-10-19, 사용자 결정)
+
+- 끝난 날: 1·2일차(`--cg-gap 7.5e-6`), 4~13일차(`3e-5`). CG의 상한은 마지막 라운드에서야 갱신되므로 두 기준이 같은 반복에서 멈춘다(시간 비교 가능).
+- 3일차: RCG 도중 두 번 끊김, JSON 없음. RCG ≥ 4,043 s라 1시간 제한으로 센다. 옛 로그는 `logs/n60_S40_day3_gap7.5e-6_stopped.log`. 14일차: 10-19 11:15 RCG 도중 멈춤. 두 날 모두 EF 캐시가 있다. 15~31일차는 안 돌림(하루 약 1.8시간).
+- 1~13일차 RCG(shift 10 s, 1시간 넘은 날은 3,600): **3,266 s, 13일 중 7일이 1시간 초과**. 원고는 아직 3,202(표와 본문 "RCG stays within the hour on average with 40 scenarios, 3,202 s at n=60"); 표 스크립트는 3일차 JSON이 없어 3,128을 낸다.
+- 이어 돌리기: `run_kl_main.py --ef-time-cap 3600 --scen 40 --n 60 --days 3,14-31 --extra "--no-omega-tol --cg-lean --ef-fallback standalone --cg-gap 3e-5 --ef-mem-limit 18"`. 끝나면 표를 다시 생성하고 원고의 표 칸과 본문 숫자를 고친다.
+- 이 PC는 그 사이 |Ω|=100, n=15의 4~31일차를 돌린다(10-19 11:15 시작, 하루 약 3.6시간, 끝 10-24 무렵).
