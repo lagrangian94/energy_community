@@ -126,7 +126,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     if sensitivity_analysis:
         use_korean_price = sensitivity_analysis['use_korean_price']
         use_tou_elec = sensitivity_analysis['use_tou_elec']
-        import_factor = sensitivity_analysis['import_factor'] # market import price가 export 대비 몇배 더 큰지
+        import_factor = sensitivity_analysis['import_factor'] # import = export + (import_factor-1)*|export| (ElecGen.import_price)
         month = sensitivity_analysis['month']
         hp_cap = sensitivity_analysis['hp_cap']
         els_cap = sensitivity_analysis['els_cap']
@@ -172,7 +172,7 @@ def setup_lem_parameters(players, configuration, time_periods, sensitivity_analy
     else:
         use_korean_price = True
         use_tou_elec = False
-        import_factor = 1.5 # [1.5, 2.0] market import price가 export 대비 몇배 더 큰지
+        import_factor = 1.5 # [1.5, 2.0] import = export + (import_factor-1)*|export| (ElecGen.import_price); 가격 >= 0이면 export의 import_factor배
         month = 1
         hp_cap = 0.8 #MW [0.6, 0.8, 1.0]
         els_cap = 1 #MW

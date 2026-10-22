@@ -19,6 +19,15 @@ from typing import Dict, Optional, Literal
 from scipy import stats
 
 
+def import_price(export_prices, import_factor):
+    """Import price export + (import_factor - 1) * |export|: import_factor times the
+    export price where it is nonnegative, and still above it where it is negative (a
+    plain ratio would put the import price below the export price there). Written as
+    the ratio on the nonnegative hours so that those come out bit for bit as before."""
+    p = np.asarray(export_prices, dtype='float64')
+    return np.where(p >= 0, p * import_factor, p + (import_factor - 1.0) * np.abs(p))
+
+
 class ElectricityPriceGenerator:
     """
     Electricity Price Generator
@@ -68,7 +77,7 @@ class ElectricityPriceGenerator:
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
-                import_prices = arr*import_factor
+                import_prices = import_price(arr, import_factor)
             return {"import": import_prices, "export": arr}
         else:
             data = self.korean_data
@@ -84,7 +93,7 @@ class ElectricityPriceGenerator:
             if self.tou:
                 import_prices = self.create_tou_import_prices(arr, month, time_horizon)
             else:
-                import_prices = arr*import_factor
+                import_prices = import_price(arr, import_factor)
             return {"import": import_prices, "export": arr}
     def load_and_process_korean_data(self):
         """한국 전력가격 데이터 로드 및 처리"""
